@@ -4,6 +4,7 @@ import com.fyp.backend.dto.TranslationRequestDto;
 import com.fyp.backend.service.TranslationService;
 import com.fyp.backend.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +31,10 @@ public class TranslationController {
     @PostMapping
     public ResponseEntity<?> getTranslation(@RequestBody TranslationRequestDto translationRequest,
             HttpServletRequest request) {
+        if (!translationService.isEnabled()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("Translation service is disabled.");
+        }
+
         // Extract userId from JWT Token using your established UserService pattern
         Long loggedInUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
 

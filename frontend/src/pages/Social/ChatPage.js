@@ -27,7 +27,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import defaultProfileImage from "../../../assets/user.png";
 import i18n from "../../../i18n";
-import { translateText } from "../../service/TranslateService";
+import { isTranslationEnabled, translateText } from "../../service/TranslateService";
 import { UserContext } from "../../context/UserContext";
 import { ChatContext } from "../../context/ChatContext";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -1187,6 +1187,7 @@ export default function ChatPage({ route }) {
   );
   const contextTranslation = contextMessageIdKey ? translations[contextMessageIdKey] : null;
   const contextCanTranslate =
+    isTranslationEnabled &&
     contextMessageType === "text" &&
     !!contextMessageIdKey &&
     !!contextSourceContent;

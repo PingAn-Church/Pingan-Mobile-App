@@ -2,7 +2,9 @@ import axios from "axios";
 import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
 
-const { IP_ADDR } = Constants.expoConfig?.extra; // Get IP address from app config
+const { IP_ADDR, ENABLE_LIBRE_TRANSLATE } = Constants.expoConfig?.extra || {}; // Get app config
+
+export const isTranslationEnabled = ENABLE_LIBRE_TRANSLATE === true;
 
 const normalizeTargetLanguage = (targetLanguage) => {
   const raw = String(targetLanguage || "en").trim().toLowerCase();
@@ -17,6 +19,10 @@ const normalizeTargetLanguage = (targetLanguage) => {
  * @returns {Promise<string>} - The translated text content.
  */
 export const translateText = async (text, targetLanguage) => {
+  if (!isTranslationEnabled) {
+    throw new Error("Translation service is disabled.");
+  }
+
   const sourceText = String(text || "");
   if (!sourceText.trim()) {
     return sourceText;

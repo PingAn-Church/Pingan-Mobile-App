@@ -44,6 +44,7 @@ export default {
       newArchEnabled: true,
       extra: {
         IP_ADDR: process.env.IP_ADDR,
+        ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
         eas: {
           projectId: "deb6d7ce-979e-46e2-88fb-d9d1b2f3018d",
         },

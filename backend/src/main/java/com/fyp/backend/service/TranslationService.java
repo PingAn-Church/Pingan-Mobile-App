@@ -13,6 +13,7 @@ public class TranslationService {
 
     private final RestTemplate restTemplate;
     private final String libreUrl;
+    private final boolean enabled;
 
     // Falls back to docker service name when env is not provided.
     private static final String DEFAULT_LIBRE_URL = "http://librefyp:5000/translate";
@@ -24,6 +25,11 @@ public class TranslationService {
         this.libreUrl = (configuredLibreUrl == null || configuredLibreUrl.isBlank())
                 ? DEFAULT_LIBRE_URL
                 : configuredLibreUrl.trim();
+        this.enabled = "true".equalsIgnoreCase(String.valueOf(System.getenv("ENABLE_LIBRE_TRANSLATE")).trim());
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     private String normalizeTargetLanguage(String targetLang) {
@@ -47,6 +53,10 @@ public class TranslationService {
      * Handles the translation logic by calling the LibreTranslate API.
      */
     public String translateText(String text, String targetLang) {
+        if (!enabled) {
+            throw new IllegalStateException("Translation service is disabled");
+        }
+
         String normalizedTargetLang = normalizeTargetLanguage(targetLang);
         System.out.println(" [TranslationService] Request received. Target Language: " + normalizedTargetLang);
 
@@ -55,17 +65,14 @@ public class TranslationService {
             return text;
         }
 
-        // Prepare the request body for LibreTranslate
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("q", text);
-        requestBody.put("source", "auto"); // Auto-detect English or Chinese
+        requestBody.put("source", "auto");
         requestBody.put("target", normalizedTargetLang);
         requestBody.put("format", "text");
 
         try {
             System.out.println(" [TranslationService] Calling LibreTranslate API at: " + libreUrl);
-
-            // LibreTranslate returns a JSON: { "translatedText": "..." }
             Map<String, Object> response = restTemplate.postForObject(libreUrl, requestBody, Map.class);
 
             if (response != null && response.containsKey("translatedText")) {
@@ -81,7 +88,7 @@ public class TranslationService {
             }
 
         } catch (Exception e) {
-            System.out.println("❌ [TranslationService] Error during API call: " + e.getMessage());
+            System.out.println("Error during translation API call: " + e.getMessage());
             throw new RuntimeException("Translation service unavailable", e);
         }
     }
