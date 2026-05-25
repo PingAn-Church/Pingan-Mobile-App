@@ -1,0 +1,466 @@
+// import React, { useEffect, useState } from "react";
+// import {
+//   Modal,
+//   SafeAreaView,
+//   Text,
+//   FlatList,
+//   TextInput,
+//   TouchableOpacity,
+//   StyleSheet,
+//   View,
+// } from "react-native";
+// import { getAllUsers, addParticipantToGroup } from "../../service/UserService";
+
+// const AddParticipantsModal = ({ visible, onClose, conversationId, existingParticipants, setParticipantDetails }) => {
+//   const [allUsers, setAllUsers] = useState([]);
+//   const [selectedUsers, setSelectedUsers] = useState([]);
+//   const [searchQuery, setSearchQuery] = useState("");
+
+//   useEffect(() => {
+//     const fetchUsers = async () => {
+//       try {
+//         const users = await getAllUsers();
+//         setAllUsers(users);
+//       } catch (error) {
+//         console.error("Error fetching users:", error);
+//       }
+//     };
+//     fetchUsers();
+//   }, []);
+
+//   const filteredUsers = allUsers.filter(
+//     (user) =>
+//       !existingParticipants.some((p) => p.id === user.id) &&
+//       (user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+//         user.lastName.toLowerCase().includes(searchQuery.toLowerCase()))
+//   );
+
+//   const handleAddParticipants = async () => {
+//     try {
+//       for (const user of selectedUsers) {
+//         await addParticipantToGroup(conversationId, user.id);
+//       }
+//       setParticipantDetails([...existingParticipants, ...selectedUsers]);
+//       onClose();
+//     } catch (error) {
+//       console.error("Error adding participants:", error);
+//     }
+//   };
+
+//   return (
+//     <Modal visible={visible} animationType="slide">
+//       <SafeAreaView style={styles.modalContainer}>
+//         {/* Header */}
+//         <View style={styles.header}>
+//           <TouchableOpacity onPress={onClose}>
+//             <Text style={styles.headerButton}>Cancel</Text>
+//           </TouchableOpacity>
+//           <Text style={styles.headerTitle}>Add Participants</Text>
+//           <TouchableOpacity onPress={handleAddParticipants}>
+//             <Text style={styles.headerButton}>Done</Text>
+//           </TouchableOpacity>
+//         </View>
+
+//         <TextInput
+//           style={styles.searchBar}
+//           placeholder="Search users..."
+//           value={searchQuery}
+//           onChangeText={setSearchQuery}
+//         />
+
+//         <FlatList
+//           data={filteredUsers}
+//           keyExtractor={(item) => item.id.toString()}
+//           renderItem={({ item }) => (
+//             <TouchableOpacity
+//               style={[styles.userItem, selectedUsers.includes(item) && styles.selectedUser]}
+//               onPress={() => setSelectedUsers((prev) => (prev.includes(item) ? prev.filter((u) => u !== item) : [...prev, item]))}
+//             >
+//               <Text style={styles.userText}>{item.firstName} {item.lastName}</Text>
+//             </TouchableOpacity>
+//           )}
+//         />
+//       </SafeAreaView>
+//     </Modal>
+//   );
+// };
+
+// export default AddParticipantsModal;
+
+// const styles = StyleSheet.create({
+//   modalContainer: { flex: 1, backgroundColor: "#fff", padding: 20 },
+//   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10 },
+//   headerTitle: { fontSize: 18, fontWeight: "bold" },
+//   headerButton: { fontSize: 16, color: "#007aff" },
+//   searchBar: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, padding: 10, marginBottom: 10 },
+//   userItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: "#ddd" },
+//   selectedUser: { backgroundColor: "#D0E7FF" },
+//   userText: { fontSize: 16 },
+// });
+
+import React, { useEffect, useState, useContext } from "react";
+import {
+  Modal,
+  SafeAreaView,
+  Text,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  View,
+} from "react-native";
+import { getAllUsers } from "../../service/UserService";
+import { addParticipantToGroup } from "../../service/ChatService";
+import { getStompClient } from "../../service/WebSocketService";
+import { getUserById } from "../../service/UserService";
+import i18n from "../../../i18n";
+import { LanguageContext } from "../../context/LanguageContext";
+
+const AddParticipantsModal = ({
+  visible,
+  onClose,
+  conversationId,
+  existingParticipants,
+  setParticipantDetails,
+}) => {
+  const [allUsers, setAllUsers] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const { language } = useContext(LanguageContext);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const users = await getAllUsers();
+        setAllUsers(users);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const filteredUsers = allUsers.filter(
+    (user) =>
+      !existingParticipants.some((p) => p.id === user.id) &&
+      (user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.lastName.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  //   const handleAddParticipants = async () => {
+  //     try {
+  //       for (const user of selectedUsers) {
+  //         const addedParticipant = await addParticipantToGroup(conversationId, user.id);
+  //         const stompClient = getStompClient();
+  //         if (stompClient && stompClient.connected) {
+  //         stompClient.publish({
+  //             destination: "/app/participantAdded",
+  //             body: JSON.stringify(response.data),
+  //         });
+  //         console.log("📡 WebSocket: Published Group Update:", response.data);
+  //     }
+
+  //       }
+  //       setParticipantDetails([...existingParticipants, ...selectedUsers]);
+  //       onClose();
+  //     } catch (error) {
+  //       console.error("Error adding participants:", error);
+  //     }
+  //   };
+
+  // const handleAddParticipants = async () => {
+  //     try {
+  //         for (const user of selectedUsers) {
+  //             const updatedConversation = await addParticipantToGroup(conversationId, user.id); // ✅ API returns updated conversation
+
+  //             const stompClient = getStompClient();
+  //             if (stompClient && stompClient.connected) {
+  //                 stompClient.publish({
+  //                     destination: "/app/participantAdded",
+  //                     body: JSON.stringify(updatedConversation), // ✅ Use correct reference
+  //                 });
+  //                 console.log("📡 WebSocket: Published Group Update:", updatedConversation);
+  //             }
+
+  //             // ✅ Update participant details in the UI immediately
+  //             setParticipantDetails(updatedConversation.participants);
+  //         }
+  //         onClose();
+  //     } catch (error) {
+  //         console.error("❌ Error adding participants:", error);
+  //     }
+  // };
+
+  // const handleAddParticipants = async () => {
+  //     try {
+  //         for (const user of selectedUsers) {
+  //             const updatedConversation = await addParticipantToGroup(conversationId, user.id);
+
+  //             if (!updatedConversation || !updatedConversation.conversationId) {
+  //                 console.error("❌ Received invalid conversation update:", updatedConversation);
+  //                 continue;
+  //             }
+
+  //             const stompClient = getStompClient();
+  //             if (stompClient && stompClient.connected) {
+  //                 stompClient.publish({
+  //                     destination: "/app/participantAdded",
+  //                     body: JSON.stringify(updatedConversation),
+  //                 });
+  //                 console.log("📡 WebSocket: Published Participant Update:", updatedConversation);
+  //             }
+
+  //             // ✅ Update participant details in the UI immediately
+  //             setParticipantDetails(updatedConversation.participants);
+  //         }
+  //         onClose();
+  //     } catch (error) {
+  //         console.error("❌ Error adding participants:", error);
+  //     }
+  // };
+
+  // const handleAddParticipants = async () => {
+  //     try {
+  //         for (const user of selectedUsers) {
+  //             const updatedConversation = await addParticipantToGroup(conversationId, user.id);
+
+  //             if (!updatedConversation || !updatedConversation.conversationId) {
+  //                 console.error("❌ Received invalid conversation update:", updatedConversation);
+  //                 continue;
+  //             }
+
+  //             // ✅ Fetch full participant details
+  //             const fullParticipants = await Promise.all(
+  //                 updatedConversation.participants.map(async (participantId) => {
+  //                     try {
+  //                         const userData = await getUserById(participantId);
+  //                         return {
+  //                             id: participantId,
+  //                             ...userData,
+  //                             profileImageUrl: await fetchViewingPresignedUrl(userData.profileImage, "profile"),
+  //                         };
+  //                     } catch (error) {
+  //                         console.error(`❌ Error fetching user ${participantId}:`, error);
+  //                         return null;
+  //                     }
+  //                 })
+  //             );
+
+  //             // ✅ Remove null values (failed fetches)
+  //             const filteredParticipants = fullParticipants.filter(Boolean);
+
+  //             // ✅ Update UI with the complete participant details
+  //             setParticipantDetails(filteredParticipants);
+
+  //             // ✅ Publish WebSocket event
+  //             const stompClient = getStompClient();
+  //             if (stompClient && stompClient.connected) {
+  //                 stompClient.publish({
+  //                     destination: "/app/participantAdded",
+  //                     body: JSON.stringify(updatedConversation),
+  //                 });
+  //                 console.log("📡 WebSocket: Published Participant Update:", updatedConversation);
+  //             }
+  //         }
+  //         onClose();
+  //     } catch (error) {
+  //         console.error("❌ Error adding participants:", error);
+  //     }
+  // };
+
+  // const handleAddParticipants = async () => {
+  //     try {
+  //         let newlyAddedParticipants = [];
+
+  //         for (const user of selectedUsers) {
+  //             const updatedConversation = await addParticipantToGroup(conversationId, user.id);
+
+  //             if (!updatedConversation || !updatedConversation.conversationId) {
+  //                 console.error("❌ Invalid conversation update received:", updatedConversation);
+  //                 continue;
+  //             }
+
+  //             // ✅ Fetch full participant details
+  //             const participantDetails = await getUserById(user.id);
+  //             newlyAddedParticipants.push(participantDetails);
+
+  //             // ✅ Publish WebSocket event
+  //             const stompClient = getStompClient();
+  //             if (stompClient && stompClient.connected) {
+  //                 stompClient.publish({
+  //                     destination: "/app/participantAdded",
+  //                     body: JSON.stringify(updatedConversation),
+  //                 });
+  //                 console.log("📡 WebSocket: Published Participant Update:", updatedConversation);
+  //             }
+  //         }
+
+  //         // ✅ Update UI: Merge existing participants with newly added ones
+  //         setParticipantDetails([...existingParticipants, ...newlyAddedParticipants]);
+  //         onClose();
+  //     } catch (error) {
+  //         console.error("❌ Error adding participants:", error);
+  //     }
+  // };
+
+  // const handleAddParticipants = async () => {
+  //   try {
+  //       let newlyAddedParticipants = [];
+
+  //       for (const user of selectedUsers) {
+  //           const updatedConversation = await addParticipantToGroup(conversationId, user.id);
+
+  //           if (!updatedConversation || !updatedConversation.conversationId) {
+  //               console.error("❌ Invalid conversation update received:", updatedConversation);
+  //               continue;
+  //           }
+
+  //           // ✅ Fetch full participant details
+  //           const participantDetails = await getUserById(user.id);
+  //           newlyAddedParticipants.push(participantDetails);
+
+  //           // ✅ Publish WebSocket event
+  //           // const stompClient = getStompClient();
+  //           // if (stompClient && stompClient.connected) {
+  //           //     stompClient.publish({
+  //           //         destination: "/app/participantAdded",
+  //           //         body: JSON.stringify(updatedConversation), // ✅ Send full conversation
+  //           //     });
+  //           //     console.log("📡 WebSocket: Published Participant Update:", updatedConversation);
+  //           // }
+  //       }
+
+  //       // ✅ Update UI immediately
+  //       setParticipantDetails([...existingParticipants, ...newlyAddedParticipants]);
+  //       onClose();
+  //   } catch (error) {
+  //       console.error("❌ Error adding participants:", error);
+  //   }
+  // };
+
+  const handleAddParticipants = async () => {
+    try {
+      for (const user of selectedUsers) {
+        const updatedConversation = await addParticipantToGroup(
+          conversationId,
+          user.id
+        );
+
+        if (!updatedConversation || !updatedConversation.conversationId) {
+          console.error(
+            "❌ Invalid conversation update received:",
+            updatedConversation
+          );
+          continue;
+        }
+      }
+      onClose();
+    } catch (error) {
+      console.error("❌ Error adding participants:", error);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide">
+      <SafeAreaView style={styles.modalContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.headerButton}>{i18n.t("cancel")}</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{i18n.t("addParticipants")}</Text>
+          <TouchableOpacity onPress={handleAddParticipants}>
+            <Text style={[styles.headerButton, styles.doneButton]}>
+              {i18n.t("done")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Bar */}
+        <TextInput
+          style={styles.searchBar}
+          placeholder={i18n.t("searchUsers")}
+          placeholderTextColor="#999"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+
+        {/* User List */}
+        <FlatList
+          data={filteredUsers}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                styles.userItem,
+                selectedUsers.includes(item) && styles.selectedUser,
+              ]}
+              onPress={() =>
+                setSelectedUsers((prev) =>
+                  prev.includes(item)
+                    ? prev.filter((u) => u !== item)
+                    : [...prev, item]
+                )
+              }
+            >
+              <Text style={styles.userText}>
+                {item.firstName} {item.lastName}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+};
+
+export default AddParticipantsModal;
+
+const styles = StyleSheet.create({
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    padding: 20,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  headerButton: {
+    fontSize: 16,
+    color: "#007aff",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  doneButton: {
+    fontWeight: "600",
+  },
+  searchBar: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    marginHorizontal: 10,
+  },
+  userItem: {
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+  },
+  selectedUser: {
+    backgroundColor: "#D0E7FF",
+  },
+  userText: {
+    fontSize: 16,
+  },
+});

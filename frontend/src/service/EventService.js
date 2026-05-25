@@ -1,0 +1,115 @@
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import { getAuthToken } from "./TokenService";
+
+const { IP_ADDR } = Constants.expoConfig?.extra;
+
+// Fetch all events
+export const getAllEvents = async () => {
+  try {
+    const response = await axios.get(`http://${IP_ADDR}:8080/api/events`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching events:", error);
+    return [];
+  }
+};
+
+// Get details of a specific event
+export const getEventById = async (eventId) => {
+  try {
+    const response = await axios.get(
+      `http://${IP_ADDR}:8080/api/events/${eventId}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching event details:", error);
+    return { error: "Failed to fetch event details" };
+  }
+};
+
+// Check in to an event
+export const checkInToEvent = async (eventId, userId) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No auth token found");
+
+  try {
+    const response = await axios.post(
+      `http://${IP_ADDR}:8080/api/events/${eventId}/checkin/${userId}`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error checking in:", error);
+    return { error: "Check-in failed" };
+  }
+};
+
+export const createEvent = async (eventData) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No auth token found");
+
+  try {
+    const response = await axios.post(
+      `http://${IP_ADDR}:8080/api/events`,
+      eventData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error creating event:", error);
+    return null;
+  }
+};
+
+export const updateEvent = async (eventId, updatedData) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No auth token found");
+
+  try {
+    const response = await axios.put(
+      `http://${IP_ADDR}:8080/api/events/${eventId}`,
+      updatedData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating event:", error);
+    throw error;
+  }
+};
+
+export const deleteEvent = async (eventId) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No auth token found");
+
+  try {
+    const response = await axios.delete(
+      `http://${IP_ADDR}:8080/api/events/${eventId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting event:", error);
+    throw error;
+  }
+};

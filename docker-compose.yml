@@ -1,0 +1,83 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-fyp
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345678
+      MYSQL_DATABASE: fyp_dev
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-fyp-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p12345678"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-fyp
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7.0
+    container_name: redis-fyp
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  libre:
+    image: libretranslate/libretranslate
+    #platform: linux/amd64  # force AMD64
+    container_name: libre-fyp
+    restart: unless-stopped
+    command: ["--load-only", "en,zh"]
+    ports:
+      - "5000:5000"
+    mem_limit: 512m
+
+  backend:
+    build: ./backend
+    #image: pinganapp/backendaws:v6 #replace with your own docker image
+    container_name: fyp-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
+      libre:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/fyp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USER: root
+      DB_PASSWORD: 12345678
+      IP_ADDR: 0.0.0.0
+
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+      # LibreTranslate URL inside Docker network
+      LIBRE_URL: http://libre:5000/translate
+    ports:
+      - "8080:8080"
+    tty: true  # keeps container running interactively
+
+volumes:
+  mysql-fyp-data:

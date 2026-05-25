@@ -1,0 +1,596 @@
+import React, { useEffect, useContext, useState, useRef } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  TextInput,
+  Button,
+  ScrollView,
+} from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import {
+  getAllEvents,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+} from "../../service/EventService";
+import { confirmAction } from "../../utils/confirmAction";
+import i18n from "../../../i18n";
+import { LanguageContext } from "../../context/LanguageContext";
+import { Platform } from "react-native";
+import { showAlert } from "../../utils/showAlert";
+
+const formatWebTimeToAMPM = (timeString) => {
+  if (!timeString) return "";
+
+  const [hours, minutes] = timeString.split(":").map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+// MOVE THIS TO THE TOP, ABOVE ManageEventsPage
+const convertToDateTime = (dateString, timeString) => {
+  if (!dateString || !timeString) return null;
+
+  try {
+    let hours, minutes;
+    const isAmPm = timeString.toUpperCase().includes("AM") || timeString.toUpperCase().includes("PM");
+
+    if (!isAmPm) {
+      const parts = timeString.split(":");
+      if (parts.length !== 2) return null;
+      hours = parseInt(parts[0], 10);
+      minutes = parseInt(parts[1], 10);
+    } else {
+      const match = timeString.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+      if (!match) return null;
+      hours = parseInt(match[1], 10);
+      minutes = parseInt(match[2], 10);
+      const modifier = match[3].toUpperCase();
+      if (modifier === "PM" && hours !== 12) hours += 12;
+      if (modifier === "AM" && hours === 12) hours = 0;
+    }
+
+    const eventDateTime = new Date(dateString);
+    if (isNaN(eventDateTime.getTime())) return null;
+    eventDateTime.setHours(hours, minutes, 0, 0);
+    return eventDateTime;
+  } catch (e) {
+    return null;
+  }
+};
+
+export default function ManageEventsPage() {
+  const navigation = useNavigation();
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  console.log("UPCOMING EVENTS", upcomingEvents);
+  const { language } = useContext(LanguageContext);
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: i18n.t("manageUpcomingEvents"),
+      headerBackTitle: i18n.t("back"),
+    });
+  }, [language]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", loadEvents);
+    return unsubscribe;
+  }, [navigation]);
+
+  const loadEvents = async () => {
+  try {
+    const data = await getAllEvents();
+    const now = new Date();
+    const upcoming = [];
+
+    data.forEach((event) => {
+      const eventEndTime = convertToDateTime(event.date, event.endTime);
+
+      // Guard against null before using .getTime()
+      if (eventEndTime && eventEndTime instanceof Date && !isNaN(eventEndTime)) {
+        const oneHourAfterEnd = new Date(eventEndTime.getTime() + 60 * 60 * 1000);
+        if (now <= oneHourAfterEnd) {
+          upcoming.push(event);
+        }
+      }
+    });
+
+    // SECURE SORT: Check for nulls during the sort process
+    upcoming.sort((a, b) => {
+      const dateA = convertToDateTime(a.date, a.startTime);
+      const dateB = convertToDateTime(b.date, b.startTime);
+      
+      const valA = dateA ? dateA.getTime() : 0;
+      const valB = dateB ? dateB.getTime() : 0;
+      return valA - valB;
+    });
+
+    setUpcomingEvents(upcoming);
+  } catch (err) {
+    console.error("Failed to load events:", err);
+  }
+};
+
+  const handleDelete = async (eventId) => {
+    const confirmed = await confirmAction({
+      title: i18n.t("delete"),
+      message: i18n.t("areYouSure"),
+      confirmText: i18n.t("delete"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await deleteEvent(eventId);
+      loadEvents();
+    } catch (err) {
+      console.error("Failed to delete:", err);
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.eventItem}
+      onPress={() => navigation.navigate("EventForm", { event: item })}
+    >
+      <View>
+        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.subtitle}>
+          {item.date} | {item.startTime} - {item.endTime}
+        </Text>
+        <Text style={styles.subtitle}>{item.location}</Text>
+      </View>
+      <TouchableOpacity onPress={() => handleDelete(item.id)}>
+        <Ionicons name="trash-outline" size={24} color="red" />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={upcomingEvents}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 80 }}
+      />
+      <TouchableOpacity
+        style={styles.createButton}
+        onPress={() => navigation.navigate("EventForm")}
+      >
+        <Text style={styles.buttonText}>+ {i18n.t("createEvent")}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export function EventFormPage() {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const editingEvent = route.params?.event || null;
+
+  const [eventData, setEventData] = useState({
+    title: editingEvent?.title || "",
+    description: editingEvent?.description || "",
+    date: editingEvent?.date || "",
+    startTime: editingEvent?.startTime || "",
+    endTime: editingEvent?.endTime || "",
+    location: editingEvent?.location || "",
+  });
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  const dateInputRef = useRef(null);
+
+
+  const handleDateChange = (event, selectedDate) => {
+    if (event?.type === "dismissed" || !selectedDate) {
+      setTimeout(() => {
+        setShowDatePicker(false);
+      }, 100);
+      return;
+    }
+
+    setEventData((prevData) => ({
+      ...prevData,
+      date: selectedDate.toISOString().split("T")[0],
+    }));
+
+    setTimeout(() => {
+      setShowDatePicker(false);
+    }, 100);
+  };
+
+  const handleTimeChange = (field, event, selectedTime) => {
+    if (event?.type === "dismissed" || !selectedTime) {
+      setTimeout(() => {
+        field === "startTime"
+          ? setShowStartTimePicker(false)
+          : setShowEndTimePicker(false);
+      }, 100);
+      return;
+    }
+
+    const formattedTime = selectedTime.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    setEventData((prevData) => ({
+      ...prevData,
+      [field]: formattedTime,
+    }));
+
+    setTimeout(() => {
+      field === "startTime"
+        ? setShowStartTimePicker(false)
+        : setShowEndTimePicker(false);
+    }, 100);
+  };
+
+  const handleInputChange = (field, value) => {
+    setEventData({ ...eventData, [field]: value });
+  };
+
+  const convertToDateTime = (dateString, timeString) => {
+    if (!dateString || !timeString) return null;
+
+    let hours, minutes;
+
+    // WEB FORMAT → HH:MM
+    if (!timeString.toUpperCase().includes("AM") && !timeString.toUpperCase().includes("PM")) {
+      const parts = timeString.split(":");
+
+      if (parts.length !== 2) {
+        console.warn("Invalid time format:", timeString);
+        return null;
+      }
+
+      hours = parseInt(parts[0], 10);
+      minutes = parseInt(parts[1], 10);
+    }
+
+    // MOBILE FORMAT → HH:MM AM/PM
+    else {
+      const match = timeString.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+
+      if (!match) {
+        console.warn("Invalid time format:", timeString);
+        return null;
+      }
+
+      let [, h, m, modifier] = match;
+
+      hours = parseInt(h, 10);
+      minutes = parseInt(m, 10);
+
+      if (modifier.toUpperCase() === "PM" && hours !== 12) hours += 12;
+      if (modifier.toUpperCase() === "AM" && hours === 12) hours = 0;
+    }
+
+    const eventDateTime = new Date(dateString);
+
+    if (isNaN(eventDateTime)) return null;
+
+    eventDateTime.setHours(hours, minutes, 0, 0);
+
+    return eventDateTime;
+  };
+
+  const handleSubmit = async () => {
+    const { title, description, date, startTime, endTime, location } =
+      eventData;
+
+    console.log("DATA", title, description, date, startTime, endTime, location);
+
+    if (!title) {
+      showAlert(i18n.t("error"), i18n.t("titleRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    if (!description) {
+      showAlert(i18n.t("error"), i18n.t("descriptionRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    if (!date) {
+      showAlert(i18n.t("error"), i18n.t("dateRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    if (!startTime) {
+      showAlert(i18n.t("error"), i18n.t("startTimeRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    if (!endTime) {
+      showAlert(i18n.t("error"), i18n.t("endTimeRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    if (!location) {
+      showAlert(i18n.t("error"), i18n.t("locationRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    if (description.length > 255) {
+      showAlert(i18n.t("error"), i18n.t("descriptionLessThan255"), [
+        { text: i18n.t("ok") },
+      ]);
+      return;
+    }
+
+    const startDateTime = convertToDateTime(date, startTime);
+    const endDateTime = convertToDateTime(date, endTime);
+
+    if (endDateTime <= startDateTime) {
+      showAlert(i18n.t("error"), i18n.t("endTimeCheck"), [
+        { text: i18n.t("ok") },
+      ]);
+      return;
+    }
+
+    try {
+      if (editingEvent) {
+        await updateEvent(editingEvent.id, eventData);
+        showAlert(i18n.t("success"), i18n.t("updateEventSuccess"), [
+          { text: i18n.t("ok") },
+        ]);
+      } else {
+        await createEvent(eventData);
+        showAlert(i18n.t("success"), i18n.t("createEventSuccess"), [
+          { text: i18n.t("ok") },
+        ]);
+      }
+      navigation.goBack();
+    } catch (error) {
+      console.log("error: ", error);
+      showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
+        { text: i18n.t("ok") },
+      ]);
+    }
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.header}>
+        {editingEvent ? i18n.t("editEvent") : i18n.t("createEvent")}
+      </Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder={i18n.t("title")}
+        value={eventData.title}
+        onChangeText={(text) => handleInputChange("title", text)}
+      />
+
+      <TextInput
+        style={[styles.input, { height: 80 }]}
+        multiline={true}
+        numberOfLines={3}
+        textAlignVertical="top"
+        placeholder={i18n.t("description")}
+        value={eventData.description}
+        onChangeText={(text) => handleInputChange("description", text)}
+      />
+      <Text style={{ marginBottom: 10 }}>
+        {eventData.description.length}/255
+      </Text>
+
+      {/* --- DATE SECTION --- */}
+      {Platform.OS === "web" ? (
+        <>
+          <TouchableOpacity
+            style={styles.inputRow}
+            onPress={() => dateInputRef.current?.showPicker?.() || dateInputRef.current?.click()}
+          >
+            <Text>{eventData.date || i18n.t("selectDate")}</Text>
+            <Ionicons name="calendar-outline" size={24} color="gray" />
+          </TouchableOpacity>
+
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={eventData.date}
+            style={{ display: "none" }}
+            onChange={(e) =>
+              setEventData({ ...eventData, date: e.target.value })
+            }
+          />
+        </>
+      ) : (
+        <>
+          <TouchableOpacity
+            style={styles.inputRow}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text>{eventData.date || i18n.t("selectDate")}</Text>
+            <Ionicons name="calendar-outline" size={24} color="gray" />
+          </TouchableOpacity>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={eventData.date ? new Date(eventData.date) : new Date()}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+            />
+          )}
+        </>
+      )}
+     
+      {/* --- START TIME --- */}
+      {Platform.OS === "web" ? (
+        <input
+          type="time"
+          style={{
+            padding: 12,
+            borderRadius: 8,
+            border: "1px solid #ccc",
+            marginBottom: 10,
+            fontSize: 16
+          }}
+          onChange={(e) =>
+            setEventData({
+              ...eventData,
+              startTime: formatWebTimeToAMPM(e.target.value),
+            })
+          }
+        />
+      ) : (
+        <>
+          <TouchableOpacity
+            style={styles.inputRow}
+            onPress={() => setShowStartTimePicker(true)}
+          >
+            <Text>{eventData.startTime || i18n.t("selectStartTime")}</Text>
+            <Ionicons name="time-outline" size={24} color="gray" />
+          </TouchableOpacity>
+
+          {showStartTimePicker && (
+            <DateTimePicker
+              value={
+                eventData.startTime
+                  ? convertToDateTime(eventData.date, eventData.startTime)
+                  : new Date()
+              }
+              mode="time"
+              is24Hour={false}
+              display="default"
+              onChange={(e, time) => handleTimeChange("startTime", e, time)}
+            />
+          )}
+        </>
+      )}
+      {/* --- END TIME --- */}
+      {Platform.OS === "web" ? (
+        <input
+          type="time"
+          style={{
+            padding: 12,
+            borderRadius: 8,
+            border: "1px solid #ccc",
+            marginBottom: 10,
+            fontSize: 16
+          }}
+          onChange={(e) =>
+            setEventData({
+              ...eventData,
+              endTime: formatWebTimeToAMPM(e.target.value)
+            })
+          }
+        />
+      ) : (
+        <>
+          <TouchableOpacity
+            style={styles.inputRow}
+            onPress={() => setShowEndTimePicker(true)}
+          >
+            <Text>{eventData.endTime || i18n.t("selectEndTime")}</Text>
+            <Ionicons name="time-outline" size={24} color="gray" />
+          </TouchableOpacity>
+
+          {showEndTimePicker && (
+            <DateTimePicker
+              value={
+                eventData.endTime
+                  ? convertToDateTime(eventData.date, eventData.endTime)
+                  : new Date()
+              }
+              mode="time"
+              is24Hour={false}
+              display="default"
+              onChange={(e, time) => handleTimeChange("endTime", e, time)}
+            />
+          )}
+        </>
+      )}
+      <TextInput
+        style={styles.input}
+        placeholder={i18n.t("location")}
+        value={eventData.location}
+        onChangeText={(text) => handleInputChange("location", text)}
+      />
+
+      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+        <Text style={styles.buttonText}>
+          {editingEvent ? i18n.t("updateEvent") : i18n.t("createEvent")}
+        </Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 15, backgroundColor: "#f5f5f5" },
+  header: { fontSize: 22, fontWeight: "bold", marginBottom: 20 },
+  input: {
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: 5,
+  },
+  inputRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: 16,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  eventItem: {
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 2,
+  },
+  title: { fontSize: 18, fontWeight: "bold" },
+  subtitle: { fontSize: 16, color: "#333" },
+  createButton: {
+    backgroundColor: "#007bff",
+    paddingVertical: 14,
+    borderRadius: 10,
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    alignItems: "center",
+  },
+  submitButton: {
+    backgroundColor: "#007bff",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 30,
+  },
+  buttonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+});
