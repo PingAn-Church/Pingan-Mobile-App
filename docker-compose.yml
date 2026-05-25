@@ -37,7 +37,8 @@ services:
 
   libre:
     image: libretranslate/libretranslate
-    #platform: linux/amd64  # force AMD64
+    profiles:
+      - translation
     container_name: libre-fyp
     restart: unless-stopped
     command: ["--load-only", "en,zh"]
@@ -57,13 +58,12 @@ services:
         condition: service_started
       redis:
         condition: service_started
-      libre:
-        condition: service_started
     environment:
       DB_URL: jdbc:mysql://mysql:3306/fyp_dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USER: root
       DB_PASSWORD: 12345678
       IP_ADDR: 0.0.0.0
+      ENABLE_LIBRE_TRANSLATE: ${ENABLE_LIBRE_TRANSLATE:-false}
 
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
@@ -74,7 +74,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
 
       # LibreTranslate URL inside Docker network
-      LIBRE_URL: http://libre:5000/translate
+      LIBRE_URL: ${LIBRE_URL:-http://libre:5000/translate}
     ports:
       - "8080:8080"
     tty: true  # keeps container running interactively
