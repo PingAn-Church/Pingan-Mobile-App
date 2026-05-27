@@ -14,9 +14,9 @@ Note: Ensure you have a .env file in the frontend folder, and have an IP_ADDR va
 create `env.properties` file in backend folder
 
 ```
-DB_URL=jdbc:mysql://localhost:3306/fyp_dev
-DB_USER=root
-DB_PASSWORD=12345678
+DB_URL=jdbc:postgresql://localhost:5432/pingan_mobile_app
+DB_USER=pingan_mobile_app_user
+DB_PASSWORD=PinganMobileApp@2026
 IP_ADDR=<ip-address-of-your-machine>
 ```
 
@@ -26,7 +26,8 @@ IP_ADDR=<ip-address-of-your-machine>
 Note: Ensure "java -version" and "mvn -version" report back the same version of Java. For some reason, Java 24 and Lombok 1.18.38 are not compatible with each other thus causing build failures.
 
 ## Database
-Use docker cli / Open docker desktop, 
+The app reuses the existing PostgreSQL instance from the external Docker network `pingan-db-net`.
+Create `infra/.env` with the PostgreSQL connection settings, then use docker cli / Open docker desktop:
 
 1. docker-compose up -d
 
@@ -62,13 +63,11 @@ For using Docker images:
 ## Access Admin Page
 Manually insert Admin to database
 open command prompt
-1. docker exec -it mysql-fyp bash
-2. mysql -u root -p
-3. USE fyp_dev;
-4. INSERT INTO users (email, password, is_admin,first_name,last_name,is_verified_user) 
-VALUES ('admin@gmail.com', '$2a$10$En2DwZ6WdX54yUt17fltqufEPOu/a2B5FhdWZx1EIsSsGABML8L5.', 1,'John','cena',1);
+1. docker exec -it pingan-care-postgres psql -U pingan_mobile_app_user -d pingan_mobile_app
+2. INSERT INTO users (email, password, is_admin,first_name,last_name,is_verified_user) 
+VALUES ('admin@gmail.com', '$2a$10$En2DwZ6WdX54yUt17fltqufEPOu/a2B5FhdWZx1EIsSsGABML8L5.', true,'John','cena',true);
 
-Note: step 2 pw is 12345678
+Note: the database password is configured in `infra/.env`.
 
 Login to admin account in frontend:
 USERNAME: admin@gmail.com
