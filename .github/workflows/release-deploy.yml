@@ -160,7 +160,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp infra/docker-compose.prod.yml compose.yml
+          cp docker-compose.prod.yml compose.yml
           {
             printf 'BACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}"
             printf 'COMPOSE_PROJECT_NAME=pingan-app\n'
