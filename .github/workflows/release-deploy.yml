@@ -140,8 +140,8 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
-      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
       BACKEND_IMAGE: ${{ needs.build-push.outputs.image-ref }}
     steps:
       - name: Check out repository
@@ -164,11 +164,9 @@ jobs:
           {
             printf 'BACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}"
             printf 'COMPOSE_PROJECT_NAME=pingan-app\n'
-            if [ -n "${GHCR_USERNAME}" ] && [ -n "${GHCR_TOKEN}" ]; then
-              printf 'GHCR_USERNAME=%s\n' "${GHCR_USERNAME}"
-              printf 'GHCR_TOKEN=%s\n' "${GHCR_TOKEN}"
-            fi
           } > .deploy.env
+          printf '%s' "${GHCR_USERNAME}" > .ghcr.username
+          printf '%s' "${GHCR_TOKEN}" > .ghcr.token
 
           cat > deploy-remote.sh <<'REMOTE_SCRIPT'
           #!/usr/bin/env bash
@@ -176,7 +174,7 @@ jobs:
 
           APP_DIR="/opt/apps/pingan-app"
           cd "${APP_DIR}"
-
+          trap 'rm -f .ghcr.username .ghcr.token' EXIT
           if [ ! -f "infra/.env" ]; then
             echo "Missing ${APP_DIR}/infra/.env. Create it before deploying." >&2
             exit 1
@@ -196,10 +194,10 @@ jobs:
           printf 'DB_NETWORK_NAME=%s\n' "${db_network_name}" >> "${tmp_env}"
           mv "${tmp_env}" .deploy.env
 
-          ghcr_username="$(awk -F= '/^GHCR_USERNAME=/{sub(/^[^=]*=/, ""); print; exit}' .deploy.env | tr -d '\r' || true)"
-          ghcr_token="$(awk -F= '/^GHCR_TOKEN=/{sub(/^[^=]*=/, ""); print; exit}' .deploy.env | tr -d '\r' || true)"
-          if [ -n "${ghcr_username}" ] && [ -n "${ghcr_token}" ]; then
-            printf '%s' "${ghcr_token}" | docker login ghcr.io -u "${ghcr_username}" --password-stdin
+          if [ -s ".ghcr.username" ] && [ -s ".ghcr.token" ]; then
+            ghcr_username="$(cat .ghcr.username)"
+            docker login ghcr.io -u "${ghcr_username}" --password-stdin < .ghcr.token
+            rm -f .ghcr.username .ghcr.token
           fi
 
           docker compose --env-file .deploy.env -f compose.yml pull
@@ -222,5 +220,7 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${APP_DIR}' '${APP_DIR}/infra'"
           scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" compose.yml "${SSH_USER}@${SSH_HOST}:${APP_DIR}/compose.yml"
           scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" .deploy.env "${SSH_USER}@${SSH_HOST}:${APP_DIR}/.deploy.env"
+          scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" .ghcr.username "${SSH_USER}@${SSH_HOST}:${APP_DIR}/.ghcr.username"
+          scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" .ghcr.token "${SSH_USER}@${SSH_HOST}:${APP_DIR}/.ghcr.token"
           scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" deploy-remote.sh "${SSH_USER}@${SSH_HOST}:${remote_script}"
           ssh -i ~/.ssh/id_ed25519 -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "bash '${remote_script}'"
