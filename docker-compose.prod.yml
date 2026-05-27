@@ -34,7 +34,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       LIBRE_URL: ${LIBRE_URL:-http://libre:5000/translate}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:3200:8080"
     networks:
       - default
       - db
