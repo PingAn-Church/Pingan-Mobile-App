@@ -61,13 +61,23 @@ For using Docker images:
 
 
 ## Access Admin Page
-Manually insert Admin to database
-open command prompt
-1. docker exec -it pingan-care-postgres psql -U pingan_mobile_app_user -d pingan_mobile_app
-2. INSERT INTO users (email, password, is_admin,first_name,last_name,is_verified_user) 
-VALUES ('admin@gmail.com', '$2a$10$En2DwZ6WdX54yUt17fltqufEPOu/a2B5FhdWZx1EIsSsGABML8L5.', true,'John','cena',true);
+Seed the admin account with the Compose tool:
 
-Note: the database password is configured in `infra/.env`.
+```
+docker compose --env-file infra/.env --profile tools run --rm --build seed-admin
+```
+
+The tool is idempotent: it creates the admin user if missing, promotes/verifies an existing user with the same email, and only resets the password when `APP_SEED_ADMIN_RESET_PASSWORD=true`.
+
+Configure the seed account in `infra/.env`:
+
+```
+APP_SEED_ADMIN_EMAIL=admin@gmail.com
+APP_SEED_ADMIN_PASSWORD=12345678
+APP_SEED_ADMIN_FIRST_NAME=John
+APP_SEED_ADMIN_LAST_NAME=Cena
+APP_SEED_ADMIN_RESET_PASSWORD=false
+```
 
 Login to admin account in frontend:
 USERNAME: admin@gmail.com

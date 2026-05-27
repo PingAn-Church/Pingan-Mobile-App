@@ -29,6 +29,7 @@ services:
     mem_limit: 512m
 
   backend:
+    image: pingan-mobile-app-backend
     build: ./backend
     container_name: fyp-backend
     restart: unless-stopped
@@ -59,6 +60,26 @@ services:
       - db
     tty: true
 
+
+  seed-admin:
+    image: pingan-mobile-app-backend
+    build: ./backend
+    profiles:
+      - tools
+    restart: "no"
+    env_file:
+      - ./infra/.env
+    environment:
+      IP_ADDR: 0.0.0.0
+      APP_TOOL: seed-admin
+      APP_SEED_ADMIN_EMAIL: "${APP_SEED_ADMIN_EMAIL:-admin@gmail.com}"
+      APP_SEED_ADMIN_PASSWORD: "${APP_SEED_ADMIN_PASSWORD:-12345678}"
+      APP_SEED_ADMIN_FIRST_NAME: "${APP_SEED_ADMIN_FIRST_NAME:-John}"
+      APP_SEED_ADMIN_LAST_NAME: "${APP_SEED_ADMIN_LAST_NAME:-Cena}"
+      APP_SEED_ADMIN_RESET_PASSWORD: "${APP_SEED_ADMIN_RESET_PASSWORD:-false}"
+      ENABLE_LIBRE_TRANSLATE: false
+    networks:
+      - db
 networks:
   db:
     name: ${DB_NETWORK_NAME:-pingan-db-net}
