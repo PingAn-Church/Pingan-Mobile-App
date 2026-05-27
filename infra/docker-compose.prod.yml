@@ -1,0 +1,59 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: pingan-app-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+
+  redis:
+    image: redis:7.0
+    container_name: pingan-app-redis
+    restart: unless-stopped
+
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    container_name: pingan-app-backend
+    restart: unless-stopped
+    env_file:
+      - ./infra/.env
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      IP_ADDR: 0.0.0.0
+      ENABLE_LIBRE_TRANSLATE: ${ENABLE_LIBRE_TRANSLATE:-false}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      LIBRE_URL: ${LIBRE_URL:-http://libre:5000/translate}
+    ports:
+      - "8080:8080"
+    networks:
+      - default
+      - db
+
+  seed-admin:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    profiles:
+      - tools
+    restart: "no"
+    env_file:
+      - ./infra/.env
+    environment:
+      IP_ADDR: 0.0.0.0
+      APP_TOOL: seed-admin
+      ENABLE_LIBRE_TRANSLATE: false
+    networks:
+      - db
+
+networks:
+  db:
+    name: ${DB_NETWORK_NAME:-pingan-db-net}
+    external: true

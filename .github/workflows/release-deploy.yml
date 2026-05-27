@@ -1,0 +1,226 @@
+name: Release and deploy
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          notes_file="${RUNNER_TEMP}/release-notes.md"
+          use_tag_message=false
+
+          tag_type="$(git cat-file -t "refs/tags/${tag}" 2>/dev/null || true)"
+          if [ "${tag_type}" = "tag" ]; then
+            git for-each-ref "refs/tags/${tag}" --format='%(contents)' > "${notes_file}"
+            if [ -n "$(tr -d '[:space:]' < "${notes_file}")" ]; then
+              use_tag_message=true
+            fi
+          fi
+
+          echo "notes_file=${notes_file}" >> "${GITHUB_OUTPUT}"
+          echo "use_tag_message=${use_tag_message}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or update release
+        uses: actions/github-script@v7
+        env:
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
+          USE_TAG_MESSAGE: ${{ steps.notes.outputs.use_tag_message }}
+        with:
+          script: |
+            const fs = require('fs');
+            const tag = process.env.GITHUB_REF_NAME;
+            const { owner, repo } = context.repo;
+            let body;
+
+            if (process.env.USE_TAG_MESSAGE === 'true') {
+              body = fs.readFileSync(process.env.NOTES_FILE, 'utf8').trim();
+            } else {
+              const generated = await github.rest.repos.generateReleaseNotes({
+                owner,
+                repo,
+                tag_name: tag,
+              });
+              body = generated.data.body;
+            }
+
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: existing.data.id,
+                tag_name: tag,
+                name: tag,
+                body,
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: tag,
+                body,
+              });
+            }
+
+  build-push:
+    name: Build and publish backend image
+    runs-on: ubuntu-latest
+    needs: release
+    outputs:
+      image-ref: ${{ steps.image.outputs.image_ref }}
+      image-repo: ${{ steps.image.outputs.image_repo }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve image tags
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_repo="ghcr.io/${GITHUB_REPOSITORY,,}/backend"
+          short_sha="${GITHUB_SHA::7}"
+          {
+            echo "image_repo=${image_repo}"
+            echo "image_ref=${image_repo}:${GITHUB_REF_NAME}"
+            echo "tags<<EOF"
+            echo "${image_repo}:${GITHUB_REF_NAME}"
+            echo "${image_repo}:latest"
+            echo "${image_repo}:sha-${short_sha}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: build-push
+    env:
+      APP_DIR: /opt/apps/pingan-app
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+      BACKEND_IMAGE: ${{ needs.build-push.outputs.image-ref }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${SSH_PORT}" -H "${SSH_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Prepare deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp infra/docker-compose.prod.yml compose.yml
+          {
+            printf 'BACKEND_IMAGE=%s\n' "${BACKEND_IMAGE}"
+            printf 'COMPOSE_PROJECT_NAME=pingan-app\n'
+            if [ -n "${GHCR_USERNAME}" ] && [ -n "${GHCR_TOKEN}" ]; then
+              printf 'GHCR_USERNAME=%s\n' "${GHCR_USERNAME}"
+              printf 'GHCR_TOKEN=%s\n' "${GHCR_TOKEN}"
+            fi
+          } > .deploy.env
+
+          cat > deploy-remote.sh <<'REMOTE_SCRIPT'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+
+          APP_DIR="/opt/apps/pingan-app"
+          cd "${APP_DIR}"
+
+          if [ ! -f "infra/.env" ]; then
+            echo "Missing ${APP_DIR}/infra/.env. Create it before deploying." >&2
+            exit 1
+          fi
+
+          db_network_name="$(awk -F= '/^DB_NETWORK_NAME=/{sub(/^[^=]*=/, ""); print; exit}' infra/.env | tr -d '\r' || true)"
+          if [ -z "${db_network_name}" ]; then
+            db_network_name="pingan-db-net"
+          fi
+
+          tmp_env=".deploy.env.tmp"
+          if [ -f ".deploy.env" ]; then
+            grep -v '^DB_NETWORK_NAME=' .deploy.env > "${tmp_env}" || true
+          else
+            : > "${tmp_env}"
+          fi
+          printf 'DB_NETWORK_NAME=%s\n' "${db_network_name}" >> "${tmp_env}"
+          mv "${tmp_env}" .deploy.env
+
+          ghcr_username="$(awk -F= '/^GHCR_USERNAME=/{sub(/^[^=]*=/, ""); print; exit}' .deploy.env | tr -d '\r' || true)"
+          ghcr_token="$(awk -F= '/^GHCR_TOKEN=/{sub(/^[^=]*=/, ""); print; exit}' .deploy.env | tr -d '\r' || true)"
+          if [ -n "${ghcr_username}" ] && [ -n "${ghcr_token}" ]; then
+            printf '%s' "${ghcr_token}" | docker login ghcr.io -u "${ghcr_username}" --password-stdin
+          fi
+
+          docker compose --env-file .deploy.env -f compose.yml pull
+          docker compose --env-file .deploy.env -f compose.yml up -d --remove-orphans
+
+          if grep -q '^APP_SEED_ADMIN_EMAIL=' infra/.env; then
+            docker compose --env-file .deploy.env -f compose.yml --profile tools run --rm seed-admin
+          fi
+
+          docker compose --env-file .deploy.env -f compose.yml ps
+          rm -f "$0"
+          REMOTE_SCRIPT
+          chmod 700 deploy-remote.sh
+
+      - name: Upload deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_script="/tmp/pingan-app-deploy-${GITHUB_RUN_ID}.sh"
+          ssh -i ~/.ssh/id_ed25519 -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${APP_DIR}' '${APP_DIR}/infra'"
+          scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" compose.yml "${SSH_USER}@${SSH_HOST}:${APP_DIR}/compose.yml"
+          scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" .deploy.env "${SSH_USER}@${SSH_HOST}:${APP_DIR}/.deploy.env"
+          scp -i ~/.ssh/id_ed25519 -P "${SSH_PORT}" deploy-remote.sh "${SSH_USER}@${SSH_HOST}:${remote_script}"
+          ssh -i ~/.ssh/id_ed25519 -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "bash '${remote_script}'"
