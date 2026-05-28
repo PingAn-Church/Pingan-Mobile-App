@@ -3,8 +3,8 @@ import 'dotenv/config'
 export default {
     expo: {
       name: "frontend",
-      slug: "frontend",
-      version: "1.0.0",
+      slug: "pingan-mobile-app",
+      version: "0.0.1",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",
@@ -23,7 +23,7 @@ export default {
           NSPhotoLibraryAddUsageDescription:
             "We need permission to save images to your photo library.",
         },
-        bundleIdentifier: "com.fyp.pingan",
+        bundleIdentifier: "org.pingan.rn-app",
       },
       android: {
         adaptiveIcon: {
@@ -35,21 +35,24 @@ export default {
           "READ_EXTERNAL_STORAGE",
           "WRITE_EXTERNAL_STORAGE",
         ],
-        package: "com.fyp.pingan",
+        package: "org.pingan.rn-app",
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       },
       web: {
         favicon: "./assets/favicon.png",
       },
       newArchEnabled: true,
+      plugins: [
+        "expo-font",
+      ],
       extra: {
         BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_BASE_URL,
         IP_ADDR: process.env.IP_ADDR,
         ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
         eas: {
-          projectId: "deb6d7ce-979e-46e2-88fb-d9d1b2f3018d",
+          projectId: "39be103c-2ac5-446e-abc7-506f4c087c45",
         },
       },
-      owner: "pinganservice572",
+      owner: "pingan-church",
     },
   };
