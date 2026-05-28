@@ -4,7 +4,7 @@ import axios from "axios";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
 
-const BASE_URL = apiUrl(`/api/threads`);
+const baseUrl = () => apiUrl(`/api/threads`);
 
 /**
  * Fetch all threads (requires auth)
@@ -14,7 +14,7 @@ export const fetchThreads = async () => {
   if (!token) throw new Error("No token found.");
 
   try {
-    const response = await axios.get(BASE_URL, {
+    const response = await axios.get(baseUrl(), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -36,7 +36,7 @@ export const createThread = async (threadData) => {
   if (!token) throw new Error("No token found.");
 
   try {
-    const response = await axios.post(BASE_URL, threadData, {
+    const response = await axios.post(baseUrl(), threadData, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -58,7 +58,7 @@ export const fetchReplies = async (threadId) => {
   if (!token) throw new Error("No token found.");
 
   try {
-    const response = await axios.get(`${BASE_URL}/${threadId}/replies`, {
+    const response = await axios.get(`${baseUrl()}/${threadId}/replies`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -82,7 +82,7 @@ export const postReply = async (threadId, replyData) => {
 
   try {
     const response = await axios.post(
-      `${BASE_URL}/${threadId}/replies`,
+      `${baseUrl()}/${threadId}/replies`,
       replyData,
       {
         headers: {
@@ -106,7 +106,7 @@ export const fetchThreadById = async (threadId) => {
     if (!token) throw new Error("No token found.");
 
     try {
-      const response = await axios.get(`${BASE_URL}/${threadId}`, {
+      const response = await axios.get(`${baseUrl()}/${threadId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -124,7 +124,7 @@ export const updateThread = async (threadId, updatedData) => {
     if (!token) throw new Error("No token found.");
 
     try {
-        const response = await axios.put(`${BASE_URL}/${threadId}`, updatedData, {
+        const response = await axios.put(`${baseUrl()}/${threadId}`, updatedData, {
         headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -143,7 +143,7 @@ export const updateReply = async (replyId, updatedContent) => {
 
     try {
       const response = await axios.put(
-        `${BASE_URL}/replies/${replyId}`,
+        `${baseUrl()}/replies/${replyId}`,
         { content: updatedContent },
         {
           headers: {
@@ -163,7 +163,7 @@ export const deleteThread = async (threadId) => {
     if (!token) throw new Error("No token found.");
 
     try {
-        await axios.delete(`${BASE_URL}/${threadId}`, {
+        await axios.delete(`${baseUrl()}/${threadId}`, {
         headers: {
             Authorization: `Bearer ${token}`,
         },
@@ -179,7 +179,7 @@ export const deleteReply = async (replyId) => {
     if (!token) throw new Error("No token found.");
 
     try {
-      await axios.delete(`${BASE_URL}/replies/${replyId}`, {
+      await axios.delete(`${baseUrl()}/replies/${replyId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

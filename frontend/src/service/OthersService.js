@@ -2,7 +2,7 @@ import axios from "axios";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
 
-const BASE_URL = apiUrl(`/api/others`);
+const baseUrl = () => apiUrl(`/api/others`);
 
 // Fetch content by name (e.g., "organisation", "faqs")
 export const getOtherContent = async (name) => {
@@ -10,7 +10,7 @@ export const getOtherContent = async (name) => {
   if (!token) throw new Error("No auth token found");
 
   try {
-    const response = await axios.get(`${BASE_URL}/${name}`, {
+    const response = await axios.get(`${baseUrl()}/${name}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -26,7 +26,7 @@ export const getAllOtherSections = async () => {
   const token = await getAuthToken();
   if (!token) throw new Error("No auth token found");
 
-  const response = await axios.get(`${BASE_URL}/all`, {
+  const response = await axios.get(`${baseUrl()}/all`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -41,7 +41,7 @@ export const updateOtherContent = async (name, content) => {
 
   try {
     const response = await axios.post(
-      `${BASE_URL}/update/${name}`,
+      `${baseUrl()}/update/${name}`,
       { content },
       {
         headers: {
@@ -62,7 +62,7 @@ export const createOtherSection = async (name, content) => {
 
   try {
     const response = await axios.post(
-      `${BASE_URL}/create`,
+      `${baseUrl()}/create`,
       { name, content },
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -79,7 +79,7 @@ export const deleteOtherSection = async (name) => {
   if (!token) throw new Error("No auth token found");
 
   try {
-    await axios.delete(`${BASE_URL}/delete/${name}`, {
+    await axios.delete(`${baseUrl()}/delete/${name}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (error) {
@@ -94,7 +94,7 @@ export const renameOtherSection = async (oldName, newName) => {
 
   try {
     const response = await axios.put(
-      `${BASE_URL}/rename/${oldName}`,
+      `${baseUrl()}/rename/${oldName}`,
       { newName },
       { headers: { Authorization: `Bearer ${token}` } }
     );

@@ -5,8 +5,6 @@ import { getAuthToken } from "./TokenService";
 import { getConversations } from "./ChatService";
 import { apiUrl } from "./apiConfig";
 
-const WS_URL = apiUrl(`/ws`);
-
 
 let stompClient = null;
 let retryCount = 0;
@@ -77,8 +75,15 @@ export const connectWebSocket = async (handlers = {}, onConnected = null) => {
 
   currentHandlers = handlers;
 
-  // const socket = new SockJS(`${WS_URL}?token=${token}`);
-  const socket = new SockJS(`${WS_URL}?token=${token}&deviceId=${deviceId}`);
+  let wsUrl;
+  try {
+    wsUrl = apiUrl(`/ws`);
+  } catch (error) {
+    console.error("WebSocket URL is not configured:", error);
+    return;
+  }
+
+  const socket = new SockJS(`${wsUrl}?token=${token}&deviceId=${deviceId}`);
   stompClient = new Client({
     webSocketFactory: () => socket,
     debug: (str) => console.log(str),

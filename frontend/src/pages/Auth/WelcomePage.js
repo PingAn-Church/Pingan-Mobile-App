@@ -111,7 +111,7 @@ import { useNavigation } from "@react-navigation/native";
 import { UserContext } from "../../context/UserContext";
 import { useState } from "react";
 import i18n from "../../../i18n";
-import logo from "../../../assets/logo.jpeg";
+import logo from "../../../assets/logo.jpg";
 
 export default function WelcomePage() {
   const navigation = useNavigation();

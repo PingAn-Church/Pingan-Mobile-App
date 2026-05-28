@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
 
-const BASE_URL = apiUrl(`/api/videos`);
+const baseUrl = () => apiUrl(`/api/videos`);
 
 export const addVideo = async (title, videoId, videoType) => {
   const token = await getAuthToken();
@@ -11,7 +11,7 @@ export const addVideo = async (title, videoId, videoType) => {
 
   try {
     const response = await axios.post(
-      `${BASE_URL}/add`,
+      `${baseUrl()}/add`,
       {
         title,
         videoId,
@@ -32,7 +32,7 @@ export const addVideo = async (title, videoId, videoType) => {
 
 export const fetchVideos = async () => {
   try {
-    const response = await axios.get(`${BASE_URL}/list`);
+    const response = await axios.get(`${baseUrl()}/list`);
     return response.data;
   } catch (error) {
     console.error("Error fetching videos:", error);
@@ -45,7 +45,7 @@ export const deleteVideo = async (videoId) => {
   if (!token) throw new Error("No authentication token found.");
 
   try {
-    await axios.delete(`${BASE_URL}/delete/${videoId}`, {
+    await axios.delete(`${baseUrl()}/delete/${videoId}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

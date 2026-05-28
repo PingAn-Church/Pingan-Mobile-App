@@ -2,7 +2,7 @@ import 'dotenv/config'
 
 export default {
     expo: {
-      name: "frontend",
+      name: "Ping An",
       slug: "pingan-mobile-app",
       version: "0.0.1",
       orientation: "portrait",
