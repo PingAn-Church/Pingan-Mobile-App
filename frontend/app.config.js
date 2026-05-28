@@ -23,7 +23,7 @@ export default {
           NSPhotoLibraryAddUsageDescription:
             "We need permission to save images to your photo library.",
         },
-        bundleIdentifier: "org.pingan.rn-app",
+        bundleIdentifier: "org.pingan.app",
       },
       android: {
         adaptiveIcon: {
@@ -35,7 +35,7 @@ export default {
           "READ_EXTERNAL_STORAGE",
           "WRITE_EXTERNAL_STORAGE",
         ],
-        package: "org.pingan.rn-app",
+        package: "org.pingan.app",
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       },
       web: {

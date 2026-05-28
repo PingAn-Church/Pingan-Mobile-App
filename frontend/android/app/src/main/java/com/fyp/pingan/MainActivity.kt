@@ -1,4 +1,4 @@
-package com.fyp.pingan
+package org.pingan.app
 
 import android.os.Build
 import android.os.Bundle
