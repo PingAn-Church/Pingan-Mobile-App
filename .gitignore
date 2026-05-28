@@ -10,3 +10,5 @@ build/
 
 # Internal Workspace files
 .agents/
+
+*.tmp.out

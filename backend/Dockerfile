@@ -14,7 +14,6 @@ FROM eclipse-temurin:21-jdk
 WORKDIR /app
 
 COPY --from=builder /app/target/*.jar app.jar
-COPY env.properties /app/env.properties
 
 EXPOSE 8080
 CMD ["java", "-jar", "app.jar"]
