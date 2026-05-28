@@ -1,20 +1,19 @@
 import axios from "axios";
-import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuthToken } from "./TokenService"; // Ensure this is where your auth token logic is located
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra; // Get IP address from your app config
 
 // Send the push token to the backend for login
 export const registerPushTokenForLogin = async (token, deviceType, deviceId) => {
     const authToken = await getAuthToken();  // Ensure the user is authenticated
     const userId = await getUserId();  // Get the current logged-in user's ID
-  
+
     try {
       const encodedToken = encodeURIComponent(token); // Encode the token to handle special characters
-  
+
       const response = await axios.post(
-        `http://${IP_ADDR}:8080/api/push-notifications/login`,  // Endpoint for login
+        apiUrl(`/api/push-notifications/login`),  // Endpoint for login
         null,
         {
           params: { token: encodedToken, userId: userId, deviceType, deviceId },
@@ -26,14 +25,14 @@ export const registerPushTokenForLogin = async (token, deviceType, deviceId) => 
       console.error("Failed to register push token for login:", error);
     }
   };
-  
+
 // Send the push token to the backend for registration (inactive)
-export const registerPushTokenForRegister = async (token, userId, deviceType, deviceId) => {  
+export const registerPushTokenForRegister = async (token, userId, deviceType, deviceId) => {
   try {
     const encodedToken = encodeURIComponent(token); // Encode the token to handle special characters
 
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/push-notifications/register`,  // Endpoint for registration
+      apiUrl(`/api/push-notifications/register`),  // Endpoint for registration
       null,
       {
         params: { token: encodedToken, userId: userId, deviceType, deviceId },
@@ -56,7 +55,7 @@ export const deactivatePushToken = async (token) => {
     const encodedToken = encodeURIComponent(token); // Encode the token to handle special characters
 
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/push-notifications/deactivate`,  // Your backend endpoint
+      apiUrl(`/api/push-notifications/deactivate`),  // Your backend endpoint
       null,  // No body needed since we are sending params in the URL
       {
         params: { token: encodedToken, userId },  // Send encoded token and userId as query params
@@ -80,7 +79,7 @@ export const unregisterPushToken = async (token) => {
     const encodedToken = encodeURIComponent(token); // Encode the token to handle special characters
 
     const response = await axios.delete(
-      `http://${IP_ADDR}:8080/api/push-notifications/unregister`,  // Your backend endpoint
+      apiUrl(`/api/push-notifications/unregister`),  // Your backend endpoint
       {
         params: { token: encodedToken, userId },  // Send encoded token and userId as query params
         headers: { Authorization: `Bearer ${authToken}` },

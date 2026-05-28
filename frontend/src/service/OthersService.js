@@ -1,9 +1,8 @@
 import axios from "axios";
 import { getAuthToken } from "./TokenService";
-import Constants from "expo-constants";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra;
-const BASE_URL = `http://${IP_ADDR}:8080/api/others`;
+const BASE_URL = apiUrl(`/api/others`);
 
 // Fetch content by name (e.g., "organisation", "faqs")
 export const getOtherContent = async (name) => {

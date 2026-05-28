@@ -1,10 +1,8 @@
 import axios from "axios";
-import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
+import { apiUrl, isLibreTranslateEnabled } from "./apiConfig";
 
-const { IP_ADDR, ENABLE_LIBRE_TRANSLATE } = Constants.expoConfig?.extra || {}; // Get app config
-
-export const isTranslationEnabled = ENABLE_LIBRE_TRANSLATE === true;
+export const isTranslationEnabled = isLibreTranslateEnabled;
 
 const normalizeTargetLanguage = (targetLanguage) => {
   const raw = String(targetLanguage || "en").trim().toLowerCase();
@@ -37,7 +35,7 @@ export const translateText = async (text, targetLanguage) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/translate`,
+      apiUrl(`/api/translate`),
       {
         text: sourceText,
         targetLanguage: normalizedTargetLanguage,

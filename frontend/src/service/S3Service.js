@@ -1,11 +1,9 @@
 import axios from "axios";
-import Constants from "expo-constants";
-
-const { IP_ADDR } = Constants.expoConfig?.extra;
+import { apiUrl } from "./apiConfig";
 
 export const getPresignedUploadUrl = async (fileName, fileType) => {
   try {
-    const response = await axios.get(`http://${IP_ADDR}:8080/s3/presigned-upload-url`, {
+    const response = await axios.get(apiUrl(`/s3/presigned-upload-url`), {
       params: { fileName, fileType },  // Send both file name and file type
     });
     return response.data;  // Return the pre-signed URL
@@ -17,7 +15,7 @@ export const getPresignedUploadUrl = async (fileName, fileType) => {
 
 export const getPresignedDownloadUrl = async (fileName, fileType) => {
   try {
-    const response = await axios.get(`http://${IP_ADDR}:8080/s3/presigned-download-url`, {
+    const response = await axios.get(apiUrl(`/s3/presigned-download-url`), {
       params: { fileName, fileType },  // Send both file name and file type
     });
     return response.data;  // Return the pre-signed URL for viewing

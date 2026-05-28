@@ -1,14 +1,11 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra;
-
-// Fetch all events
 export const getAllEvents = async () => {
   try {
-    const response = await axios.get(`http://${IP_ADDR}:8080/api/events`);
+    const response = await axios.get(apiUrl(`/api/events`));
     return response.data;
   } catch (error) {
     console.error("Error fetching events:", error);
@@ -20,7 +17,7 @@ export const getAllEvents = async () => {
 export const getEventById = async (eventId) => {
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/events/${eventId}`
+      apiUrl(`/api/events/${eventId}`)
     );
     return response.data;
   } catch (error) {
@@ -36,7 +33,7 @@ export const checkInToEvent = async (eventId, userId) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/events/${eventId}/checkin/${userId}`,
+      apiUrl(`/api/events/${eventId}/checkin/${userId}`),
       {},
       {
         headers: {
@@ -57,7 +54,7 @@ export const createEvent = async (eventData) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/events`,
+      apiUrl(`/api/events`),
       eventData,
       {
         headers: {
@@ -79,7 +76,7 @@ export const updateEvent = async (eventId, updatedData) => {
 
   try {
     const response = await axios.put(
-      `http://${IP_ADDR}:8080/api/events/${eventId}`,
+      apiUrl(`/api/events/${eventId}`),
       updatedData,
       {
         headers: {
@@ -100,7 +97,7 @@ export const deleteEvent = async (eventId) => {
 
   try {
     const response = await axios.delete(
-      `http://${IP_ADDR}:8080/api/events/${eventId}`,
+      apiUrl(`/api/events/${eventId}`),
       {
         headers: {
           Authorization: `Bearer ${token}`,

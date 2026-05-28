@@ -1,11 +1,10 @@
 // src/service/ThreadService.js
 
 import axios from "axios";
-import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra;
-const BASE_URL = `http://${IP_ADDR}:8080/api/threads`;
+const BASE_URL = apiUrl(`/api/threads`);
 
 /**
  * Fetch all threads (requires auth)
@@ -105,21 +104,21 @@ export const postReply = async (threadId, replyData) => {
 export const fetchThreadById = async (threadId) => {
     const token = await getAuthToken();
     if (!token) throw new Error("No token found.");
-  
+
     try {
       const response = await axios.get(`${BASE_URL}/${threadId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-  
+
       return response.data;
     } catch (error) {
       console.error("Error fetching thread:", error);
       throw error;
     }
   };
-  
+
 export const updateThread = async (threadId, updatedData) => {
     const token = await getAuthToken();
     if (!token) throw new Error("No token found.");
@@ -141,7 +140,7 @@ export const updateThread = async (threadId, updatedData) => {
 export const updateReply = async (replyId, updatedContent) => {
     const token = await getAuthToken();
     if (!token) throw new Error("No token found.");
-  
+
     try {
       const response = await axios.put(
         `${BASE_URL}/replies/${replyId}`,
@@ -158,7 +157,7 @@ export const updateReply = async (replyId, updatedContent) => {
       throw error;
     }
   };
-  
+
 export const deleteThread = async (threadId) => {
     const token = await getAuthToken();
     if (!token) throw new Error("No token found.");
@@ -178,7 +177,7 @@ export const deleteThread = async (threadId) => {
 export const deleteReply = async (replyId) => {
     const token = await getAuthToken();
     if (!token) throw new Error("No token found.");
-  
+
     try {
       await axios.delete(`${BASE_URL}/replies/${replyId}`, {
         headers: {
@@ -190,4 +189,3 @@ export const deleteReply = async (replyId) => {
       throw error;
     }
   };
-  

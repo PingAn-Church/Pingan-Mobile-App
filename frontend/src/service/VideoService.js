@@ -1,10 +1,9 @@
 import axios from "axios";
-import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuthToken } from "./TokenService";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra;
-const BASE_URL = `http://${IP_ADDR}:8080/api/videos`;
+const BASE_URL = apiUrl(`/api/videos`);
 
 export const addVideo = async (title, videoId, videoType) => {
   const token = await getAuthToken();

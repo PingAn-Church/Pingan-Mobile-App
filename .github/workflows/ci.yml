@@ -90,6 +90,7 @@ jobs:
         working-directory: frontend
     env:
       CI: "1"
+      BACKEND_BASE_URL: http://127.0.0.1:8080
       IP_ADDR: 127.0.0.1
       ENABLE_LIBRE_TRANSLATE: "false"
       NODE_OPTIONS: --openssl-legacy-provider

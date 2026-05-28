@@ -1,9 +1,8 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage"; // Import AsyncStorage
-import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra; // Get IP address from app config
 
 // Fetch user profile data from the backend
 // export const fetchUserProfile = async () => {
@@ -17,7 +16,7 @@ const { IP_ADDR } = Constants.expoConfig?.extra; // Get IP address from app conf
 
 //   try {
 //     // Make API call to fetch user profile
-//     const response = await axios.get(`http://${IP_ADDR}:8080/user/profile`, {
+//     const response = await axios.get(apiUrl(`/user/profile`), {
 //       headers: {
 //         Authorization: `Bearer ${token}`, // Send token in Authorization header
 //       },
@@ -40,7 +39,7 @@ export const fetchUserProfile = async () => {
 
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/users/profile`,
+      apiUrl(`/api/users/profile`),
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -62,7 +61,7 @@ export const getUserById = async (userId) => {
 
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/users/${userId}`,
+      apiUrl(`/api/users/${userId}`),
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -86,7 +85,7 @@ export const getAllUsers = async () => {
   }
 
   try {
-    const response = await axios.get(`http://${IP_ADDR}:8080/api/users`, {
+    const response = await axios.get(apiUrl(`/api/users`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -104,7 +103,7 @@ export const startPrivateChat = async (participantIds) => {
     if (!token) throw new Error("No token found.");
 
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/chat/start`,
+      apiUrl(`/chat/start`),
       {
         conversationType: "private", // ✅ Fix key name
         participants: participantIds, // ✅ Send only user IDs
@@ -125,7 +124,7 @@ export const startGroupChat = async (groupDetails) => {
     if (!token) throw new Error("No token found.");
 
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/chat/start`,
+      apiUrl(`/chat/start`),
       {
         conversationType: "group", // ✅ Fix key name
         groupName: groupDetails.groupName,
@@ -148,7 +147,7 @@ export const getOnlineUsers = async () => {
     if (!token) throw new Error("No token found.");
 
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/users/online-users`,
+      apiUrl(`/api/users/online-users`),
       { headers: { Authorization: `Bearer ${token}` } }
     );
     return response.data; // Returns { userId1: "online", userId2: "online", ... }
@@ -164,7 +163,7 @@ export const getVerifiedUsers = async () => {
 
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/users/verified`,
+      apiUrl(`/api/users/verified`),
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -182,7 +181,7 @@ export const getAdminUsers = async () => {
 
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/users/admins`,
+      apiUrl(`/api/users/admins`),
       {
         headers: { Authorization: `Bearer ${token}` },
       }
@@ -200,7 +199,7 @@ export const updateUserVerifiedStatus = async (userId, isVerifiedUser) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/users/update-verified/${userId}`,
+      apiUrl(`/api/users/update-verified/${userId}`),
       null,
       {
         params: { isVerifiedUser },
@@ -220,7 +219,7 @@ export const updateUserAdminStatus = async (userId, isAdmin) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/users/update-admin/${userId}`,
+      apiUrl(`/api/users/update-admin/${userId}`),
       null,
       {
         params: { isAdmin },
@@ -240,7 +239,7 @@ export const updateUserProfile = async (userData) => {
 
   try {
     const response = await axios.put(
-      `http://${IP_ADDR}:8080/api/users/profile`,
+      apiUrl(`/api/users/profile`),
       userData,
       {
         headers: {

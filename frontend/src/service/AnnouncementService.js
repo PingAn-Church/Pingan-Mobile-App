@@ -1,13 +1,11 @@
 import axios from "axios";
-import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
-
-const { IP_ADDR } = Constants.expoConfig?.extra;
+import { apiUrl } from "./apiConfig";
 
 export const getAllAnnouncements = async () => {
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/api/announcements`
+      apiUrl(`/api/announcements`)
     );
     return response.data;
   } catch (error) {
@@ -22,7 +20,7 @@ export const createAnnouncement = async (title, imageUrl, announcementLink) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/api/announcements`,
+      apiUrl(`/api/announcements`),
       null,
       {
         params: { title, imageUrl, announcementLink},
@@ -41,7 +39,7 @@ export const deleteAnnouncement = async (id) => {
   if (!token) throw new Error("No authentication token found.");
 
   try {
-    await axios.delete(`http://${IP_ADDR}:8080/api/announcements/${id}`, {
+    await axios.delete(apiUrl(`/api/announcements/${id}`), {
       headers: {
         Authorization: `Bearer ${token}`,
       },

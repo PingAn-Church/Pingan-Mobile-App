@@ -1,2 +1,18 @@
-backend/mvnw text eol=lf
-*.cmd text eol=crlf
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.jar binary
+*.keystore binary
+*.jks binary
+*.p12 binary
+*.mobileprovision binary
+*.pdf binary
+*.zip binary

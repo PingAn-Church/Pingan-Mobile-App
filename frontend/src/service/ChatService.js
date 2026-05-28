@@ -1,8 +1,7 @@
 import axios from "axios";
-import Constants from "expo-constants";
 import { getAuthToken } from "./TokenService";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra; // Get IP address from app config
 
 // Fetch conversations of the logged-in user
 export const getConversations = async (userId) => {
@@ -15,7 +14,7 @@ export const getConversations = async (userId) => {
   try {
     // Make API call to fetch conversations for the user
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/chat/conversations`,
+      apiUrl(`/chat/conversations`),
       {
         params: { userId }, // Pass userId as query parameter
         headers: {
@@ -42,7 +41,7 @@ export const getConversationById = async (conversationId) => {
 
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/chat/conversation/${conversationId}`,
+      apiUrl(`/chat/conversation/${conversationId}`),
       {
         headers: {
           Authorization: `Bearer ${token}`, // Send token in Authorization header
@@ -68,7 +67,7 @@ export const getChatHistory = async (conversationId, conversationType) => {
   }
 
   try {
-    const response = await axios.get(`http://${IP_ADDR}:8080/chat/history`, {
+    const response = await axios.get(apiUrl(`/chat/history`), {
       params: { conversationId, conversationType },
       headers: {
         Authorization: `Bearer ${token}`, // Send token in Authorization header
@@ -86,7 +85,7 @@ export const sendMessageToDatabase = async (chatMessage, conversationType, retry
 
   try {
     const response = await fetch(
-      `http://${IP_ADDR}:8080/chat/send?conversationType=${conversationType}`, // ✅ Pass `conversationType` as a query parameter
+      apiUrl(`/chat/send?conversationType=${conversationType}`), // ✅ Pass `conversationType` as a query parameter
       {
         method: "POST",
         headers: {
@@ -130,7 +129,7 @@ export const deleteMessageFromDatabase = async (messageId) => {
 
   try {
     const response = await fetch(
-      `http://${IP_ADDR}:8080/chat/deleteMessage?messageId=${messageId}`,
+      apiUrl(`/chat/deleteMessage?messageId=${messageId}`),
       {
         method: "DELETE",
         headers: {
@@ -155,7 +154,7 @@ export const editMessageInDatabase = async (messageId, newContent, conversationT
 
   try {
     const response = await fetch(
-      `http://${IP_ADDR}:8080/chat/editMessage?messageId=${messageId}&conversationType=${conversationType}`, // ✅ Pass `conversationType` in the request parameters
+      apiUrl(`/chat/editMessage?messageId=${messageId}&conversationType=${conversationType}`), // ✅ Pass `conversationType` in the request parameters
       {
         method: "PUT",
         headers: {
@@ -187,7 +186,7 @@ export const addParticipantToGroup = async (conversationId, userId) => {
   try {
     // ✅ Make the API request to add a participant
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/chat/addParticipant`,
+      apiUrl(`/chat/addParticipant`),
       null, // No request body needed
       {
         params: { conversationId, userId }, // Send conversation and user ID as query params
@@ -212,7 +211,7 @@ export const removeParticipantFromGroup = async (conversationId, userId) => {
   }
 
   try {
-    const response = await axios.delete(`http://${IP_ADDR}:8080/chat/removeParticipant`, {
+    const response = await axios.delete(apiUrl(`/chat/removeParticipant`), {
       params: { conversationId, userId },
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -234,7 +233,7 @@ export const addAdminToGroup = async (conversationId, userId) => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/chat/addAdmin`,
+      apiUrl(`/chat/addAdmin`),
       null,
       {
         params: { conversationId, userId },
@@ -257,7 +256,7 @@ export const removeAdminFromGroup = async (conversationId, userId, conversationT
   const token = await getAuthToken();
 
   try {
-    await axios.delete(`http://${IP_ADDR}:8080/chat/removeAdmin`, {
+    await axios.delete(apiUrl(`/chat/removeAdmin`), {
       params: { conversationId, userId },
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -276,7 +275,7 @@ export const leaveGroup = async (conversationId) => {
 
   try {
     const response = await axios.delete(
-      `http://${IP_ADDR}:8080/chat/leaveGroup`,
+      apiUrl(`/chat/leaveGroup`),
       {
         params: { conversationId },
         headers: { Authorization: `Bearer ${token}` }, // Send token in Authorization header
@@ -294,7 +293,7 @@ export const updateGroupIcon = async (conversationId, groupIcon) => {
 
   try {
     const response = await axios.put(
-      `http://${IP_ADDR}:8080/chat/updateGroupIcon`,
+      apiUrl(`/chat/updateGroupIcon`),
       null,
       {
         params: { conversationId, groupIcon },
@@ -315,7 +314,7 @@ export const deleteConversationFromDatabase = async (conversationId) => {
 
   try {
     const response = await axios.delete(
-      `http://${IP_ADDR}:8080/chat/conversation/${conversationId}`,
+      apiUrl(`/chat/conversation/${conversationId}`),
       {
         headers: {
           Authorization: `Bearer ${token}`,

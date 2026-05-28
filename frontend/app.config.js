@@ -43,6 +43,7 @@ export default {
       },
       newArchEnabled: true,
       extra: {
+        BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_BASE_URL,
         IP_ADDR: process.env.IP_ADDR,
         ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
         eas: {
@@ -52,4 +53,3 @@ export default {
       owner: "pinganservice572",
     },
   };
-  

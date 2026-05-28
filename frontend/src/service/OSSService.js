@@ -1,7 +1,5 @@
 import axios from "axios";
-import Constants from "expo-constants";
-
-const { IP_ADDR } = Constants.expoConfig?.extra;
+import { apiUrl } from "./apiConfig";
 
 const normalizeFileName = (fileName) => {
   const raw = String(fileName || "");
@@ -30,7 +28,7 @@ export const getPresignedUploadUrl = async (fileName, fileType) => {
   try {
     const normalizedFileName = normalizeFileName(fileName);
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/oss/presigned-upload-url`,
+      apiUrl(`/oss/presigned-upload-url`),
       {
         params: { fileName: normalizedFileName, fileType },
       }
@@ -181,7 +179,7 @@ export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride
 export const getPresignedDownloadUrl = async (fileName, fileType) => {
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/oss/presigned-download-url`,
+      apiUrl(`/oss/presigned-download-url`),
       {
         params: { fileName, fileType },
       }
@@ -211,7 +209,7 @@ export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
 export const fetchPictures = async (fileType) => {
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/oss/list-pictures`,
+      apiUrl(`/oss/list-pictures`),
       {
         params: { fileType },
       }
@@ -225,7 +223,7 @@ export const fetchPictures = async (fileType) => {
 
 export const deletePicture = async (fileName, fileType) => {
   try {
-    await axios.delete(`http://${IP_ADDR}:8080/oss/delete`, {
+    await axios.delete(apiUrl(`/oss/delete`), {
       params: { fileName, fileType },
     });
   } catch (error) {
@@ -238,7 +236,7 @@ export const getConversationUploadUrl = async (fileName, conversationId, content
   try {
     const normalizedFileName = normalizeFileName(fileName);
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/oss/conversations/presigned-upload-url`,
+      apiUrl(`/oss/conversations/presigned-upload-url`),
       { params: { fileName: normalizedFileName, conversationId, contentType } }
     );
     const presignedUrl = String(response.data || "").trim();
@@ -265,7 +263,7 @@ export const getConversationUploadUrl = async (fileName, conversationId, content
 export const getConversationDownloadUrl = async (fileName, conversationId) => {
   try {
     const response = await axios.get(
-      `http://${IP_ADDR}:8080/oss/conversations/presigned-download-url`,
+      apiUrl(`/oss/conversations/presigned-download-url`),
       { params: { fileName, conversationId } }
     );
     return response.data;

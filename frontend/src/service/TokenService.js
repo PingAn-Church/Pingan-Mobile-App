@@ -1,9 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import Constants from "expo-constants";
 import { logoutUser } from "./AuthService";
-
-const { IP_ADDR } = Constants.expoConfig?.extra;
+import { apiUrl } from "./apiConfig";
 
 let hasAttemptedRefresh = false;
 
@@ -82,7 +80,7 @@ export const refreshAccessToken = async () => {
 
   try {
     const response = await axios.post(
-      `http://${IP_ADDR}:8080/auth/refresh-token?deviceId=${deviceId}`,
+      apiUrl(`/auth/refresh-token?deviceId=${deviceId}`),
       { refreshToken }
     );
 
@@ -98,4 +96,3 @@ export const refreshAccessToken = async () => {
     throw error;
   }
 };
-

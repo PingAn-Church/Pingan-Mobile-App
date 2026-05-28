@@ -1,12 +1,11 @@
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
-import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuthToken } from "./TokenService";
 import { getConversations } from "./ChatService";
+import { apiUrl } from "./apiConfig";
 
-const { IP_ADDR } = Constants.expoConfig?.extra;
-const WS_URL = `http://${IP_ADDR}:8080/ws`;
+const WS_URL = apiUrl(`/ws`);
 
 
 let stompClient = null;
