@@ -34,7 +34,7 @@
   "emailPwRequired": "Email and password are required.",
   "somethingWentWrong": "Something went wrong. Please try again or contact an administrator.",
   "enterEmail": "Please enter your email.",
-  "sendNewPassWordToEmail": "If this email is registered, you will receive a new password shortly.",
+  "sendNewPasswordToEmail": "If this email is registered, you will receive a new password shortly.",
   "resetPassword": "Reset Password",
 
   "Home": "Home",

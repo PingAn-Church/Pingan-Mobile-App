@@ -4,17 +4,19 @@ import i18n from "../../i18n";
 
 export const LanguageContext = createContext();
 
+const DEFAULT_LANGUAGE = "zh";
+
 export const LanguageProvider = ({ children }) => {
-  const [language, setLanguage] = useState("en");
+  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
 
   useEffect(() => {
     const loadLanguage = async () => {
       const storedLang = await AsyncStorage.getItem("appLanguage");
-      if (storedLang) {
-        setLanguage(storedLang);
-        i18n.locale = storedLang;
-      }
+      const nextLanguage = storedLang || DEFAULT_LANGUAGE;
+      setLanguage(nextLanguage);
+      i18n.locale = nextLanguage;
     };
+
     loadLanguage();
   }, []);
 

@@ -138,7 +138,7 @@ export function ForgotPasswordPage() {
         },
       ]);
     } catch (error) {
-      showAlert(i18n.t("error"), i18n.t("somethingWentwrong"), [
+      showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
         { text: i18n.t("ok") },
       ]);
     }
