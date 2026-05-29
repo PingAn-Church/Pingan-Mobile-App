@@ -33,14 +33,22 @@
   "submit": {
     "production": {
       "android": {
-        "serviceAccountKeyPath": "./secrets/google-service-account.json",
-        "track": "internal"
+        "applicationId": "org.pingan.app",
+        "serviceAccountKeyPath": "./secrets/google-play-service-account.placeholder.json",
+        "track": "internal",
+        "releaseStatus": "completed"
       },
       "ios": {
-        "ascAppId": "${ASC_APP_ID}",
-        "ascApiKeyPath": "./secrets/AuthKey.p8",
-        "ascApiKeyId": "${ASC_API_KEY_ID}",
-        "ascApiKeyIssuerId": "${ASC_API_KEY_ISSUER_ID}"
+        "bundleIdentifier": "org.pingan.app",
+        "ascAppId": "6774477173",
+        "appleTeamId": "2NA3ZU7393",
+        "sku": "org.pingan.app",
+        "language": "en-US",
+        "appName": "Ping-An",
+        "ascApiKeyPath": "./secrets/AuthKey_F6MU884V53.p8",
+        "ascApiKeyId": "F6MU884V53",
+        "ascApiKeyIssuerId": "d71bfaa0-e0f2-45ad-82fb-59e6f5d2988f",
+        "groups": ["INTERNAL_TESTERS_GROUP_PLACEHOLDER"]
       }
     }
   }

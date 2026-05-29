@@ -78,3 +78,9 @@ yarn-error.*
 *.tsbuildinfo
 
 # @end expo-cli
+# EAS submit credentials
+secrets/
+*.p8
+*.p12
+*.cer
+*.mobileprovision
