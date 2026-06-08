@@ -10,5 +10,6 @@ build/
 
 # Internal Workspace files
 .agents/
-
+# source apps for ref
+source-apps/
 *.tmp.out

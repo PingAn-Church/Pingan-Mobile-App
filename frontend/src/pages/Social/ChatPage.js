@@ -343,7 +343,7 @@ export default function ChatPage({ route }) {
   useEffect(() => {
     navigation.setOptions({
       title: i18n.t("chat"),
-      headerBackTitleVisible: false,
+      headerBackButtonDisplayMode: "minimal",
       headerBackTitle: "",
     });
   }, [language, navigation]);
