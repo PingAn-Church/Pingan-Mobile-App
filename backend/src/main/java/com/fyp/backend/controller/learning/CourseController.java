@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -37,6 +38,13 @@ public class CourseController {
     @GetMapping("/categoryHandler")
     public ApiResponse<List<Map<String, Object>>> categoryHandler() {
         return ApiResponse.ok(courseService.listCategories());
+    }
+
+    /** Management list (published + drafts) for the authoring portal. */
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @GetMapping("/getAllCourse")
+    public ApiResponse<List<Map<String, Object>>> getAllCourse() {
+        return ApiResponse.ok(courseService.listAllCourses());
     }
 
     @GetMapping("/getModuleDetail/{courseId}")

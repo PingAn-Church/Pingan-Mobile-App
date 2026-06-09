@@ -48,6 +48,13 @@ public class CourseService {
                 .collect(Collectors.toList());
     }
 
+    /** All courses (published or not) for the authoring/management list. */
+    public List<Map<String, Object>> listAllCourses() {
+        List<Course> courses = courseRepository.findAll();
+        courses.sort(courseComparator("updated_at").reversed());
+        return courses.stream().map(this::courseSummaryMap).collect(Collectors.toList());
+    }
+
     public Map<String, Object> listPublishedCourses(String category, int limit, int offset,
             String sortBy, String sortOrder) {
         List<Course> courses;
@@ -165,7 +172,7 @@ public class CourseService {
         return m;
     }
 
-    private Map<String, Object> courseSummaryMap(Course course) {
+    public Map<String, Object> courseSummaryMap(Course course) {
         Category category = course.getCategoryId() == null ? null
                 : categoryRepository.findById(course.getCategoryId()).orElse(null);
 
