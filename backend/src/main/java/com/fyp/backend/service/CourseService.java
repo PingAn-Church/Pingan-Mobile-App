@@ -15,11 +15,13 @@ import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.Category;
 import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseOutcome;
+import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
 import com.fyp.backend.model.CourseSection;
 import com.fyp.backend.model.CourseVideo;
 import com.fyp.backend.repository.CategoryRepository;
 import com.fyp.backend.repository.CourseOutcomeRepository;
+import com.fyp.backend.repository.CourseQuizRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseResourceRepository;
@@ -39,6 +41,7 @@ public class CourseService {
     @Autowired private CourseVideoRepository videoRepository;
     @Autowired private CourseResourceRepository resourceRepository;
     @Autowired private CourseOutcomeRepository outcomeRepository;
+    @Autowired private CourseQuizRepository quizRepository;
     @Autowired private CourseRatingRepository ratingRepository;
 
     public List<Map<String, Object>> listCategories() {
@@ -116,14 +119,18 @@ public class CourseService {
             List<Map<String, Object>> resources = resourceRepository
                     .findBySectionIdOrderByOrderIndexAsc(section.getId()).stream()
                     .map(this::resourceMap).collect(Collectors.toList());
+            List<Map<String, Object>> quizzes = quizRepository
+                    .findBySectionIdOrderByOrderIndexAsc(section.getId()).stream()
+                    .map(this::quizLessonMap).collect(Collectors.toList());
 
             List<Map<String, Object>> lessons = new ArrayList<>();
             lessons.addAll(videos);
             lessons.addAll(resources);
+            lessons.addAll(quizzes);
 
             module.put("videos", videos);
             module.put("resources", resources);
-            module.put("quizzes", List.of());
+            module.put("quizzes", quizzes);
             module.put("lessons", lessons);
             modules.add(module);
         }
@@ -194,6 +201,7 @@ public class CourseService {
         m.put("is_published", course.isPublished());
         m.put("total_sections", sectionRepository.countByCourseId(course.getId()));
         m.put("total_videos", videoRepository.countByCourseId(course.getId()));
+        m.put("total_quizzes", quizRepository.countByCourseId(course.getId()));
         m.put("created_at", course.getCreatedAt());
         m.put("updated_at", course.getUpdatedAt());
         return m;
@@ -212,6 +220,20 @@ public class CourseService {
         m.put("thumbnail_url", v.getThumbnailUrl());
         m.put("is_preview", v.isPreview());
         m.put("order_index", v.getOrderIndex());
+        return m;
+    }
+
+    private Map<String, Object> quizLessonMap(CourseQuiz q) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", String.valueOf(q.getId()));
+        m.put("type", "quiz");
+        m.put("course_id", String.valueOf(q.getCourseId()));
+        m.put("section_id", q.getSectionId() == null ? null : String.valueOf(q.getSectionId()));
+        m.put("title", q.getTitle());
+        m.put("description", q.getDescription());
+        m.put("passing_score", q.getPassingScore());
+        m.put("max_attempts", q.getMaxAttempts());
+        m.put("order_index", q.getOrderIndex());
         return m;
     }
 

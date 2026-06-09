@@ -8,13 +8,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.model.CourseEnrollment;
+import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
 import com.fyp.backend.model.CourseVideo;
 import com.fyp.backend.model.UserModuleProgress;
 import com.fyp.backend.repository.CourseEnrollmentRepository;
+import com.fyp.backend.repository.CourseQuizRepository;
 import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
+import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserVideoProgressRepository;
@@ -34,6 +37,8 @@ public class ProgressService {
     @Autowired private ResourceProgressRepository resourceProgressRepository;
     @Autowired private UserModuleProgressRepository moduleProgressRepository;
     @Autowired private CourseEnrollmentRepository enrollmentRepository;
+    @Autowired private CourseQuizRepository quizRepository;
+    @Autowired private QuizAttemptRepository attemptRepository;
 
     /** Recomputes and persists the enrollment progress %, returns the new value. */
     public double recomputeCourseProgress(Long userId, Long courseId) {
@@ -41,13 +46,16 @@ public class ProgressService {
                 .stream().map(CourseVideo::getId).collect(Collectors.toList());
         List<Long> resourceIds = resourceRepository.findByCourseIdOrderByOrderIndexAsc(courseId)
                 .stream().map(CourseResource::getId).collect(Collectors.toList());
+        List<Long> quizIds = quizRepository.findByCourseIdOrderByOrderIndexAsc(courseId)
+                .stream().map(CourseQuiz::getId).collect(Collectors.toList());
 
-        int total = videoIds.size() + resourceIds.size();
+        int total = videoIds.size() + resourceIds.size() + quizIds.size();
         long completedVideos = videoIds.isEmpty() ? 0
                 : videoProgressRepository.countByUserIdAndVideoIdInAndIsCompletedTrue(userId, videoIds);
         long completedResources = resourceIds.isEmpty() ? 0
                 : resourceProgressRepository.countByUserIdAndResourceIdInAndIsCompletedTrue(userId, resourceIds);
-        long completed = completedVideos + completedResources;
+        long completedQuizzes = passedQuizCount(userId, quizIds);
+        long completed = completedVideos + completedResources + completedQuizzes;
 
         double pct = total > 0 ? (completed * 100.0) / total : 0.0;
         pct = Math.round(pct * 100.0) / 100.0;
@@ -73,13 +81,16 @@ public class ProgressService {
                 .stream().map(CourseVideo::getId).collect(Collectors.toList());
         List<Long> resourceIds = resourceRepository.findBySectionIdOrderByOrderIndexAsc(sectionId)
                 .stream().map(CourseResource::getId).collect(Collectors.toList());
+        List<Long> quizIds = quizRepository.findBySectionIdOrderByOrderIndexAsc(sectionId)
+                .stream().map(CourseQuiz::getId).collect(Collectors.toList());
 
-        int total = videoIds.size() + resourceIds.size();
+        int total = videoIds.size() + resourceIds.size() + quizIds.size();
         long completedVideos = videoIds.isEmpty() ? 0
                 : videoProgressRepository.countByUserIdAndVideoIdInAndIsCompletedTrue(userId, videoIds);
         long completedResources = resourceIds.isEmpty() ? 0
                 : resourceProgressRepository.countByUserIdAndResourceIdInAndIsCompletedTrue(userId, resourceIds);
-        boolean complete = total > 0 && (completedVideos + completedResources) >= total;
+        long completedQuizzes = passedQuizCount(userId, quizIds);
+        boolean complete = total > 0 && (completedVideos + completedResources + completedQuizzes) >= total;
 
         UserModuleProgress mp = moduleProgressRepository
                 .findByUserIdAndCourseIdAndSectionId(userId, courseId, sectionId)
@@ -109,5 +120,14 @@ public class ProgressService {
 
     public long sectionCount(Long courseId) {
         return sectionRepository.countByCourseId(courseId);
+    }
+
+    /** Number of the given quizzes the user has passed at least once. */
+    private long passedQuizCount(Long userId, List<Long> quizIds) {
+        long count = 0;
+        for (Long quizId : quizIds) {
+            if (attemptRepository.countByUserIdAndQuizIdAndIsPassedTrue(userId, quizId) > 0) count++;
+        }
+        return count;
     }
 }

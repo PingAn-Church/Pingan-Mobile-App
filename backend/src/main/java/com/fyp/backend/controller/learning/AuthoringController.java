@@ -145,4 +145,40 @@ public class AuthoringController {
         authoringService.deleteResource(id);
         return ApiResponse.ok("Resource deleted", null);
     }
+
+    // ---- quizzes & questions -------------------------------------------
+
+    @PostMapping("/createQuiz")
+    public ApiResponse<Map<String, Object>> createQuiz(@RequestBody Map<String, Object> body) {
+        return ApiResponse.ok("Quiz created", authoringService.createQuiz(body));
+    }
+
+    @PutMapping("/updateQuiz/{id}")
+    public ApiResponse<Map<String, Object>> updateQuiz(@PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok("Quiz updated", authoringService.updateQuiz(id, body));
+    }
+
+    @DeleteMapping("/deleteQuiz/{id}")
+    public ApiResponse<Object> deleteQuiz(@PathVariable Long id) {
+        authoringService.deleteQuiz(id);
+        return ApiResponse.ok("Quiz deleted", null);
+    }
+
+    @PostMapping("/createQuizQuestion")
+    public ApiResponse<Map<String, Object>> createQuestion(@RequestBody Map<String, Object> body) {
+        return ApiResponse.ok("Question created", authoringService.createQuestion(body));
+    }
+
+    @PutMapping("/updateQuizQuestion/{id}")
+    public ApiResponse<Map<String, Object>> updateQuestion(@PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok("Question updated", authoringService.updateQuestion(id, body));
+    }
+
+    @DeleteMapping("/deleteQuizQuestion/{id}")
+    public ApiResponse<Object> deleteQuestion(@PathVariable Long id) {
+        authoringService.deleteQuestion(id);
+        return ApiResponse.ok("Question deleted", null);
+    }
 }

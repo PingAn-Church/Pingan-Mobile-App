@@ -8,21 +8,27 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.Category;
 import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseOutcome;
+import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
 import com.fyp.backend.model.CourseSection;
 import com.fyp.backend.model.CourseVideo;
+import com.fyp.backend.model.QuizQuestion;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CategoryRepository;
 import com.fyp.backend.repository.CourseOutcomeRepository;
+import com.fyp.backend.repository.CourseQuizRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
+import com.fyp.backend.repository.QuizAttemptRepository;
+import com.fyp.backend.repository.QuizQuestionRepository;
 
 /**
  * Write-side authoring logic for the in-app instructor/admin portal (P3).
@@ -39,7 +45,11 @@ public class AuthoringService {
     @Autowired private CourseResourceRepository resourceRepository;
     @Autowired private CourseOutcomeRepository outcomeRepository;
     @Autowired private CourseRatingRepository ratingRepository;
+    @Autowired private CourseQuizRepository quizRepository;
+    @Autowired private QuizQuestionRepository questionRepository;
+    @Autowired private QuizAttemptRepository attemptRepository;
     @Autowired private CourseService courseService;
+    @Autowired private ObjectMapper objectMapper;
 
     // ---- courses --------------------------------------------------------
 
@@ -83,6 +93,9 @@ public class AuthoringService {
     public void deleteCourse(Long courseId) {
         Course c = courseRepository.findById(courseId)
                 .orElseThrow(() -> ApiException.notFound("Course not found"));
+        for (CourseQuiz quiz : quizRepository.findByCourseIdOrderByOrderIndexAsc(courseId)) {
+            deleteQuizCascade(quiz.getId());
+        }
         outcomeRepository.deleteAll(outcomeRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         resourceRepository.deleteAll(resourceRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         videoRepository.deleteAll(videoRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
@@ -186,7 +199,91 @@ public class AuthoringService {
                 .orElseThrow(() -> ApiException.notFound("Section not found"));
         videoRepository.deleteAll(videoRepository.findBySectionIdOrderByOrderIndexAsc(id));
         resourceRepository.deleteAll(resourceRepository.findBySectionIdOrderByOrderIndexAsc(id));
+        for (CourseQuiz quiz : quizRepository.findBySectionIdOrderByOrderIndexAsc(id)) {
+            deleteQuizCascade(quiz.getId());
+        }
         sectionRepository.delete(s);
+    }
+
+    // ---- quizzes & questions -------------------------------------------
+
+    public Map<String, Object> createQuiz(Map<String, Object> body) {
+        Long courseId = requireLong(body, "courseId");
+        requireCourse(courseId);
+        CourseQuiz q = new CourseQuiz();
+        q.setCourseId(courseId);
+        q.setSectionId(optLong(body, "sectionId"));
+        q.setTitle(requireString(body, "title"));
+        q.setDescription(str(body, "description", ""));
+        q.setPassingScore(intVal(body, "passingScore", 70));
+        q.setTimeLimitMinutes(body.get("timeLimitMinutes") == null ? null : intVal(body, "timeLimitMinutes", 0));
+        q.setMaxAttempts(body.get("maxAttempts") == null ? null : intVal(body, "maxAttempts", 3));
+        q.setOrderIndex(intVal(body, "orderIndex", (int) quizRepository.countByCourseId(courseId)));
+        q = quizRepository.save(q);
+        return quizMap(q);
+    }
+
+    public Map<String, Object> updateQuiz(Long id, Map<String, Object> body) {
+        CourseQuiz q = quizRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Quiz not found"));
+        if (body.containsKey("title")) q.setTitle(requireString(body, "title"));
+        if (body.containsKey("description")) q.setDescription(str(body, "description", ""));
+        if (body.containsKey("passingScore")) q.setPassingScore(intVal(body, "passingScore", 70));
+        if (body.containsKey("timeLimitMinutes"))
+            q.setTimeLimitMinutes(body.get("timeLimitMinutes") == null ? null : intVal(body, "timeLimitMinutes", 0));
+        if (body.containsKey("maxAttempts"))
+            q.setMaxAttempts(body.get("maxAttempts") == null ? null : intVal(body, "maxAttempts", 3));
+        if (body.containsKey("orderIndex")) q.setOrderIndex(intVal(body, "orderIndex", q.getOrderIndex()));
+        if (body.containsKey("sectionId")) q.setSectionId(optLong(body, "sectionId"));
+        quizRepository.save(q);
+        return quizMap(q);
+    }
+
+    @Transactional
+    public void deleteQuiz(Long id) {
+        if (!quizRepository.existsById(id)) throw ApiException.notFound("Quiz not found");
+        deleteQuizCascade(id);
+    }
+
+    private void deleteQuizCascade(Long quizId) {
+        attemptRepository.deleteAll(attemptRepository.findByQuizIdIn(List.of(quizId)));
+        questionRepository.deleteByQuizId(quizId);
+        quizRepository.deleteById(quizId);
+    }
+
+    public Map<String, Object> createQuestion(Map<String, Object> body) {
+        Long quizId = requireLong(body, "quizId");
+        if (!quizRepository.existsById(quizId)) throw ApiException.notFound("Quiz not found");
+        QuizQuestion q = new QuizQuestion();
+        q.setQuizId(quizId);
+        applyQuestionBody(q, body, true);
+        q.setOrderIndex(intVal(body, "orderIndex", (int) questionRepository.countByQuizId(quizId)));
+        q = questionRepository.save(q);
+        return questionMap(q);
+    }
+
+    public Map<String, Object> updateQuestion(Long id, Map<String, Object> body) {
+        QuizQuestion q = questionRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Question not found"));
+        applyQuestionBody(q, body, false);
+        if (body.containsKey("orderIndex")) q.setOrderIndex(intVal(body, "orderIndex", q.getOrderIndex()));
+        questionRepository.save(q);
+        return questionMap(q);
+    }
+
+    public void deleteQuestion(Long id) {
+        if (!questionRepository.existsById(id)) throw ApiException.notFound("Question not found");
+        questionRepository.deleteById(id);
+    }
+
+    private void applyQuestionBody(QuizQuestion q, Map<String, Object> body, boolean create) {
+        if (create || body.containsKey("question")) q.setQuestion(requireString(body, "question"));
+        if (create || body.containsKey("questionType")) q.setQuestionType(str(body, "questionType", "multiple-choice"));
+        if (create || body.containsKey("options")) q.setOptions(toJson(body.get("options")));
+        if (create || body.containsKey("correctAnswer")) q.setCorrectAnswer(toJsonOrString(body.get("correctAnswer")));
+        if (body.containsKey("explanation")) q.setExplanation(str(body, "explanation", ""));
+        if (body.containsKey("points")) q.setPoints(intVal(body, "points", 1));
+        if (body.containsKey("imageUrl")) q.setImageUrl(str(body, "imageUrl", null));
     }
 
     // ---- videos ---------------------------------------------------------
@@ -355,6 +452,55 @@ public class AuthoringService {
         m.put("is_preview", v.isPreview());
         m.put("order_index", v.getOrderIndex());
         return m;
+    }
+
+    private Map<String, Object> quizMap(CourseQuiz q) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", String.valueOf(q.getId()));
+        m.put("course_id", String.valueOf(q.getCourseId()));
+        m.put("section_id", q.getSectionId() == null ? null : String.valueOf(q.getSectionId()));
+        m.put("title", q.getTitle());
+        m.put("passing_score", q.getPassingScore());
+        m.put("max_attempts", q.getMaxAttempts());
+        m.put("order_index", q.getOrderIndex());
+        return m;
+    }
+
+    private Map<String, Object> questionMap(QuizQuestion q) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", String.valueOf(q.getId()));
+        m.put("quiz_id", String.valueOf(q.getQuizId()));
+        m.put("question", q.getQuestion());
+        m.put("question_type", q.getQuestionType());
+        m.put("options", parseJson(q.getOptions()));
+        m.put("points", q.getPoints());
+        m.put("order_index", q.getOrderIndex());
+        return m;
+    }
+
+    private Object parseJson(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, Object.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String toJson(Object value) {
+        if (value == null) return null;
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Lists/objects are JSON-encoded; plain scalars stored as-is. */
+    private String toJsonOrString(Object value) {
+        if (value == null) return null;
+        if (value instanceof String s) return s;
+        return toJson(value);
     }
 
     private Map<String, Object> resourceMap(CourseResource r) {
