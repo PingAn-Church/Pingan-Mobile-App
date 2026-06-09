@@ -176,6 +176,8 @@
   "currentAdmins": "当前管理员",
   "you": "  （你）",
   "noAdmins": "未找到管理员",
+  "learning": "学习",
+  "noCourses": "暂无课程",
   "manageInstructors": "管理讲师",
   "currentInstructors": "当前讲师",
   "noInstructors": "未找到讲师",

@@ -65,7 +65,10 @@ import * as Notifications from "expo-notifications";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./src/learning/lib/queryClient";
 import { AuthProvider } from "./src/learning/context/AuthContext";
-import LearningHomeScreen from "./src/learning/screens/LearningHomeScreen";
+import CoursesScreen from "./src/learning/screens/CoursesScreen";
+import CourseDetailScreen from "./src/learning/screens/CourseDetailScreen";
+import LearningVideoScreen from "./src/learning/screens/VideoScreen";
+import LearningDocumentScreen from "./src/learning/screens/DocumentScreen";
 
 // Sidebar for desktop browsers
 import { useWindowDimensions, View } from "react-native";
@@ -353,9 +356,24 @@ export default function App() {
                     options={{ headerShown: false, headerTitle: "" }} // Hide header for bottom tabs
                   />
                   <Stack.Screen
-                    name="LearningHome"
-                    component={LearningHomeScreen}
+                    name="Learning"
+                    component={CoursesScreen}
                     options={{ headerTitle: "Learning" }}
+                  />
+                  <Stack.Screen
+                    name="LearningCourseDetail"
+                    component={CourseDetailScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LearningVideo"
+                    component={LearningVideoScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LearningDocument"
+                    component={LearningDocumentScreen}
+                    options={{ headerTitle: "" }}
                   />
                 </Stack.Navigator>
               </WebSocketProvider>

@@ -176,6 +176,8 @@
   "currentAdmins": "Current Admins",
   "you": "  (You)",
   "noAdmins": "No admins found.",
+  "learning": "Learning",
+  "noCourses": "No courses available yet.",
   "manageInstructors": "Manage Instructors",
   "currentInstructors": "Current Instructors",
   "noInstructors": "No instructors found.",

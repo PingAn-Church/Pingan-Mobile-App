@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Platform,
+  Image,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Carousel from "../../components/Carousel";
@@ -17,6 +18,7 @@ import { fetchVideos } from "../../service/VideoService";
 import { Ionicons } from "@expo/vector-icons";
 import PlatformWebView from "../../components/PlatformWebView";
 import { fetchPictures } from "../../service/OSSService";
+import { getPublishedCourses } from "../../learning/services/courseService";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 
@@ -43,6 +45,7 @@ export default function HomePage() {
   const [events, setEvents] = useState([]);
   const [videos, setVideos] = useState([]);
   const [pictures, setPictures] = useState([]);
+  const [courses, setCourses] = useState([]);
 
   const convertToDateTime = (dateString, timeString) => {
     if (!dateString || !timeString) return NaN;
@@ -66,8 +69,16 @@ export default function HomePage() {
       loadAnnouncements();
       loadPictures();
       loadEvents();
+      loadCourses();
     }, [])
   );
+
+  const loadCourses = async () => {
+    try {
+      const { courses } = await getPublishedCourses({ limit: 8 });
+      setCourses(courses);
+    } catch (error) { console.error(error); }
+  };
 
   const loadAnnouncements = async () => {
     try {
@@ -172,6 +183,50 @@ export default function HomePage() {
               />
             ))}
           </ScrollView>
+        </View>
+
+        {/* Section: Learning */}
+        <View style={styles.section}>
+          <View style={styles.headerRow}>
+            <Text style={styles.sectionTitle}>{i18n.t("learning")}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Learning")}>
+              <Text style={styles.viewAllText}>{`${i18n.t("viewAll")} →`}</Text>
+            </TouchableOpacity>
+          </View>
+          {courses.length > 0 ? (
+            <ScrollView
+              horizontal={!isDesktop}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={isDesktop ? styles.flexRowWrap : styles.flexRow}
+            >
+              {courses.map((course) => (
+                <TouchableOpacity
+                  key={course.id}
+                  style={styles.courseCard}
+                  onPress={() =>
+                    navigation.navigate("LearningCourseDetail", { courseId: course.id })
+                  }
+                >
+                  <Image
+                    source={{
+                      uri:
+                        course.thumbnailUrl ||
+                        "https://picsum.photos/seed/course/400/250",
+                    }}
+                    style={styles.courseImage}
+                  />
+                  <Text style={styles.courseTitle} numberOfLines={2}>
+                    {course.title}
+                  </Text>
+                  <Text style={styles.courseMeta} numberOfLines={1}>
+                    {course.categoryName} • {course.durationHours}h
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noData}>{i18n.t("noCourses")}</Text>
+          )}
         </View>
 
         {/* Section 3: Events */}
@@ -495,6 +550,37 @@ const styles = StyleSheet.create({
   },
   videosPageVideoItemWeb: {
     maxWidth: 560,
+  },
+
+  // Learning
+  courseCard: {
+    width: 220,
+    marginHorizontal: 8,
+    marginBottom: 10,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  courseImage: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "#ddd",
+  },
+  courseTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#222",
+    paddingHorizontal: 10,
+    paddingTop: 8,
+  },
+  courseMeta: {
+    fontSize: 13,
+    color: "#666",
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    paddingTop: 2,
   },
 
   // Shared
