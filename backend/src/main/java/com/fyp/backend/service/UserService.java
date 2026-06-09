@@ -122,6 +122,18 @@ public class UserService {
         return userRepository.findByIsAdminTrue();
     }
 
+    public List<User> findInstructors() {
+        return userRepository.findByIsInstructorTrue();
+    }
+
+    @Transactional
+    public void updateUserInstructorStatus(Long userId, boolean isInstructor) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setInstructor(isInstructor);
+        userRepository.save(user);
+    }
+
     @Transactional
     public void updateUserVerifiedStatus(Long userId, boolean isVerifiedUser) {
         Optional<User> userOptional = userRepository.findById(userId);

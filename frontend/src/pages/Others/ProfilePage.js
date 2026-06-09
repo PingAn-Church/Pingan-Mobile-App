@@ -171,6 +171,11 @@ export default function ProfilePage() {
       icon: "admin-panel-settings",
     },
     {
+      titleKey: "manageInstructors",
+      screen: "ManageInstructors",
+      icon: "school",
+    },
+    {
       titleKey: "manageUsers",
       screen: "ManageUsers",
       icon: "groups",

@@ -49,6 +49,7 @@ import ManageAnnouncementsPage, {
 import ManageAdminsPage, {
   ManageUsersPage,
 } from "./src/pages/Others/ManageAdminsPage";
+import ManageInstructorsPage from "./src/pages/Others/ManageInstructorsPage";
 import ManageEventsPage, {
   EventFormPage,
 } from "./src/pages/Others/ManageEventsPage";
@@ -327,6 +328,11 @@ export default function App() {
                   <Stack.Screen
                     name="ManageUsers"
                     component={ManageUsersPage}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="ManageInstructors"
+                    component={ManageInstructorsPage}
                     options={{ headerTitle: "" }}
                   />
                   <Stack.Screen

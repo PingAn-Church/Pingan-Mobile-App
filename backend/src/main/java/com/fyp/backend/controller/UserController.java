@@ -100,9 +100,7 @@ public class UserController {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isPresent()) {
             User user = userOptional.get();
-            UserProfileDto userProfile = new UserProfileDto(user.getId(), user.getFirstName(), user.getLastName(),
-                    user.getEmail(), user.getProfileImage(), user.isVerifiedUser(), user.isAdmin(), user.getBirthday());
-            return ResponseEntity.ok(userProfile);
+            return ResponseEntity.ok(UserProfileDto.from(user));
         } else {
             return ResponseEntity.status(404).body(null); // User not found
         }
@@ -128,8 +126,7 @@ public class UserController {
         List<User> allUsers = userRepository.findAll();
         List<UserProfileDto> usersWithoutCurrentUser = allUsers.stream()
                 .filter(user -> !user.getId().equals(currentUser.getId())) // Exclude the current user
-                .map(user -> new UserProfileDto(user.getId(), user.getFirstName(), user.getLastName(), user.getEmail(),
-                        user.getProfileImage(), user.isVerifiedUser(), user.isAdmin(), user.getBirthday()))
+                .map(UserProfileDto::from)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(usersWithoutCurrentUser);
@@ -146,9 +143,7 @@ public class UserController {
         List<User> verifiedUsers = userService.findVerifiedUsers();
 
         List<UserProfileDto> userDtos = verifiedUsers.stream()
-                .map(user -> new UserProfileDto(user.getId(), user.getFirstName(), user.getLastName(),
-                        user.getEmail(), user.getProfileImage(), user.isVerifiedUser(), user.isAdmin(),
-                        user.getBirthday()))
+                .map(UserProfileDto::from)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(userDtos);
@@ -159,9 +154,7 @@ public class UserController {
         List<User> adminUsers = userService.findAdmins();
 
         List<UserProfileDto> adminDtos = adminUsers.stream()
-                .map(user -> new UserProfileDto(user.getId(), user.getFirstName(), user.getLastName(),
-                        user.getEmail(), user.getProfileImage(), user.isVerifiedUser(), user.isAdmin(),
-                        user.getBirthday()))
+                .map(UserProfileDto::from)
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(adminDtos);
@@ -183,6 +176,23 @@ public class UserController {
             @RequestParam boolean isAdmin) {
         userService.updateUserAdminStatus(id, isAdmin);
         return ResponseEntity.ok("User admin status updated!");
+    }
+
+    @GetMapping("/instructors")
+    public ResponseEntity<List<UserProfileDto>> getInstructorUsers() {
+        List<UserProfileDto> instructors = userService.findInstructors().stream()
+                .map(UserProfileDto::from)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(instructors);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/update-instructor/{id}")
+    public ResponseEntity<String> updateUserInstructorStatus(
+            @PathVariable Long id,
+            @RequestParam boolean isInstructor) {
+        userService.updateUserInstructorStatus(id, isInstructor);
+        return ResponseEntity.ok("User instructor status updated!");
     }
 
     @PutMapping("/profile")
