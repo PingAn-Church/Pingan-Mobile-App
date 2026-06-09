@@ -60,6 +60,12 @@ import i18n from "./i18n";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import * as Notifications from "expo-notifications";
 
+// E-learning module
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./src/learning/lib/queryClient";
+import { AuthProvider } from "./src/learning/context/AuthContext";
+import LearningHomeScreen from "./src/learning/screens/LearningHomeScreen";
+
 // Sidebar for desktop browsers
 import { useWindowDimensions, View } from "react-native";
 //import { createDrawerNavigator } from "@react-navigation/drawer";
@@ -212,7 +218,9 @@ export default function App() {
     <NavigationContainer
       linking={Platform.OS === "web" ? linking : undefined}
     >
+      <QueryClientProvider client={queryClient}>
       <UserProvider>
+        <AuthProvider>
         <NotificationProvider>
           <LanguageProvider>
             <ChatProvider>
@@ -338,12 +346,19 @@ export default function App() {
                     component={isDesktop ? WebSidebarLayout : BottomTabNavigator}
                     options={{ headerShown: false, headerTitle: "" }} // Hide header for bottom tabs
                   />
+                  <Stack.Screen
+                    name="LearningHome"
+                    component={LearningHomeScreen}
+                    options={{ headerTitle: "Learning" }}
+                  />
                 </Stack.Navigator>
               </WebSocketProvider>
             </ChatProvider>
           </LanguageProvider>
         </NotificationProvider>
+        </AuthProvider>
       </UserProvider>
+      </QueryClientProvider>
     </NavigationContainer>
   );
 }

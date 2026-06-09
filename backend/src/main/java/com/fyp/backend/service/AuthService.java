@@ -52,16 +52,7 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
-        return new UserProfileDto(
-                savedUser.getId(),
-                savedUser.getFirstName(),
-                savedUser.getLastName(),
-                savedUser.getEmail(),
-                savedUser.getProfileImage(),
-                savedUser.isVerifiedUser(),
-                savedUser.isAdmin(),
-                savedUser.getBirthday()
-        );
+        return UserProfileDto.from(savedUser);
     }
 
     /**

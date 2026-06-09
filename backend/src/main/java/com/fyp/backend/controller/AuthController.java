@@ -50,7 +50,7 @@ public class AuthController {
             Map<String, Object> response = new HashMap<>();
             response.put("accessToken", accessToken);
             response.put("refreshToken", refreshToken);
-            response.put("user", new UserProfileDto(user.getId(), user.getFirstName(), user.getLastName(), user.getEmail(), user.getProfileImage(), user.isVerifiedUser(), user.isAdmin(), user.getBirthday()));
+            response.put("user", UserProfileDto.from(user));
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {

@@ -53,16 +53,7 @@ public class UserService {
         if (email == null) return Optional.empty();
 
         return userRepository.findByEmail(email)
-                .map(user -> new UserProfileDto(
-                        user.getId(),
-                        user.getFirstName(),
-                        user.getLastName(),
-                        user.getEmail(),
-                        user.getProfileImage(),
-                        user.isVerifiedUser(),
-                        user.isAdmin(),
-                        user.getBirthday()
-                ));
+                .map(UserProfileDto::from);
     }
 
 

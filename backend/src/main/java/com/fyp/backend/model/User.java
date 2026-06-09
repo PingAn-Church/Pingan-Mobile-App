@@ -1,5 +1,7 @@
 package com.fyp.backend.model;
 
+import org.hibernate.annotations.ColumnDefault;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -40,6 +42,25 @@ public class User {
     @Column(nullable = false)
     private boolean isAdmin;
 
+    // E-learning: course author / instructor privileges (admins are inclusively instructors)
+    @ColumnDefault("false")
+    @Column(nullable = false)
+    private boolean isInstructor = false;
+
+    // E-learning: gamification credits balance
+    @ColumnDefault("0")
+    @Column(nullable = false)
+    private Integer points = 0;
+
     @Column
     private String birthday;
+
+    @Column
+    private String bio;
+
+    @Column
+    private String location;
+
+    @Column
+    private String phone;
 }
