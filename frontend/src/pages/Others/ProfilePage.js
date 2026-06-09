@@ -182,6 +182,14 @@ export default function ProfilePage() {
     },
   ];
 
+  const instructorOptions = [
+    {
+      titleKey: "courseManagement",
+      screen: "CourseManagement",
+      icon: "library-books",
+    },
+  ];
+
   const handlePressLogout = async () => {
   try {
     await handleDeactivatePushToken();
@@ -231,6 +239,28 @@ export default function ProfilePage() {
             <View style={{ flexShrink: 1 }}>
               <View style={styles.gridContainer}>
                 {options.map((option, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.optionButton}
+                    onPress={() => navigation.navigate(option.screen)}
+                  >
+                    <MaterialIcons name={option.icon} size={40} color="white" />
+                    <Text style={styles.optionText}>
+                      {i18n.t(option.titleKey)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {(user?.admin || user?.instructor) && (
+          <View style={styles.adminContainer}>
+            <Text style={styles.subHeader}>{i18n.t("instructorControls")}</Text>
+            <View style={{ flexShrink: 1 }}>
+              <View style={styles.gridContainer}>
+                {instructorOptions.map((option, index) => (
                   <TouchableOpacity
                     key={index}
                     style={styles.optionButton}

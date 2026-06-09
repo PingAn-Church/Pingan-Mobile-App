@@ -178,6 +178,8 @@
   "noAdmins": "No admins found.",
   "learning": "Learning",
   "noCourses": "No courses available yet.",
+  "instructorControls": "Instructor Controls",
+  "courseManagement": "Course Management",
   "manageInstructors": "Manage Instructors",
   "currentInstructors": "Current Instructors",
   "noInstructors": "No instructors found.",

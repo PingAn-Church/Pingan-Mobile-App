@@ -178,6 +178,8 @@
   "noAdmins": "未找到管理员",
   "learning": "学习",
   "noCourses": "暂无课程",
+  "instructorControls": "讲师控制台",
+  "courseManagement": "课程管理",
   "manageInstructors": "管理讲师",
   "currentInstructors": "当前讲师",
   "noInstructors": "未找到讲师",

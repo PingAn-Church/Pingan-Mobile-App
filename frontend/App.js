@@ -69,6 +69,8 @@ import CoursesScreen from "./src/learning/screens/CoursesScreen";
 import CourseDetailScreen from "./src/learning/screens/CourseDetailScreen";
 import LearningVideoScreen from "./src/learning/screens/VideoScreen";
 import LearningDocumentScreen from "./src/learning/screens/DocumentScreen";
+import CourseManagementScreen from "./src/learning/screens/instructor/CourseManagementScreen";
+import CourseEditorScreen from "./src/learning/screens/instructor/CourseEditorScreen";
 
 // Sidebar for desktop browsers
 import { useWindowDimensions, View } from "react-native";
@@ -373,6 +375,16 @@ export default function App() {
                   <Stack.Screen
                     name="LearningDocument"
                     component={LearningDocumentScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CourseManagement"
+                    component={CourseManagementScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CourseEditor"
+                    component={CourseEditorScreen}
                     options={{ headerTitle: "" }}
                   />
                 </Stack.Navigator>
