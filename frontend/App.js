@@ -71,6 +71,9 @@ import LearningVideoScreen from "./src/learning/screens/VideoScreen";
 import LearningDocumentScreen from "./src/learning/screens/DocumentScreen";
 import CourseManagementScreen from "./src/learning/screens/instructor/CourseManagementScreen";
 import CourseEditorScreen from "./src/learning/screens/instructor/CourseEditorScreen";
+import MyCoursesScreen from "./src/learning/screens/MyCoursesScreen";
+import WishlistScreen from "./src/learning/screens/WishlistScreen";
+import LeaveReviewScreen from "./src/learning/screens/LeaveReviewScreen";
 
 // Sidebar for desktop browsers
 import { useWindowDimensions, View } from "react-native";
@@ -385,6 +388,21 @@ export default function App() {
                   <Stack.Screen
                     name="CourseEditor"
                     component={CourseEditorScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="MyCourses"
+                    component={MyCoursesScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="Wishlist"
+                    component={WishlistScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LeaveReview"
+                    component={LeaveReviewScreen}
                     options={{ headerTitle: "" }}
                   />
                 </Stack.Navigator>

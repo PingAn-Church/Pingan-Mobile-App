@@ -83,7 +83,18 @@ export default function CoursesScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Courses</Text>
+      <View style={styles.topRow}>
+        <Text style={styles.heading}>Courses</Text>
+        <View style={styles.quickLinks}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate("MyCourses")}>
+            <Ionicons name="school-outline" size={16} color={Colors.white} />
+            <Text style={styles.quickText}>My Learning</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtnGhost} onPress={() => navigation.navigate("Wishlist")}>
+            <Ionicons name="heart-outline" size={18} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <ScrollView
         horizontal
@@ -133,12 +144,33 @@ export default function CoursesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.primary },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingTop: 16,
+  },
   heading: {
     fontSize: 26,
     fontWeight: "700",
     color: Colors.textPrimary,
-    paddingHorizontal: 18,
-    paddingTop: 16,
+  },
+  quickLinks: { flexDirection: "row", alignItems: "center", gap: 8 },
+  quickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+  },
+  quickText: { color: Colors.white, fontWeight: "600", fontSize: 12 },
+  quickBtnGhost: {
+    padding: 7,
+    borderRadius: 18,
+    backgroundColor: Colors.backgroundGray,
   },
   chipsRow: { maxHeight: 56 },
   chipsContent: { paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
