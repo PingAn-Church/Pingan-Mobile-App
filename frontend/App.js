@@ -74,6 +74,11 @@ import CourseEditorScreen from "./src/learning/screens/instructor/CourseEditorSc
 import MyCoursesScreen from "./src/learning/screens/MyCoursesScreen";
 import WishlistScreen from "./src/learning/screens/WishlistScreen";
 import LeaveReviewScreen from "./src/learning/screens/LeaveReviewScreen";
+import QuizScreen from "./src/learning/screens/QuizScreen";
+import CertificatesScreen from "./src/learning/screens/CertificatesScreen";
+import CertificateViewerScreen from "./src/learning/screens/CertificateViewerScreen";
+import AchievementsScreen from "./src/learning/screens/AchievementsScreen";
+import LearningGoalScreen from "./src/learning/screens/LearningGoalScreen";
 
 // Sidebar for desktop browsers
 import { useWindowDimensions, View } from "react-native";
@@ -403,6 +408,31 @@ export default function App() {
                   <Stack.Screen
                     name="LeaveReview"
                     component={LeaveReviewScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="QuizScreen"
+                    component={QuizScreen}
+                    options={{ headerTitle: "Quiz" }}
+                  />
+                  <Stack.Screen
+                    name="Certificates"
+                    component={CertificatesScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CertificateViewer"
+                    component={CertificateViewerScreen}
+                    options={{ headerTitle: "Certificate" }}
+                  />
+                  <Stack.Screen
+                    name="Achievements"
+                    component={AchievementsScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LearningGoal"
+                    component={LearningGoalScreen}
                     options={{ headerTitle: "" }}
                   />
                 </Stack.Navigator>

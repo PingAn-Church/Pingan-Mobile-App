@@ -8,10 +8,17 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getMyCourses, type EnrolledCourse } from "@/services/enrollmentService";
+
+const HUB_LINKS: { route: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { route: "Certificates", label: "Certificates", icon: "ribbon-outline" },
+  { route: "Achievements", label: "Achievements", icon: "trophy-outline" },
+  { route: "LearningGoal", label: "Goals", icon: "flag-outline" },
+];
 
 function ProgressBar({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(100, value));
@@ -72,6 +79,15 @@ export default function MyCoursesScreen() {
         </View>
       )}
 
+      <View style={styles.hubRow}>
+        {HUB_LINKS.map((l) => (
+          <TouchableOpacity key={l.route} style={styles.hubBtn} onPress={() => navigation.navigate(l.route)}>
+            <Ionicons name={l.icon} size={20} color={Colors.secondary} />
+            <Text style={styles.hubLabel}>{l.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
@@ -106,6 +122,18 @@ const styles = StyleSheet.create({
   stat: { flex: 1, backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 12, alignItems: "center" },
   statValue: { color: Colors.textPrimary, fontSize: 18, fontWeight: "800" },
   statLabel: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
+  hubRow: { flexDirection: "row", gap: 10, paddingHorizontal: 18, marginBottom: 10 },
+  hubBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Colors.backgroundGray,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  hubLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: "600" },
   list: { padding: 14, paddingBottom: 40 },
   card: { flexDirection: "row", backgroundColor: Colors.backgroundGray, borderRadius: 12, overflow: "hidden", marginBottom: 12 },
   thumb: { width: 110, height: 110, backgroundColor: Colors.gray800 },
