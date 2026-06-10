@@ -32,7 +32,7 @@ const mapCourse = (c: any): LearningCourse => ({
 
 const mapLesson = (l: any): LearningLesson => ({
   id: str(l.id),
-  type: l.type === "resource" ? "resource" : "video",
+  type: l.type === "resource" ? "resource" : l.type === "quiz" ? "quiz" : "video",
   title: str(l.title),
   description: str(l.description),
   durationSeconds: num(l.duration_seconds),

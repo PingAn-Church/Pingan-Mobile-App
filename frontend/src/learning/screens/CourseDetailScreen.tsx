@@ -91,6 +91,8 @@ export default function CourseDetailScreen() {
         videoUrl: lesson.videoUrl,
         videoId: lesson.id,
       });
+    } else if (lesson.type === "quiz") {
+      navigation.navigate("QuizScreen", { quizId: lesson.id, title: lesson.title });
     } else {
       navigation.navigate("LearningDocument", {
         title: lesson.title,
@@ -100,6 +102,9 @@ export default function CourseDetailScreen() {
       });
     }
   };
+
+  const lessonIcon = (type: string) =>
+    type === "video" ? "play-circle-outline" : type === "quiz" ? "help-circle-outline" : "document-text-outline";
 
   if (detailQuery.isLoading) {
     return (
@@ -184,7 +189,7 @@ export default function CourseDetailScreen() {
                 {m.lessons.map((lesson) => (
                   <TouchableOpacity key={lesson.id} style={styles.lessonRow} onPress={() => openLesson(lesson)}>
                     <Ionicons
-                      name={lesson.type === "video" ? "play-circle-outline" : "document-text-outline"}
+                      name={lessonIcon(lesson.type) as any}
                       size={20}
                       color={Colors.textSecondary}
                     />

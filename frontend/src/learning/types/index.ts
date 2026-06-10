@@ -25,7 +25,7 @@ export interface LearningCourse {
   totalVideos: number;
 }
 
-export type LessonType = "video" | "resource";
+export type LessonType = "video" | "resource" | "quiz";
 
 export interface LearningLesson {
   id: string;

@@ -16,9 +16,26 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import { getCategories, getCourseDetail } from "@/services/courseService";
 import * as authoring from "@/services/authoringService";
+import {
+  getQuizDetail,
+  createQuiz,
+  deleteQuiz,
+  createQuestion,
+  deleteQuestion,
+  type QuizDetail,
+  type QuestionType,
+} from "@/services/quizService";
 import type { LearningCategory, LearningCourseDetail } from "@/types";
 
 type LessonKind = "video" | "resource";
+
+const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "multiple-choice", label: "Single choice" },
+  { value: "multiple-correct", label: "Multi select" },
+  { value: "true-false", label: "True / False" },
+  { value: "short-answer", label: "Short answer" },
+  { value: "matching", label: "Matching" },
+];
 
 export default function CourseEditorScreen() {
   const navigation = useNavigation<any>();
@@ -55,6 +72,27 @@ export default function CourseEditorScreen() {
     resourceType: string;
     isPreview: boolean;
   }>({ visible: false, kind: "video", sectionId: "", title: "", url: "", durationMinutes: "0", resourceType: "pdf", isPreview: false });
+
+  // quiz modal (create a quiz on a module)
+  const [quizModal, setQuizModal] = useState<{ visible: boolean; sectionId: string; title: string; passingScore: string }>(
+    { visible: false, sectionId: "", title: "", passingScore: "70" }
+  );
+  // question editor (manage questions inside a quiz)
+  const [questionEditor, setQuestionEditor] = useState<{ visible: boolean; quiz: QuizDetail | null; loading: boolean }>(
+    { visible: false, quiz: null, loading: false }
+  );
+  // question modal (add a question to the open quiz)
+  const [questionModal, setQuestionModal] = useState<{
+    visible: boolean;
+    quizId: string;
+    questionType: QuestionType;
+    question: string;
+    points: string;
+    optionsText: string;
+    correctText: string;
+    tfValue: "True" | "False";
+    pairsText: string;
+  }>({ visible: false, quizId: "", questionType: "multiple-choice", question: "", points: "1", optionsText: "", correctText: "", tfValue: "True", pairsText: "" });
 
   useEffect(() => {
     navigation.setOptions({ title: courseId ? "Edit Course" : "New Course" });
@@ -259,6 +297,147 @@ export default function CourseEditorScreen() {
     ]);
   };
 
+  // ---- quizzes ------------------------------------------------------
+  const openAddQuiz = (sectionId: string) =>
+    setQuizModal({ visible: true, sectionId, title: "", passingScore: "70" });
+
+  const saveQuiz = async () => {
+    if (!courseId || !quizModal.title.trim()) {
+      Alert.alert("Required", "Quiz title is required.");
+      return;
+    }
+    try {
+      await createQuiz({
+        courseId,
+        sectionId: quizModal.sectionId,
+        title: quizModal.title.trim(),
+        passingScore: Number(quizModal.passingScore) || 70,
+      });
+      setQuizModal((m) => ({ ...m, visible: false }));
+      await reloadContent(courseId);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to create quiz.");
+    }
+  };
+
+  const removeQuiz = (id: string) => {
+    Alert.alert("Delete quiz", "Delete this quiz and its questions?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deleteQuiz(id);
+          if (courseId) await reloadContent(courseId);
+        },
+      },
+    ]);
+  };
+
+  const openQuizEditor = async (quizId: string) => {
+    setQuestionEditor({ visible: true, quiz: null, loading: true });
+    try {
+      const quiz = await getQuizDetail(quizId);
+      setQuestionEditor({ visible: true, quiz, loading: false });
+    } catch {
+      setQuestionEditor({ visible: false, quiz: null, loading: false });
+      Alert.alert("Error", "Could not load the quiz.");
+    }
+  };
+
+  const reloadQuestions = async (quizId: string) => {
+    try {
+      const quiz = await getQuizDetail(quizId);
+      setQuestionEditor((s) => ({ ...s, quiz }));
+    } catch {}
+  };
+
+  // ---- questions ----------------------------------------------------
+  const openAddQuestion = (quizId: string) =>
+    setQuestionModal({
+      visible: true,
+      quizId,
+      questionType: "multiple-choice",
+      question: "",
+      points: "1",
+      optionsText: "",
+      correctText: "",
+      tfValue: "True",
+      pairsText: "",
+    });
+
+  const saveQuestion = async () => {
+    const m = questionModal;
+    if (!m.question.trim()) {
+      Alert.alert("Required", "Question text is required.");
+      return;
+    }
+    const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
+    const body: Record<string, any> = {
+      quizId: m.quizId,
+      question: m.question.trim(),
+      questionType: m.questionType,
+      points: Number(m.points) || 1,
+    };
+    if (m.questionType === "multiple-choice") {
+      body.options = lines(m.optionsText);
+      body.correctAnswer = m.correctText.trim();
+    } else if (m.questionType === "multiple-correct") {
+      body.options = lines(m.optionsText);
+      body.correctAnswer = m.correctText.split(",").map((x) => x.trim()).filter(Boolean);
+    } else if (m.questionType === "true-false") {
+      body.options = ["True", "False"];
+      body.correctAnswer = m.tfValue;
+    } else if (m.questionType === "short-answer") {
+      body.correctAnswer = m.correctText.trim();
+    } else if (m.questionType === "matching") {
+      const pairs = lines(m.pairsText)
+        .map((l) => {
+          const [left, right] = l.split("=>");
+          return { left: (left || "").trim(), right: (right || "").trim() };
+        })
+        .filter((p) => p.left && p.right);
+      if (pairs.length === 0) {
+        Alert.alert("Required", "Enter at least one pair as 'left => right'.");
+        return;
+      }
+      body.correctAnswer = pairs;
+    }
+
+    // Validate answers are present for graded types.
+    if (m.questionType !== "matching") {
+      const hasAnswer = Array.isArray(body.correctAnswer)
+        ? body.correctAnswer.length > 0
+        : String(body.correctAnswer ?? "").length > 0;
+      if (!hasAnswer) {
+        Alert.alert("Required", "Please provide the correct answer.");
+        return;
+      }
+    }
+
+    try {
+      await createQuestion(body);
+      setQuestionModal((s) => ({ ...s, visible: false }));
+      await reloadQuestions(m.quizId);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to add question.");
+    }
+  };
+
+  const removeQuestion = (quizId: string, questionId: string) => {
+    Alert.alert("Delete question", "Remove this question?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deleteQuestion(questionId);
+          await reloadQuestions(quizId);
+        },
+      },
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center" }]}>
@@ -376,21 +555,37 @@ export default function CourseEditorScreen() {
                   </View>
                 </View>
 
-                {m.lessons.map((l) => (
-                  <View key={l.id} style={styles.lessonRow}>
-                    <Ionicons
-                      name={l.type === "video" ? "play-circle-outline" : "document-text-outline"}
-                      size={18}
-                      color={Colors.textSecondary}
-                    />
-                    <Text style={styles.lessonText} numberOfLines={1}>
-                      {l.title}
-                    </Text>
-                    <TouchableOpacity onPress={() => removeLesson(l.type, l.id)}>
-                      <Ionicons name="close" size={18} color={Colors.red} />
+                {m.lessons.map((l) => {
+                  const isQuiz = l.type === "quiz";
+                  return (
+                    <TouchableOpacity
+                      key={l.id}
+                      style={styles.lessonRow}
+                      activeOpacity={isQuiz ? 0.6 : 1}
+                      onPress={isQuiz ? () => openQuizEditor(l.id) : undefined}
+                      disabled={!isQuiz}
+                    >
+                      <Ionicons
+                        name={
+                          l.type === "video"
+                            ? "play-circle-outline"
+                            : isQuiz
+                            ? "help-circle-outline"
+                            : "document-text-outline"
+                        }
+                        size={18}
+                        color={isQuiz ? Colors.secondary : Colors.textSecondary}
+                      />
+                      <Text style={styles.lessonText} numberOfLines={1}>
+                        {l.title}
+                        {isQuiz ? "  (tap to edit questions)" : ""}
+                      </Text>
+                      <TouchableOpacity onPress={() => (isQuiz ? removeQuiz(l.id) : removeLesson(l.type as LessonKind, l.id))}>
+                        <Ionicons name="close" size={18} color={Colors.red} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
 
                 <View style={styles.addLessonRow}>
                   <TouchableOpacity style={styles.addLessonBtn} onPress={() => openAddLesson(m.id, "video")}>
@@ -400,6 +595,10 @@ export default function CourseEditorScreen() {
                   <TouchableOpacity style={styles.addLessonBtn} onPress={() => openAddLesson(m.id, "resource")}>
                     <Ionicons name="document-outline" size={16} color={Colors.secondary} />
                     <Text style={styles.addLessonText}>Document</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.addLessonBtn} onPress={() => openAddQuiz(m.id)}>
+                    <Ionicons name="help-circle-outline" size={16} color={Colors.secondary} />
+                    <Text style={styles.addLessonText}>Quiz</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -450,6 +649,143 @@ export default function CourseEditorScreen() {
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveLesson}>
+                <Text style={styles.saveBtnText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Quiz modal (create quiz) */}
+      <Modal visible={quizModal.visible} transparent animationType="fade" onRequestClose={() => setQuizModal((m) => ({ ...m, visible: false }))}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>New quiz</Text>
+            <TextInput style={styles.input} value={quizModal.title} onChangeText={(v) => setQuizModal((m) => ({ ...m, title: v }))} placeholder="Quiz title" placeholderTextColor={Colors.textMuted} />
+            <Text style={styles.label}>Pass mark (%)</Text>
+            <TextInput style={styles.input} value={quizModal.passingScore} onChangeText={(v) => setQuizModal((m) => ({ ...m, passingScore: v }))} keyboardType="numeric" />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setQuizModal((m) => ({ ...m, visible: false }))}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveQuiz}>
+                <Text style={styles.saveBtnText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Question editor (list + add/delete questions in a quiz) */}
+      <Modal visible={questionEditor.visible} transparent animationType="slide" onRequestClose={() => setQuestionEditor((s) => ({ ...s, visible: false }))}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: "85%" }]}>
+            <View style={styles.moduleHeader}>
+              <Text style={styles.modalTitle} numberOfLines={1}>{questionEditor.quiz?.title || "Quiz"}</Text>
+              <TouchableOpacity onPress={() => setQuestionEditor((s) => ({ ...s, visible: false }))}>
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {questionEditor.loading ? (
+              <ActivityIndicator color={Colors.secondary} style={{ marginVertical: 20 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }}>
+                {(questionEditor.quiz?.questions ?? []).length === 0 ? (
+                  <Text style={styles.muted}>No questions yet. Add one below.</Text>
+                ) : (
+                  questionEditor.quiz!.questions.map((q, i) => (
+                    <View key={q.id} style={styles.lessonRow}>
+                      <Text style={styles.lessonText} numberOfLines={2}>
+                        {i + 1}. {q.question}  ·  {q.questionType}
+                      </Text>
+                      <TouchableOpacity onPress={() => removeQuestion(questionEditor.quiz!.id, q.id)}>
+                        <Ionicons name="trash-outline" size={18} color={Colors.red} />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={[styles.modalSaveBtn, { alignSelf: "stretch", alignItems: "center", marginTop: 14 }]}
+              onPress={() => questionEditor.quiz && openAddQuestion(questionEditor.quiz.id)}
+            >
+              <Text style={styles.saveBtnText}>Add question</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Question modal (create a question) */}
+      <Modal visible={questionModal.visible} transparent animationType="fade" onRequestClose={() => setQuestionModal((m) => ({ ...m, visible: false }))}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: "88%" }]}>
+            <Text style={styles.modalTitle}>New question</Text>
+            <ScrollView style={{ maxHeight: 460 }}>
+              <Text style={styles.label}>Type</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                {QUESTION_TYPES.map((t) => {
+                  const active = questionModal.questionType === t.value;
+                  return (
+                    <TouchableOpacity key={t.value} style={[styles.chip, active && styles.chipActive]} onPress={() => setQuestionModal((m) => ({ ...m, questionType: t.value }))}>
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{t.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={styles.label}>Question</Text>
+              <TextInput style={[styles.input, styles.multiline]} value={questionModal.question} onChangeText={(v) => setQuestionModal((m) => ({ ...m, question: v }))} placeholder="Question text" placeholderTextColor={Colors.textMuted} multiline />
+
+              {(questionModal.questionType === "multiple-choice" || questionModal.questionType === "multiple-correct") && (
+                <>
+                  <Text style={styles.label}>Options (one per line)</Text>
+                  <TextInput style={[styles.input, styles.multiline]} value={questionModal.optionsText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, optionsText: v }))} placeholder={"Option A\nOption B\nOption C"} placeholderTextColor={Colors.textMuted} multiline />
+                  <Text style={styles.label}>
+                    {questionModal.questionType === "multiple-correct" ? "Correct options (comma separated, must match above)" : "Correct option (must match one above)"}
+                  </Text>
+                  <TextInput style={styles.input} value={questionModal.correctText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, correctText: v }))} placeholder={questionModal.questionType === "multiple-correct" ? "Option A, Option C" : "Option B"} placeholderTextColor={Colors.textMuted} />
+                </>
+              )}
+
+              {questionModal.questionType === "true-false" && (
+                <>
+                  <Text style={styles.label}>Correct answer</Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    {(["True", "False"] as const).map((v) => {
+                      const active = questionModal.tfValue === v;
+                      return (
+                        <TouchableOpacity key={v} style={[styles.chip, active && styles.chipActive]} onPress={() => setQuestionModal((m) => ({ ...m, tfValue: v }))}>
+                          <Text style={[styles.chipText, active && styles.chipTextActive]}>{v}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {questionModal.questionType === "short-answer" && (
+                <>
+                  <Text style={styles.label}>Expected answer</Text>
+                  <TextInput style={styles.input} value={questionModal.correctText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, correctText: v }))} placeholder="Accepted answer (case-insensitive)" placeholderTextColor={Colors.textMuted} />
+                </>
+              )}
+
+              {questionModal.questionType === "matching" && (
+                <>
+                  <Text style={styles.label}>Pairs (one per line, as 'left =&gt; right')</Text>
+                  <TextInput style={[styles.input, styles.multiline]} value={questionModal.pairsText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, pairsText: v }))} placeholder={"HTTP => 80\nHTTPS => 443"} placeholderTextColor={Colors.textMuted} multiline />
+                </>
+              )}
+
+              <Text style={styles.label}>Points</Text>
+              <TextInput style={styles.input} value={questionModal.points} onChangeText={(v) => setQuestionModal((m) => ({ ...m, points: v }))} keyboardType="numeric" />
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setQuestionModal((m) => ({ ...m, visible: false }))}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveQuestion}>
                 <Text style={styles.saveBtnText}>Add</Text>
               </TouchableOpacity>
             </View>
