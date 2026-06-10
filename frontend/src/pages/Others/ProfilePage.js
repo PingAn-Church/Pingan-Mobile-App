@@ -259,7 +259,7 @@ export default function ProfilePage() {
           <View style={styles.adminContainer}>
             <Text style={styles.subHeader}>{i18n.t("instructorControls")}</Text>
             <View style={{ flexShrink: 1 }}>
-              <View style={styles.gridContainer}>
+              <View style={[styles.gridContainer, styles.instructorGrid]}>
                 {instructorOptions.map((option, index) => (
                   <TouchableOpacity
                     key={index}
@@ -586,6 +586,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 0,
     gap: 10,
+  },
+  // The instructor grid often has a single item; stretch it to the full row so
+  // the button's percentage width resolves the same as the admin buttons
+  // instead of collapsing around its content.
+  instructorGrid: {
+    alignSelf: "stretch",
   },
   optionButton: {
     width: "45%",
