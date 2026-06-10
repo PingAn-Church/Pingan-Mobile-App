@@ -32,6 +32,8 @@ import type { LearningCategory, LearningCourseDetail } from "@/types";
 
 type LessonKind = "video" | "resource";
 
+const CATEGORY_COLORS = ["#6366F1", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
+
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "multiple-choice", label: "Single choice" },
   { value: "multiple-correct", label: "Multi select" },
@@ -61,6 +63,10 @@ export default function CourseEditorScreen() {
   const [categories, setCategories] = useState<LearningCategory[]>([]);
   const [detail, setDetail] = useState<LearningCourseDetail | null>(null);
 
+  // category modal
+  const [categoryModal, setCategoryModal] = useState<{ visible: boolean; name: string; color: string }>(
+    { visible: false, name: "", color: CATEGORY_COLORS[0] }
+  );
   // section modal
   const [sectionModal, setSectionModal] = useState<{ visible: boolean; id?: string; title: string; description: string }>(
     { visible: false, title: "", description: "" }
@@ -121,6 +127,7 @@ export default function CourseEditorScreen() {
       setDurationHours(String(d.durationHours));
       setThumbnailUrl(d.thumbnailUrl || "");
       setTags((d.tags || []).join(", "));
+      setIsPublished(!!d.isPublished);
       setCategoryName(d.categoryName || "General");
       setOutcomes(d.outcomes || []);
     } catch {
@@ -213,6 +220,23 @@ export default function CourseEditorScreen() {
       Alert.alert("Error", e?.message || "Failed to upload the cover image.");
     } finally {
       setUploadingCover(false);
+    }
+  };
+
+  // ---- categories ---------------------------------------------------
+  const saveCategory = async () => {
+    const name = categoryModal.name.trim();
+    if (!name) {
+      Alert.alert("Required", "Category name is required.");
+      return;
+    }
+    try {
+      await authoring.createCategory({ name, color: categoryModal.color });
+      setCategories(await getCategories());
+      setCategoryName(name);
+      setCategoryModal({ visible: false, name: "", color: CATEGORY_COLORS[0] });
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to create category.");
     }
   };
 
@@ -502,6 +526,13 @@ export default function CourseEditorScreen() {
               </TouchableOpacity>
             );
           })}
+        <TouchableOpacity
+          style={[styles.chip, styles.chipNew]}
+          onPress={() => setCategoryModal({ visible: true, name: "", color: CATEGORY_COLORS[0] })}
+        >
+          <Ionicons name="add" size={15} color={Colors.secondary} />
+          <Text style={[styles.chipText, { color: Colors.secondary }]}>New</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <View style={styles.row2}>
@@ -650,6 +681,34 @@ export default function CourseEditorScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Category modal */}
+      <Modal visible={categoryModal.visible} transparent animationType="fade" onRequestClose={() => setCategoryModal((m) => ({ ...m, visible: false }))}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>New category</Text>
+            <TextInput style={styles.input} value={categoryModal.name} onChangeText={(v) => setCategoryModal((m) => ({ ...m, name: v }))} placeholder="Category name" placeholderTextColor={Colors.textMuted} />
+            <Text style={styles.label}>Color</Text>
+            <View style={styles.swatchRow}>
+              {CATEGORY_COLORS.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.swatch, { backgroundColor: c }, categoryModal.color === c && styles.swatchActive]}
+                  onPress={() => setCategoryModal((m) => ({ ...m, color: c }))}
+                />
+              ))}
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setCategoryModal((m) => ({ ...m, visible: false }))}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveCategory}>
+                <Text style={styles.saveBtnText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Section modal */}
       <Modal visible={sectionModal.visible} transparent animationType="fade" onRequestClose={() => setSectionModal((s) => ({ ...s, visible: false }))}>
@@ -856,8 +915,12 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: 6 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: Colors.backgroundGray, marginRight: 8 },
   chipActive: { backgroundColor: Colors.secondary },
+  chipNew: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "transparent", borderWidth: 1, borderColor: Colors.secondary },
   chipText: { color: Colors.textSecondary, fontWeight: "600" },
   chipTextActive: { color: Colors.white },
+  swatchRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  swatch: { width: 30, height: 30, borderRadius: 15 },
+  swatchActive: { borderWidth: 3, borderColor: Colors.white },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 8 },
   sectionTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: "700" },
   outcomeRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },

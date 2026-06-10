@@ -23,6 +23,7 @@ export interface LearningCourse {
   studentCount: number;
   totalSections: number;
   totalVideos: number;
+  isPublished?: boolean;
 }
 
 export type LessonType = "video" | "resource" | "quiz";

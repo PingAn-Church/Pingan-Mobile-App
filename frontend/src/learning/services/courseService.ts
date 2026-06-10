@@ -28,6 +28,7 @@ const mapCourse = (c: any): LearningCourse => ({
   studentCount: num(c.student_count),
   totalSections: num(c.total_sections),
   totalVideos: num(c.total_videos),
+  isPublished: !!c.is_published,
 });
 
 const mapLesson = (l: any): LearningLesson => ({
