@@ -5,13 +5,13 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
+import CourseCoverImage from "@/components/CourseCoverImage";
 import { getMyCourses, type EnrolledCourse } from "@/services/enrollmentService";
 
 const HUB_LINKS: { route: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -50,8 +50,9 @@ export default function MyCoursesScreen() {
       style={styles.card}
       onPress={() => navigation.navigate("LearningCourseDetail", { courseId: item.id })}
     >
-      <Image
-        source={{ uri: item.thumbnailUrl || "https://picsum.photos/seed/course/200/120" }}
+      <CourseCoverImage
+        uri={item.thumbnailUrl}
+        fallback="https://picsum.photos/seed/course/200/120"
         style={styles.thumb}
       />
       <View style={styles.cardBody}>

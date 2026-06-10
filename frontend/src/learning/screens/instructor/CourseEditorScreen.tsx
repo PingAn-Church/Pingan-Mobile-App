@@ -13,8 +13,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants";
+import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getCourseDetail } from "@/services/courseService";
+import { getPresignedUploadUrl, uploadFileToOSS } from "../../../service/OSSService";
 import * as authoring from "@/services/authoringService";
 import {
   getQuizDetail,
@@ -49,6 +52,7 @@ export default function CourseEditorScreen() {
   const [description, setDescription] = useState("");
   const [durationHours, setDurationHours] = useState("0");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [tags, setTags] = useState("");
   const [isPublished, setIsPublished] = useState(false);
   const [categoryName, setCategoryName] = useState<string>("General");
@@ -189,6 +193,27 @@ export default function CourseEditorScreen() {
         },
       },
     ]);
+  };
+
+  // ---- cover image --------------------------------------------------
+  const handlePickCover = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    setUploadingCover(true);
+    try {
+      const presignedUrl = await getPresignedUploadUrl(`course_cover_${Date.now()}.jpeg`, "course");
+      const uploadedUrl = await uploadFileToOSS(result.assets[0].uri, presignedUrl);
+      setThumbnailUrl(uploadedUrl);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to upload the cover image.");
+    } finally {
+      setUploadingCover(false);
+    }
   };
 
   // ---- outcomes -----------------------------------------------------
@@ -486,8 +511,23 @@ export default function CourseEditorScreen() {
         </View>
       </View>
 
-      <Text style={styles.label}>Thumbnail URL</Text>
-      <TextInput style={styles.input} value={thumbnailUrl} onChangeText={setThumbnailUrl} placeholder="https://..." placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+      <Text style={styles.label}>Cover image</Text>
+      {!!thumbnailUrl && <CourseCoverImage uri={thumbnailUrl} style={styles.coverPreview} />}
+      <View style={styles.coverRow}>
+        <TouchableOpacity style={styles.coverBtn} onPress={handlePickCover} disabled={uploadingCover}>
+          <Ionicons name="image-outline" size={18} color={Colors.secondary} />
+          <Text style={styles.coverBtnText}>
+            {uploadingCover ? "Uploading..." : thumbnailUrl ? "Change image" : "Choose image"}
+          </Text>
+        </TouchableOpacity>
+        {!!thumbnailUrl && !uploadingCover && (
+          <TouchableOpacity style={styles.coverBtn} onPress={() => setThumbnailUrl("")}>
+            <Ionicons name="trash-outline" size={18} color={Colors.red} />
+            <Text style={[styles.coverBtnText, { color: Colors.red }]}>Remove</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <TextInput style={styles.input} value={thumbnailUrl} onChangeText={setThumbnailUrl} placeholder="...or paste an image URL (https://...)" placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
 
       <Text style={styles.label}>Tags (comma separated)</Text>
       <TextInput style={styles.input} value={tags} onChangeText={setTags} placeholder="java, backend" placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
@@ -809,6 +849,10 @@ const styles = StyleSheet.create({
   },
   multiline: { minHeight: 80, textAlignVertical: "top" },
   row2: { flexDirection: "row", gap: 12 },
+  coverPreview: { width: "100%", aspectRatio: 2, borderRadius: 10, marginBottom: 10, backgroundColor: Colors.backgroundGray },
+  coverRow: { flexDirection: "row", alignItems: "center", gap: 18, marginBottom: 6 },
+  coverBtn: { flexDirection: "row", alignItems: "center", gap: 5 },
+  coverBtnText: { color: Colors.secondary, fontWeight: "600", fontSize: 13 },
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: 6 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: Colors.backgroundGray, marginRight: 8 },
   chipActive: { backgroundColor: Colors.secondary },

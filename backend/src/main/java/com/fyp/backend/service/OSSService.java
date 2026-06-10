@@ -315,6 +315,7 @@ public class OSSService {
             case "document" -> "documents/";
             case "event" -> "eventPictures/";
             case "announcement" -> "announcementPictures/";
+            case "course" -> "coursePictures/";
             case "other" -> "otherPictures/";
             default -> throw new IllegalArgumentException("Unsupported file type: " + fileType);
         };

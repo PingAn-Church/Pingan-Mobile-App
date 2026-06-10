@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -13,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants";
+import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCourseDetail } from "@/services/courseService";
 import {
   isEnrolled as checkEnrolled,
@@ -123,8 +123,9 @@ export default function CourseDetailScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Image
-        source={{ uri: data.thumbnailUrl || "https://picsum.photos/seed/course/600/300" }}
+      <CourseCoverImage
+        uri={data.thumbnailUrl}
+        fallback="https://picsum.photos/seed/course/600/300"
         style={styles.hero}
       />
       <TouchableOpacity style={styles.heart} onPress={toggleWishlist}>

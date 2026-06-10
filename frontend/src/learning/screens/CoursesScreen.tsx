@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
@@ -13,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
+import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getPublishedCourses } from "@/services/courseService";
 import type { LearningCourse } from "@/types";
 
@@ -27,8 +27,9 @@ export function CourseCard({
 }) {
   return (
     <TouchableOpacity style={[styles.card, width ? { width } : null]} onPress={onPress} activeOpacity={0.85}>
-      <Image
-        source={{ uri: course.thumbnailUrl || "https://picsum.photos/seed/course/400/250" }}
+      <CourseCoverImage
+        uri={course.thumbnailUrl}
+        fallback="https://picsum.photos/seed/course/400/250"
         style={styles.cardImage}
       />
       <View style={styles.cardBody}>
