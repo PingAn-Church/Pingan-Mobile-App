@@ -340,6 +340,21 @@ public class PushNotificationService {
 //        }
 //    }
 
+    /**
+     * Sends a learning-related push (enrolment, quiz result, course completion,
+     * achievement, certificate) to a single user, reusing the Expo delivery path.
+     * Best-effort: any delivery failure is swallowed so it never breaks the
+     * learning flow that triggered it.
+     */
+    public void notifyLearningEvent(Long userId, String title, String message) {
+        if (userId == null) return;
+        try {
+            sendPushNotification(List.of(userId), message, title, null, "learning");
+        } catch (Exception ignored) {
+            // best-effort notification; never disrupt the originating action
+        }
+    }
+
     // Send push notifications to all devices associated with the user
     public void sendPushNotification(List<Long> recipientIds, String message, String title, Long conversationId, String conversationType) {
         for (Long userId : recipientIds) {
