@@ -34,6 +34,9 @@ public class QuizService {
     @Autowired private QuizQuestionRepository questionRepository;
     @Autowired private QuizAttemptRepository attemptRepository;
     @Autowired private ProgressService progressService;
+    @Autowired private PushNotificationService pushNotificationService;
+    @Autowired private AchievementService achievementService;
+    @Autowired private GoalService goalService;
     @Autowired private ObjectMapper objectMapper;
 
     public Map<String, Object> getQuizDetail(Long quizId, Long userId) {
@@ -55,6 +58,11 @@ public class QuizService {
             m.put("points", q.getPoints());
             m.put("order_index", q.getOrderIndex());
             m.put("image_url", q.getImageUrl());
+            // Matching questions: expose the prompts (left, in order) and a shuffled
+            // set of choices (right) without revealing the correct pairing.
+            if ("matching".equals(q.getQuestionType())) {
+                addMatchingDisplay(m, q);
+            }
             qList.add(m);
         }
 
@@ -136,6 +144,13 @@ public class QuizService {
         progressService.recomputeModuleCompletion(userId, quiz.getCourseId(), quiz.getSectionId());
         progressService.recomputeCourseProgress(userId, quiz.getCourseId());
 
+        if (isPassed) {
+            pushNotificationService.notifyLearningEvent(userId, "Quiz passed",
+                    "You scored " + score + "% on \"" + quiz.getTitle() + "\". Well done!");
+            achievementService.evaluate(userId, quiz.getCourseId());
+        }
+        goalService.onLearningActivity(userId, timeTakenMinutes == null ? 1 : timeTakenMinutes);
+
         Integer remaining = maxAttempts == null ? null : Math.max(0, maxAttempts - attemptNumber);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("score", score);
@@ -192,6 +207,24 @@ public class QuizService {
         response.put("success", true);
         response.put("data", data);
         return response;
+    }
+
+    /**
+     * Adds {@code matching_left} (ordered prompts) and {@code matching_right}
+     * (shuffled choices) to a matching question payload, derived from the stored
+     * correct pairs. The correct left→right mapping is never sent to the client.
+     */
+    private void addMatchingDisplay(Map<String, Object> m, QuizQuestion q) {
+        List<Map<String, Object>> pairs = toMapList(parseJsonOrRaw(q.getCorrectAnswer()));
+        List<String> left = new ArrayList<>();
+        List<String> right = new ArrayList<>();
+        for (Map<String, Object> p : pairs) {
+            left.add(String.valueOf(p.get("left")));
+            right.add(String.valueOf(p.get("right")));
+        }
+        Collections.shuffle(right);
+        m.put("matching_left", left);
+        m.put("matching_right", right);
     }
 
     // ---- grading --------------------------------------------------------

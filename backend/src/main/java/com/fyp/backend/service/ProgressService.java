@@ -14,6 +14,7 @@ import com.fyp.backend.model.CourseVideo;
 import com.fyp.backend.model.UserModuleProgress;
 import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseQuizRepository;
+import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
@@ -39,6 +40,10 @@ public class ProgressService {
     @Autowired private CourseEnrollmentRepository enrollmentRepository;
     @Autowired private CourseQuizRepository quizRepository;
     @Autowired private QuizAttemptRepository attemptRepository;
+    @Autowired private CourseRepository courseRepository;
+    @Autowired private CertificateService certificateService;
+    @Autowired private AchievementService achievementService;
+    @Autowired private PushNotificationService pushNotificationService;
 
     /** Recomputes and persists the enrollment progress %, returns the new value. */
     public double recomputeCourseProgress(Long userId, Long courseId) {
@@ -62,6 +67,7 @@ public class ProgressService {
 
         CourseEnrollment enrollment = enrollmentRepository.findByUserIdAndCourseId(userId, courseId).orElse(null);
         if (enrollment != null) {
+            boolean wasCompleted = enrollment.isCompleted();
             enrollment.setProgressPercentage(pct);
             boolean done = pct >= 100.0;
             enrollment.setCompleted(done);
@@ -70,6 +76,10 @@ public class ProgressService {
             enrollment.setUpdatedAt(Instant.now());
             enrollment.setLastActivityAt(Instant.now());
             enrollmentRepository.save(enrollment);
+
+            if (done && !wasCompleted) {
+                awardCourseCompletion(userId, courseId);
+            }
         }
         return pct;
     }
@@ -120,6 +130,18 @@ public class ProgressService {
 
     public long sectionCount(Long courseId) {
         return sectionRepository.countByCourseId(courseId);
+    }
+
+    /**
+     * Fan-out for a course reaching 100% for the first time: issue a certificate
+     * and notify the learner. Called once per completion transition.
+     */
+    private void awardCourseCompletion(Long userId, Long courseId) {
+        certificateService.issueForCompletion(userId, courseId);
+        String title = courseRepository.findById(courseId).map(c -> c.getTitle()).orElse("your course");
+        pushNotificationService.notifyLearningEvent(userId, "Course completed",
+                "Congratulations! You completed \"" + title + "\" and earned a certificate.");
+        achievementService.evaluate(userId, courseId);
     }
 
     /** Number of the given quizzes the user has passed at least once. */

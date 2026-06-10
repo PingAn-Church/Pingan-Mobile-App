@@ -42,6 +42,9 @@ public class EnrollmentService {
     @Autowired private ResourceProgressRepository resourceProgressRepository;
     @Autowired private ProgressService progressService;
     @Autowired private CourseService courseService;
+    @Autowired private PushNotificationService pushNotificationService;
+    @Autowired private CertificateService certificateService;
+    @Autowired private GoalService goalService;
 
     @Transactional
     public Map<String, Object> enroll(Long userId, Long courseId) {
@@ -57,6 +60,8 @@ public class EnrollmentService {
             enrollment = enrollmentRepository.save(enrollment);
             course.setStudentCount((course.getStudentCount() == null ? 0 : course.getStudentCount()) + 1);
             courseRepository.save(course);
+            pushNotificationService.notifyLearningEvent(userId, "Enrolled",
+                    "You're enrolled in \"" + course.getTitle() + "\". Time to start learning!");
         }
 
         List<CourseSection> sections = sectionRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
@@ -153,6 +158,7 @@ public class EnrollmentService {
 
         progressService.recomputeModuleCompletion(userId, video.getCourseId(), video.getSectionId());
         double pct = progressService.recomputeCourseProgress(userId, video.getCourseId());
+        goalService.onLearningActivity(userId, Math.max(0, watch / 60));
         return progressResult(pct, completed);
     }
 
@@ -180,6 +186,7 @@ public class EnrollmentService {
 
         progressService.recomputeModuleCompletion(userId, r.getCourseId(), r.getSectionId());
         double pct = progressService.recomputeCourseProgress(userId, r.getCourseId());
+        goalService.onLearningActivity(userId, completed ? Math.max(1, r.getEstimatedReadMinutes() == null ? 1 : r.getEstimatedReadMinutes()) : 0);
         return progressResult(pct, completed);
     }
 
@@ -187,11 +194,20 @@ public class EnrollmentService {
     public Map<String, Object> completeCourse(Long userId, Long courseId) {
         CourseEnrollment e = enrollmentRepository.findByUserIdAndCourseId(userId, courseId)
                 .orElseThrow(() -> ApiException.badRequest("Not enrolled in this course"));
+        boolean wasAlreadyComplete = e.isCompleted();
         e.setCompleted(true);
         e.setProgressPercentage(100.0);
         if (e.getCompletionDate() == null) e.setCompletionDate(Instant.now());
         e.setUpdatedAt(Instant.now());
         enrollmentRepository.save(e);
+
+        if (!wasAlreadyComplete) {
+            certificateService.issueForCompletion(userId, courseId);
+            String title = courseRepository.findById(courseId).map(Course::getTitle).orElse("your course");
+            pushNotificationService.notifyLearningEvent(userId, "Course completed",
+                    "Congratulations! You completed \"" + title + "\" and earned a certificate.");
+        }
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("is_completed", true);
         data.put("course_id", String.valueOf(courseId));
