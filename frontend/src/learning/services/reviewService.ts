@@ -24,8 +24,12 @@ const mapReview = (r: any): CourseReview => ({
 
 export const getMyReview = async (courseId: string): Promise<CourseReview | null> => {
   const res = await apiService.get<any>(`/courseReviewHandler/${encodeURIComponent(courseId)}`);
-  const d = res?.data ?? res;
-  return d ? mapReview(d) : null;
+  // "No review yet" comes back as {success, data: null}. `res?.data ?? res`
+  // would fall through to the truthy envelope itself and fabricate a phantom
+  // review (flipping the form into update mode), so only unwrap `data` when
+  // the key exists and insist on a real review id.
+  const d = res && typeof res === "object" && "data" in res ? res.data : res;
+  return d && d.id != null ? mapReview(d) : null;
 };
 
 export const getCourseReviews = async (courseId: string): Promise<CourseReview[]> => {
