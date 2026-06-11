@@ -104,6 +104,24 @@ export default function QuizScreen() {
     );
   }
 
+  if (result?.pendingReview) {
+    return (
+      <View style={[styles.container, styles.center, { padding: 24 }]}>
+        <Ionicons name="hourglass-outline" size={72} color={Colors.starGold} />
+        <Text style={styles.resultLabel}>Submitted for review</Text>
+        <Text style={[styles.muted, { textAlign: "center", marginTop: 8 }]}>
+          {result.pendingCount} answer{result.pendingCount === 1 ? "" : "s"} await your
+          instructor's review. Your final score will be released once grading is done —
+          we'll notify you.
+        </Text>
+        <View style={{ height: 24 }} />
+        <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.ghostBtnText}>Back to course</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (result) {
     const canRetry =
       !result.isPassed && (result.attemptsRemaining === null || result.attemptsRemaining > 0);

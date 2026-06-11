@@ -193,6 +193,11 @@ export default function ProfilePage() {
       screen: "CourseStats",
       icon: "insights",
     },
+    {
+      titleKey: "quizGrading",
+      screen: "QuizGrading",
+      icon: "grading",
+    },
   ];
 
   const handlePressLogout = async () => {

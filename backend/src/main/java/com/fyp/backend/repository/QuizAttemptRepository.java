@@ -21,6 +21,8 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
 
     List<QuizAttempt> findByQuizIdIn(List<Long> quizIds);
 
+    List<QuizAttempt> findByQuizIdInAndGradesReleasedFalse(List<Long> quizIds);
+
     /** Number of distinct quizzes the user has passed at least once. */
     @Query("select count(distinct a.quizId) from QuizAttempt a where a.userId = :userId and a.isPassed = true")
     long countDistinctPassedQuizzes(@Param("userId") Long userId);

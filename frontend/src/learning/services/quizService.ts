@@ -35,6 +35,9 @@ export interface QuizResult {
   totalQuestions: number;
   correctAnswers: number;
   isPassed: boolean;
+  /** True when short answers are held for instructor review (score is provisional). */
+  pendingReview: boolean;
+  pendingCount: number;
   attemptNumber: number;
   attemptsRemaining: number | null;
 }
@@ -89,6 +92,8 @@ export const submitQuiz = async (
     totalQuestions: num(d.totalQuestions),
     correctAnswers: num(d.correctAnswers),
     isPassed: !!d.isPassed,
+    pendingReview: !!d.pendingReview,
+    pendingCount: num(d.pendingCount),
     attemptNumber: num(d.attemptNumber, 1),
     attemptsRemaining: d.attemptsRemaining ?? null,
   };

@@ -19,6 +19,7 @@ import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
+import com.fyp.backend.repository.QuizQuestionRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserVideoProgressRepository;
@@ -40,6 +41,7 @@ public class ProgressService {
     @Autowired private CourseEnrollmentRepository enrollmentRepository;
     @Autowired private CourseQuizRepository quizRepository;
     @Autowired private QuizAttemptRepository attemptRepository;
+    @Autowired private QuizQuestionRepository questionRepository;
     @Autowired private CourseRepository courseRepository;
     @Autowired private CertificateService certificateService;
     @Autowired private AchievementService achievementService;
@@ -144,11 +146,23 @@ public class ProgressService {
         achievementService.evaluate(userId, courseId);
     }
 
-    /** Number of the given quizzes the user has passed at least once. */
+    /** Question types graded manually by the instructor ("text" is the legacy alias). */
+    private static final List<String> MANUAL_TYPES = List.of("short-answer", "text");
+
+    /**
+     * Number of the given quizzes that count as complete: passed at least once,
+     * or — for quizzes with manually graded short answers — attempted at all,
+     * so learners aren't blocked on instructor grading.
+     */
     private long passedQuizCount(Long userId, List<Long> quizIds) {
         long count = 0;
         for (Long quizId : quizIds) {
-            if (attemptRepository.countByUserIdAndQuizIdAndIsPassedTrue(userId, quizId) > 0) count++;
+            if (attemptRepository.countByUserIdAndQuizIdAndIsPassedTrue(userId, quizId) > 0) {
+                count++;
+            } else if (questionRepository.countByQuizIdAndQuestionTypeIn(quizId, MANUAL_TYPES) > 0
+                    && attemptRepository.countByUserIdAndQuizId(userId, quizId) > 0) {
+                count++;
+            }
         }
         return count;
     }

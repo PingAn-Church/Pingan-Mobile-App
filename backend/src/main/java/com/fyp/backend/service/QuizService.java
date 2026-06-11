@@ -3,6 +3,7 @@ package com.fyp.backend.service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,25 +15,34 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.QuizAttempt;
 import com.fyp.backend.model.QuizQuestion;
+import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CourseQuizRepository;
+import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.QuizQuestionRepository;
+import com.fyp.backend.repository.UserRepository;
 
 /**
- * Quiz delivery + auto-grading engine (P5). Grades multiple-choice,
- * multiple-correct, true-false, matching and short-answer questions, records the
- * attempt and recomputes course/module progress. Manual short-answer grading and
- * credits are layered on in P6/P7.
+ * Quiz delivery + grading engine (P5/P6). Auto-grades multiple-choice,
+ * multiple-correct, true-false and matching questions; short-answer questions
+ * are held for manual instructor review (grades stay unreleased and the
+ * attempt is not passable until every short answer is graded).
  */
 @Service
 public class QuizService {
 
+    /** Question types graded manually by the instructor ("text" is the legacy alias). */
+    private static final List<String> MANUAL_TYPES = List.of("short-answer", "text");
+
     @Autowired private CourseQuizRepository quizRepository;
     @Autowired private QuizQuestionRepository questionRepository;
     @Autowired private QuizAttemptRepository attemptRepository;
+    @Autowired private CourseRepository courseRepository;
+    @Autowired private UserRepository userRepository;
     @Autowired private ProgressService progressService;
     @Autowired private PushNotificationService pushNotificationService;
     @Autowired private AchievementService achievementService;
@@ -102,7 +112,18 @@ public class QuizService {
         Map<Long, QuizQuestion> byId = new LinkedHashMap<>();
         for (QuizQuestion q : questions) byId.put(q.getId(), q);
 
+        int pendingCount = 0;
+        double autoPointsPossible = 0;
+        double totalPointsPossible = 0;
+        for (QuizQuestion q : questions) {
+            totalPointsPossible += points(q);
+            if (isManuallyGraded(q)) pendingCount++;
+            else autoPointsPossible += points(q);
+        }
+        boolean hasShortAnswer = pendingCount > 0;
+
         int correctCount = 0;
+        double pointsEarned = 0;
         List<Map<String, Object>> graded = new ArrayList<>();
         Map<String, Object> answerMap = new LinkedHashMap<>();
 
@@ -114,17 +135,36 @@ public class QuizService {
             QuizQuestion q = byId.get(questionId);
             if (q == null) continue;
 
-            boolean correct = grade(q, userAnswer);
-            if (correct) correctCount++;
             Map<String, Object> g = new LinkedHashMap<>();
             g.put("questionId", String.valueOf(questionId));
-            g.put("isCorrect", correct);
+            if (isManuallyGraded(q)) {
+                // Held for instructor review; verdict unknown until graded.
+                g.put("isCorrect", null);
+                g.put("requiresManualGrading", true);
+            } else {
+                boolean correct = grade(q, userAnswer);
+                if (correct) {
+                    correctCount++;
+                    pointsEarned += points(q);
+                }
+                g.put("isCorrect", correct);
+            }
             graded.add(g);
         }
 
         int totalQuestions = questions.size();
-        int score = totalQuestions > 0 ? (int) Math.round((correctCount * 100.0) / totalQuestions) : 0;
-        boolean isPassed = score >= quiz.getPassingScore();
+        // Points-weighted score. With short answers present it is provisional
+        // (auto-gradable portion only) and the attempt can't pass until the
+        // instructor grades the rest.
+        int score;
+        boolean isPassed;
+        if (hasShortAnswer) {
+            score = autoPointsPossible > 0 ? (int) Math.round(pointsEarned * 100.0 / autoPointsPossible) : 0;
+            isPassed = false;
+        } else {
+            score = totalPointsPossible > 0 ? (int) Math.round(pointsEarned * 100.0 / totalPointsPossible) : 0;
+            isPassed = score >= quiz.getPassingScore();
+        }
         int attemptNumber = (int) previousAttempts + 1;
 
         QuizAttempt attempt = new QuizAttempt();
@@ -137,10 +177,12 @@ public class QuizService {
         attempt.setAttemptNumber(attemptNumber);
         attempt.setTimeTakenMinutes(timeTakenMinutes);
         attempt.setAnswers(writeJson(answerMap));
+        attempt.setGradesReleased(!hasShortAnswer);
         attempt.setCompletedAt(Instant.now());
         attemptRepository.save(attempt);
 
-        // Recompute progress now that this quiz may be passed.
+        // Recompute progress now that this quiz may be passed (or, for
+        // short-answer quizzes, attempted — which counts toward progress).
         progressService.recomputeModuleCompletion(userId, quiz.getCourseId(), quiz.getSectionId());
         progressService.recomputeCourseProgress(userId, quiz.getCourseId());
 
@@ -148,6 +190,9 @@ public class QuizService {
             pushNotificationService.notifyLearningEvent(userId, "Quiz passed",
                     "You scored " + score + "% on \"" + quiz.getTitle() + "\". Well done!");
             achievementService.evaluate(userId, quiz.getCourseId());
+        }
+        if (hasShortAnswer) {
+            notifyInstructorOfPendingReview(quiz);
         }
         goalService.onLearningActivity(userId, timeTakenMinutes == null ? 1 : timeTakenMinutes);
 
@@ -157,6 +202,9 @@ public class QuizService {
         data.put("totalQuestions", totalQuestions);
         data.put("correctAnswers", correctCount);
         data.put("isPassed", isPassed);
+        data.put("pendingReview", hasShortAnswer);
+        data.put("pendingCount", pendingCount);
+        data.put("gradesReleased", !hasShortAnswer);
         data.put("attemptNumber", attemptNumber);
         data.put("attemptsRemaining", remaining);
         data.put("answers", graded);
@@ -166,6 +214,13 @@ public class QuizService {
         response.put("message", "Quiz submitted successfully");
         response.put("data", data);
         return response;
+    }
+
+    private void notifyInstructorOfPendingReview(CourseQuiz quiz) {
+        Course course = courseRepository.findById(quiz.getCourseId()).orElse(null);
+        if (course == null || course.getInstructorId() == null) return;
+        pushNotificationService.notifyLearningEvent(course.getInstructorId(), "Answers to review",
+                "A learner submitted \"" + quiz.getTitle() + "\" — short answers are awaiting your review.");
     }
 
     public Map<String, Object> getQuizResults(Long quizId, Long userId) {
@@ -179,6 +234,7 @@ public class QuizService {
         QuizAttempt latest = attempts.get(0);
         List<QuizQuestion> questions = questionRepository.findByQuizIdOrderByOrderIndexAsc(quizId);
         Map<String, Object> submitted = parseJsonMap(latest.getAnswers());
+        Map<String, Object> manualGrades = parseJsonMap(latest.getGradedAnswers());
 
         List<Map<String, Object>> review = new ArrayList<>();
         for (QuizQuestion q : questions) {
@@ -188,8 +244,26 @@ public class QuizService {
             m.put("question", q.getQuestion());
             m.put("question_type", q.getQuestionType());
             m.put("your_answer", userAnswer);
-            m.put("correct_answer", parseJsonOrRaw(q.getCorrectAnswer()));
-            m.put("is_correct", grade(q, userAnswer));
+            if (isManuallyGraded(q)) {
+                Object g = manualGrades.get(String.valueOf(q.getId()));
+                if (g instanceof Map<?, ?> gm) {
+                    double awarded = toDouble(gm.get("pointsAwarded"));
+                    m.put("is_correct", awarded >= points(q));
+                    m.put("points_awarded", awarded);
+                    m.put("max_points", points(q));
+                    m.put("feedback", gm.get("feedback"));
+                    m.put("correct_answer", parseJsonOrRaw(q.getCorrectAnswer()));
+                } else {
+                    // Not reviewed yet: no verdict, and don't reveal the
+                    // expected answer before the instructor releases grades.
+                    m.put("is_correct", null);
+                    m.put("pending_review", true);
+                    m.put("correct_answer", null);
+                }
+            } else {
+                m.put("correct_answer", parseJsonOrRaw(q.getCorrectAnswer()));
+                m.put("is_correct", grade(q, userAnswer));
+            }
             m.put("explanation", q.getExplanation());
             review.add(m);
         }
@@ -225,6 +299,193 @@ public class QuizService {
         Collections.shuffle(right);
         m.put("matching_left", left);
         m.put("matching_right", right);
+    }
+
+    // ---- manual grading (P6) ---------------------------------------------
+
+    /**
+     * Attempts awaiting short-answer review, scoped to courses the requester
+     * owns (admins see every course). One entry per attempt with its ungraded
+     * short-answer questions, oldest submission first.
+     */
+    public List<Map<String, Object>> pendingGrading(User requester) {
+        List<Course> courses = requester.isAdmin()
+                ? courseRepository.findAll()
+                : courseRepository.findByInstructorId(requester.getId());
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Course course : courses) {
+            for (CourseQuiz quiz : quizRepository.findByCourseIdOrderByOrderIndexAsc(course.getId())) {
+                List<QuizQuestion> manualQuestions = questionRepository
+                        .findByQuizIdOrderByOrderIndexAsc(quiz.getId())
+                        .stream().filter(this::isManuallyGraded).toList();
+                if (manualQuestions.isEmpty()) continue;
+
+                for (QuizAttempt attempt : attemptRepository
+                        .findByQuizIdInAndGradesReleasedFalse(List.of(quiz.getId()))) {
+                    Map<String, Object> submitted = parseJsonMap(attempt.getAnswers());
+                    Map<String, Object> manualGrades = parseJsonMap(attempt.getGradedAnswers());
+
+                    List<Map<String, Object>> pendingQuestions = new ArrayList<>();
+                    for (QuizQuestion q : manualQuestions) {
+                        if (manualGrades.containsKey(String.valueOf(q.getId()))) continue;
+                        Map<String, Object> qm = new LinkedHashMap<>();
+                        qm.put("question_id", String.valueOf(q.getId()));
+                        qm.put("question", q.getQuestion());
+                        qm.put("points", points(q));
+                        qm.put("expected_answer", parseJsonOrRaw(q.getCorrectAnswer()));
+                        qm.put("student_answer", submitted.get(String.valueOf(q.getId())));
+                        pendingQuestions.add(qm);
+                    }
+                    if (pendingQuestions.isEmpty()) continue;
+
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("attempt_id", String.valueOf(attempt.getId()));
+                    m.put("quiz_id", String.valueOf(quiz.getId()));
+                    m.put("quiz_title", quiz.getTitle());
+                    m.put("course_id", String.valueOf(course.getId()));
+                    m.put("course_title", course.getTitle());
+                    m.put("student_name", studentName(attempt.getUserId()));
+                    m.put("attempt_number", attempt.getAttemptNumber());
+                    m.put("submitted_at", attempt.getCompletedAt() == null ? null : attempt.getCompletedAt().toString());
+                    m.put("questions", pendingQuestions);
+                    out.add(m);
+                }
+            }
+        }
+        out.sort(Comparator.comparing(m -> String.valueOf(m.get("submitted_at"))));
+        return out;
+    }
+
+    /**
+     * Records the instructor's grade for one short answer, rescores the attempt
+     * points-weighted, and releases grades once every short answer is reviewed.
+     */
+    @Transactional
+    public Map<String, Object> gradeShortAnswer(User grader, Map<String, Object> body) {
+        Long attemptId = parseLong(body.get("attemptId"));
+        Long questionId = parseLong(body.get("questionId"));
+        Object rawPoints = body.get("pointsAwarded");
+        if (attemptId == null || questionId == null || rawPoints == null) {
+            throw ApiException.badRequest("attemptId, questionId and pointsAwarded are required");
+        }
+
+        QuizAttempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> ApiException.notFound("Quiz attempt not found"));
+        QuizQuestion question = questionRepository.findById(questionId)
+                .orElseThrow(() -> ApiException.notFound("Question not found"));
+        if (!question.getQuizId().equals(attempt.getQuizId())) {
+            throw ApiException.badRequest("Question does not belong to this attempt's quiz");
+        }
+        if (!isManuallyGraded(question)) {
+            throw ApiException.badRequest("Only short-answer questions are graded manually");
+        }
+        CourseQuiz quiz = quizRepository.findById(attempt.getQuizId())
+                .orElseThrow(() -> ApiException.notFound("Quiz not found"));
+        if (!grader.isAdmin()) {
+            Long ownerId = courseRepository.findById(quiz.getCourseId())
+                    .map(Course::getInstructorId).orElse(null);
+            if (ownerId == null || !ownerId.equals(grader.getId())) {
+                throw ApiException.forbidden("You can only grade quizzes in your own courses");
+            }
+        }
+
+        int maxPoints = points(question);
+        double awarded = toDouble(rawPoints);
+        if (awarded < 0 || awarded > maxPoints) {
+            throw ApiException.badRequest("pointsAwarded must be between 0 and " + maxPoints);
+        }
+
+        Map<String, Object> manualGrades = parseJsonMap(attempt.getGradedAnswers());
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("pointsAwarded", awarded);
+        entry.put("maxPoints", maxPoints);
+        entry.put("feedback", body.get("feedback"));
+        entry.put("gradedAt", Instant.now().toString());
+        entry.put("gradedBy", String.valueOf(grader.getId()));
+        manualGrades.put(String.valueOf(questionId), entry);
+        attempt.setGradedAnswers(writeJson(manualGrades));
+
+        // Points-weighted rescore across all questions.
+        List<QuizQuestion> questions = questionRepository.findByQuizIdOrderByOrderIndexAsc(attempt.getQuizId());
+        Map<String, Object> submitted = parseJsonMap(attempt.getAnswers());
+        double earned = 0;
+        double possible = 0;
+        int correctCount = 0;
+        int ungraded = 0;
+        for (QuizQuestion q : questions) {
+            int p = points(q);
+            possible += p;
+            if (isManuallyGraded(q)) {
+                Object g = manualGrades.get(String.valueOf(q.getId()));
+                if (g instanceof Map<?, ?> gm) {
+                    double pa = toDouble(gm.get("pointsAwarded"));
+                    earned += pa;
+                    if (pa >= p) correctCount++;
+                } else {
+                    ungraded++;
+                }
+            } else if (grade(q, submitted.get(String.valueOf(q.getId())))) {
+                earned += p;
+                correctCount++;
+            }
+        }
+        int score = possible > 0 ? (int) Math.round(earned * 100.0 / possible) : 0;
+        boolean fullyGraded = ungraded == 0;
+        boolean wasPassed = attempt.isPassed();
+        boolean isPassed = fullyGraded && score >= quiz.getPassingScore();
+
+        attempt.setScore(score);
+        attempt.setCorrectAnswers(correctCount);
+        attempt.setPassed(isPassed);
+        attempt.setGradesReleased(fullyGraded);
+        attemptRepository.save(attempt);
+
+        if (fullyGraded) {
+            progressService.recomputeModuleCompletion(attempt.getUserId(), quiz.getCourseId(), quiz.getSectionId());
+            progressService.recomputeCourseProgress(attempt.getUserId(), quiz.getCourseId());
+            pushNotificationService.notifyLearningEvent(attempt.getUserId(), "Quiz graded",
+                    "Your answers for \"" + quiz.getTitle() + "\" were reviewed. Score: " + score + "%"
+                            + (isPassed ? " — passed!" : "."));
+            if (isPassed && !wasPassed) {
+                achievementService.evaluate(attempt.getUserId(), quiz.getCourseId());
+            }
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("attemptId", String.valueOf(attempt.getId()));
+        data.put("questionId", String.valueOf(questionId));
+        data.put("pointsAwarded", awarded);
+        data.put("maxPoints", maxPoints);
+        data.put("score", score);
+        data.put("isPassed", isPassed);
+        data.put("gradesReleased", fullyGraded);
+        data.put("remainingUngraded", ungraded);
+        return data;
+    }
+
+    private boolean isManuallyGraded(QuizQuestion q) {
+        return q.getQuestionType() != null && MANUAL_TYPES.contains(q.getQuestionType());
+    }
+
+    private int points(QuizQuestion q) {
+        return q.getPoints() == null || q.getPoints() <= 0 ? 1 : q.getPoints();
+    }
+
+    private double toDouble(Object v) {
+        try {
+            return Double.parseDouble(String.valueOf(v));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private String studentName(Long userId) {
+        return userRepository.findById(userId).map(u -> {
+            String name = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
+                    + (u.getLastName() == null ? "" : u.getLastName())).trim();
+            return name.isEmpty() ? (u.getEmail() == null ? "Learner" : u.getEmail()) : name;
+        }).orElse("Learner");
     }
 
     // ---- grading --------------------------------------------------------

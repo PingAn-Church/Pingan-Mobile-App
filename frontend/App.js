@@ -72,6 +72,7 @@ import LearningDocumentScreen from "./src/learning/screens/DocumentScreen";
 import CourseManagementScreen from "./src/learning/screens/instructor/CourseManagementScreen";
 import CourseEditorScreen from "./src/learning/screens/instructor/CourseEditorScreen";
 import CourseStatsScreen from "./src/learning/screens/instructor/CourseStatsScreen";
+import GradingScreen from "./src/learning/screens/instructor/GradingScreen";
 import MyCoursesScreen from "./src/learning/screens/MyCoursesScreen";
 import WishlistScreen from "./src/learning/screens/WishlistScreen";
 import LeaveReviewScreen from "./src/learning/screens/LeaveReviewScreen";
@@ -399,6 +400,11 @@ export default function App() {
                   <Stack.Screen
                     name="CourseStats"
                     component={CourseStatsScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="QuizGrading"
+                    component={GradingScreen}
                     options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
