@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -21,6 +20,7 @@ import {
   removeFromWishlist,
 } from "@/services/enrollmentService";
 import { getCourseReviews } from "@/services/reviewService";
+import { notify } from "@/utils/alerts";
 import type { LearningLesson } from "@/types";
 
 export default function CourseDetailScreen() {
@@ -58,9 +58,9 @@ export default function CourseDetailScreen() {
       await enrollCourse(courseId);
       await queryClient.invalidateQueries({ queryKey: ["learning", "enrolled", courseId] });
       await queryClient.invalidateQueries({ queryKey: ["learning", "my-courses"] });
-      Alert.alert("Enrolled", "You're enrolled. Start learning!");
+      notify("Enrolled", "You're enrolled. Start learning!");
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Could not enrol.");
+      notify("Error", e?.message || "Could not enrol.");
     } finally {
       setEnrolling(false);
     }
@@ -76,13 +76,13 @@ export default function CourseDetailScreen() {
         setWishlisted(true);
       }
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Could not update wishlist.");
+      notify("Error", e?.message || "Could not update wishlist.");
     }
   };
 
   const openLesson = (lesson: LearningLesson) => {
     if (!enrolled && !lesson.isPreview) {
-      Alert.alert("Enrol required", "Enrol in this course to access this lesson.");
+      notify("Enrol required", "Enrol in this course to access this lesson.");
       return;
     }
     if (lesson.type === "video") {
@@ -188,7 +188,7 @@ export default function CourseDetailScreen() {
                   {idx + 1}. {m.title}
                 </Text>
                 {m.lessons.map((lesson) => (
-                  <TouchableOpacity key={lesson.id} style={styles.lessonRow} onPress={() => openLesson(lesson)}>
+                  <TouchableOpacity key={`${lesson.type}-${lesson.id}`} style={styles.lessonRow} onPress={() => openLesson(lesson)}>
                     <Ionicons
                       name={lessonIcon(lesson.type) as any}
                       size={20}
