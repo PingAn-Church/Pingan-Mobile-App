@@ -494,9 +494,6 @@ const ThreadDetailPage = ({ route }) => {
   const { user } = useContext(UserContext);
   const navigation = useNavigation();
 
-  console.log("TESTINTG")
-  console.log("USER", user);
-
   useEffect(() => {
     navigation.setOptions({
       title: i18n.t("threadDetail"),
