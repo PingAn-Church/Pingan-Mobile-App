@@ -6,13 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   Switch,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import { getMyReview, postReview, updateReview } from "@/services/reviewService";
+import { notify } from "@/utils/alerts";
 
 export default function LeaveReviewScreen() {
   const navigation = useNavigation<any>();
@@ -45,11 +45,11 @@ export default function LeaveReviewScreen() {
 
   const submit = async () => {
     if (rating < 1) {
-      Alert.alert("Rating required", "Please choose a star rating.");
+      notify("Rating required", "Please choose a star rating.");
       return;
     }
     if (!text.trim()) {
-      Alert.alert("Review required", "Please write a short review.");
+      notify("Review required", "Please write a short review.");
       return;
     }
     setSubmitting(true);
@@ -57,11 +57,9 @@ export default function LeaveReviewScreen() {
       const payload = { rating, review: text.trim(), isAnonymous: anonymous };
       if (editing) await updateReview(courseId, payload);
       else await postReview(courseId, payload);
-      Alert.alert("Thank you", "Your review has been saved.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      notify("Thank you", "Your review has been saved.", () => navigation.goBack());
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to submit review.");
+      notify("Error", e?.message || "Failed to submit review.");
     } finally {
       setSubmitting(false);
     }

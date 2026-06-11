@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
+import { notify } from "@/utils/alerts";
 import {
   getQuizDetail,
   submitQuiz,
@@ -43,7 +43,7 @@ export default function QuizScreen() {
     try {
       setQuiz(await getQuizDetail(quizId));
     } catch {
-      Alert.alert("Error", "Could not load this quiz.");
+      notify("Error", "Could not load this quiz.");
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export default function QuizScreen() {
       const r = await submitQuiz(quizId, payload);
       setResult(r);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Could not submit quiz.");
+      notify("Error", e?.message || "Could not submit quiz.");
     } finally {
       setSubmitting(false);
     }

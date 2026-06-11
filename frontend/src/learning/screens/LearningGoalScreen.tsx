@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import {
   type LearningGoal,
   type GoalTemplate,
 } from "@/services/goalService";
+import { confirmDestructive, notify } from "@/utils/alerts";
 
 export default function LearningGoalScreen() {
   const queryClient = useQueryClient();
@@ -34,26 +35,19 @@ export default function LearningGoalScreen() {
       await createGoalsFromTemplates([t.id]);
       refresh();
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Could not add goal.");
+      notify("Error", e?.message || "Could not add goal.");
     }
   };
 
   const remove = (g: LearningGoal) => {
-    Alert.alert("Remove goal", `Remove "${g.label}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await clearGoal(g.id);
-            refresh();
-          } catch (e: any) {
-            Alert.alert("Error", e?.message || "Could not remove goal.");
-          }
-        },
-      },
-    ]);
+    confirmDestructive("Remove goal", `Remove "${g.label}"?`, "Remove", async () => {
+      try {
+        await clearGoal(g.id);
+        refresh();
+      } catch (e: any) {
+        notify("Error", e?.message || "Could not remove goal.");
+      }
+    });
   };
 
   const data = goalsQuery.data;

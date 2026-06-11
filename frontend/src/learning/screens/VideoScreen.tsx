@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import { markVideoComplete } from "@/services/enrollmentService";
+import { notify } from "@/utils/alerts";
 // Reuse Pingan's web-safe webview wrapper (iframe on web, WebView on native).
 import PlatformWebView from "../../components/PlatformWebView";
 
@@ -30,11 +31,9 @@ export default function VideoScreen() {
     setMarking(true);
     try {
       await markVideoComplete(videoId);
-      Alert.alert("Marked complete", "Your progress has been updated.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      notify("Marked complete", "Your progress has been updated.", () => navigation.goBack());
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Could not update progress.");
+      notify("Error", e?.message || "Could not update progress.");
     } finally {
       setMarking(false);
     }

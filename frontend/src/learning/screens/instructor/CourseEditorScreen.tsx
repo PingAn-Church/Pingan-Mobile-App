@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Switch,
   Modal,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +18,7 @@ import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getCourseDetail } from "@/services/courseService";
 import { getPresignedUploadUrl, uploadFileToOSS } from "../../../service/OSSService";
 import * as authoring from "@/services/authoringService";
+import { confirmDestructive, notify } from "@/utils/alerts";
 import {
   getQuizDetail,
   createQuiz,
@@ -81,7 +81,7 @@ export default function CourseEditorScreen() {
     durationMinutes: string;
     resourceType: string;
     isPreview: boolean;
-  }>({ visible: false, kind: "video", sectionId: "", title: "", url: "", durationMinutes: "0", resourceType: "pdf", isPreview: false });
+  }>({ visible: false, kind: "video", sectionId: "", title: "", url: "", durationMinutes: "", resourceType: "pdf", isPreview: false });
 
   // quiz modal (create a quiz on a module)
   const [quizModal, setQuizModal] = useState<{ visible: boolean; sectionId: string; title: string; passingScore: string }>(
@@ -131,7 +131,7 @@ export default function CourseEditorScreen() {
       setCategoryName(d.categoryName || "General");
       setOutcomes(d.outcomes || []);
     } catch {
-      Alert.alert("Error", "Could not load course.");
+      notify("Error", "Could not load course.");
     } finally {
       setLoading(false);
     }
@@ -155,7 +155,7 @@ export default function CourseEditorScreen() {
 
   const handleSaveCourse = async () => {
     if (!title.trim()) {
-      Alert.alert("Required", "Please enter a course title.");
+      notify("Required", "Please enter a course title.");
       return;
     }
     setSaving(true);
@@ -175,9 +175,9 @@ export default function CourseEditorScreen() {
         await authoring.setCourseOutcomes(courseId, cleanOutcomes);
         await reloadContent(courseId);
       }
-      Alert.alert("Saved", "Course saved successfully.");
+      notify("Saved", "Course saved successfully.");
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to save course.");
+      notify("Error", e?.message || "Failed to save course.");
     } finally {
       setSaving(false);
     }
@@ -185,21 +185,14 @@ export default function CourseEditorScreen() {
 
   const handleDeleteCourse = () => {
     if (!courseId) return;
-    Alert.alert("Delete course", "This permanently deletes the course and its content.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await authoring.deleteCourse(courseId);
-            navigation.goBack();
-          } catch (e: any) {
-            Alert.alert("Error", e?.message || "Failed to delete.");
-          }
-        },
-      },
-    ]);
+    confirmDestructive("Delete course", "This permanently deletes the course and its content.", "Delete", async () => {
+      try {
+        await authoring.deleteCourse(courseId);
+        navigation.goBack();
+      } catch (e: any) {
+        notify("Error", e?.message || "Failed to delete.");
+      }
+    });
   };
 
   // ---- cover image --------------------------------------------------
@@ -217,7 +210,7 @@ export default function CourseEditorScreen() {
       const uploadedUrl = await uploadFileToOSS(result.assets[0].uri, presignedUrl);
       setThumbnailUrl(uploadedUrl);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to upload the cover image.");
+      notify("Error", e?.message || "Failed to upload the cover image.");
     } finally {
       setUploadingCover(false);
     }
@@ -227,7 +220,7 @@ export default function CourseEditorScreen() {
   const saveCategory = async () => {
     const name = categoryModal.name.trim();
     if (!name) {
-      Alert.alert("Required", "Category name is required.");
+      notify("Required", "Category name is required.");
       return;
     }
     try {
@@ -236,7 +229,7 @@ export default function CourseEditorScreen() {
       setCategoryName(name);
       setCategoryModal({ visible: false, name: "", color: CATEGORY_COLORS[0] });
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to create category.");
+      notify("Error", e?.message || "Failed to create category.");
     }
   };
 
@@ -249,7 +242,7 @@ export default function CourseEditorScreen() {
   // ---- sections -----------------------------------------------------
   const saveSection = async () => {
     if (!courseId || !sectionModal.title.trim()) {
-      Alert.alert("Required", "Module title is required.");
+      notify("Required", "Module title is required.");
       return;
     }
     try {
@@ -268,22 +261,19 @@ export default function CourseEditorScreen() {
       setSectionModal({ visible: false, title: "", description: "" });
       await reloadContent(courseId);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to save module.");
+      notify("Error", e?.message || "Failed to save module.");
     }
   };
 
   const removeSection = (id: string) => {
-    Alert.alert("Delete module", "Delete this module and its lessons?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await authoring.deleteSection(id);
-          if (courseId) await reloadContent(courseId);
-        },
-      },
-    ]);
+    confirmDestructive("Delete module", "Delete this module and its lessons?", "Delete", async () => {
+      try {
+        await authoring.deleteSection(id);
+        if (courseId) await reloadContent(courseId);
+      } catch (e: any) {
+        notify("Error", e?.message || "Failed to delete the module.");
+      }
+    });
   };
 
   // ---- lessons ------------------------------------------------------
@@ -294,14 +284,14 @@ export default function CourseEditorScreen() {
       sectionId,
       title: "",
       url: "",
-      durationMinutes: "0",
+      durationMinutes: "",
       resourceType: "pdf",
       isPreview: false,
     });
 
   const saveLesson = async () => {
     if (!courseId || !lessonModal.title.trim()) {
-      Alert.alert("Required", "Lesson title is required.");
+      notify("Required", "Lesson title is required.");
       return;
     }
     try {
@@ -327,23 +317,20 @@ export default function CourseEditorScreen() {
       setLessonModal((m) => ({ ...m, visible: false }));
       await reloadContent(courseId);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to add lesson.");
+      notify("Error", e?.message || "Failed to add lesson.");
     }
   };
 
   const removeLesson = (kind: LessonKind, id: string) => {
-    Alert.alert("Delete lesson", "Remove this lesson?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          if (kind === "video") await authoring.deleteVideo(id);
-          else await authoring.deleteResource(id);
-          if (courseId) await reloadContent(courseId);
-        },
-      },
-    ]);
+    confirmDestructive("Delete lesson", "Remove this lesson?", "Delete", async () => {
+      try {
+        if (kind === "video") await authoring.deleteVideo(id);
+        else await authoring.deleteResource(id);
+        if (courseId) await reloadContent(courseId);
+      } catch (e: any) {
+        notify("Error", e?.message || "Failed to delete the lesson.");
+      }
+    });
   };
 
   // ---- quizzes ------------------------------------------------------
@@ -352,7 +339,7 @@ export default function CourseEditorScreen() {
 
   const saveQuiz = async () => {
     if (!courseId || !quizModal.title.trim()) {
-      Alert.alert("Required", "Quiz title is required.");
+      notify("Required", "Quiz title is required.");
       return;
     }
     try {
@@ -365,22 +352,19 @@ export default function CourseEditorScreen() {
       setQuizModal((m) => ({ ...m, visible: false }));
       await reloadContent(courseId);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to create quiz.");
+      notify("Error", e?.message || "Failed to create quiz.");
     }
   };
 
   const removeQuiz = (id: string) => {
-    Alert.alert("Delete quiz", "Delete this quiz and its questions?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await deleteQuiz(id);
-          if (courseId) await reloadContent(courseId);
-        },
-      },
-    ]);
+    confirmDestructive("Delete quiz", "Delete this quiz and its questions?", "Delete", async () => {
+      try {
+        await deleteQuiz(id);
+        if (courseId) await reloadContent(courseId);
+      } catch (e: any) {
+        notify("Error", e?.message || "Failed to delete the quiz.");
+      }
+    });
   };
 
   const openQuizEditor = async (quizId: string) => {
@@ -390,7 +374,7 @@ export default function CourseEditorScreen() {
       setQuestionEditor({ visible: true, quiz, loading: false });
     } catch {
       setQuestionEditor({ visible: false, quiz: null, loading: false });
-      Alert.alert("Error", "Could not load the quiz.");
+      notify("Error", "Could not load the quiz.");
     }
   };
 
@@ -418,7 +402,7 @@ export default function CourseEditorScreen() {
   const saveQuestion = async () => {
     const m = questionModal;
     if (!m.question.trim()) {
-      Alert.alert("Required", "Question text is required.");
+      notify("Required", "Question text is required.");
       return;
     }
     const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
@@ -447,7 +431,7 @@ export default function CourseEditorScreen() {
         })
         .filter((p) => p.left && p.right);
       if (pairs.length === 0) {
-        Alert.alert("Required", "Enter at least one pair as 'left => right'.");
+        notify("Required", "Enter at least one pair as 'left => right'.");
         return;
       }
       body.correctAnswer = pairs;
@@ -459,7 +443,7 @@ export default function CourseEditorScreen() {
         ? body.correctAnswer.length > 0
         : String(body.correctAnswer ?? "").length > 0;
       if (!hasAnswer) {
-        Alert.alert("Required", "Please provide the correct answer.");
+        notify("Required", "Please provide the correct answer.");
         return;
       }
     }
@@ -469,22 +453,19 @@ export default function CourseEditorScreen() {
       setQuestionModal((s) => ({ ...s, visible: false }));
       await reloadQuestions(m.quizId);
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to add question.");
+      notify("Error", e?.message || "Failed to add question.");
     }
   };
 
   const removeQuestion = (quizId: string, questionId: string) => {
-    Alert.alert("Delete question", "Remove this question?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await deleteQuestion(questionId);
-          await reloadQuestions(quizId);
-        },
-      },
-    ]);
+    confirmDestructive("Delete question", "Remove this question?", "Delete", async () => {
+      try {
+        await deleteQuestion(questionId);
+        await reloadQuestions(quizId);
+      } catch (e: any) {
+        notify("Error", e?.message || "Failed to delete the question.");
+      }
+    });
   };
 
   if (loading) {
@@ -628,33 +609,39 @@ export default function CourseEditorScreen() {
 
                 {m.lessons.map((l) => {
                   const isQuiz = l.type === "quiz";
+                  // Lesson ids come from separate tables (videos/resources/
+                  // quizzes), so the type prefix keeps keys unique per row.
                   return (
-                    <TouchableOpacity
-                      key={l.id}
-                      style={styles.lessonRow}
-                      activeOpacity={isQuiz ? 0.6 : 1}
-                      onPress={isQuiz ? () => openQuizEditor(l.id) : undefined}
-                      disabled={!isQuiz}
-                    >
-                      <Ionicons
-                        name={
-                          l.type === "video"
-                            ? "play-circle-outline"
-                            : isQuiz
-                            ? "help-circle-outline"
-                            : "document-text-outline"
-                        }
-                        size={18}
-                        color={isQuiz ? Colors.secondary : Colors.textSecondary}
-                      />
-                      <Text style={styles.lessonText} numberOfLines={1}>
-                        {l.title}
-                        {isQuiz ? "  (tap to edit questions)" : ""}
-                      </Text>
-                      <TouchableOpacity onPress={() => (isQuiz ? removeQuiz(l.id) : removeLesson(l.type as LessonKind, l.id))}>
+                    <View key={`${l.type}-${l.id}`} style={styles.lessonRow}>
+                      <TouchableOpacity
+                        style={styles.lessonBody}
+                        activeOpacity={isQuiz ? 0.6 : 1}
+                        onPress={isQuiz ? () => openQuizEditor(l.id) : undefined}
+                        disabled={!isQuiz}
+                      >
+                        <Ionicons
+                          name={
+                            l.type === "video"
+                              ? "play-circle-outline"
+                              : isQuiz
+                              ? "help-circle-outline"
+                              : "document-text-outline"
+                          }
+                          size={18}
+                          color={isQuiz ? Colors.secondary : Colors.textSecondary}
+                        />
+                        <Text style={styles.lessonText} numberOfLines={1}>
+                          {l.title}
+                          {isQuiz ? "  (tap to edit questions)" : ""}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() => (isQuiz ? removeQuiz(l.id) : removeLesson(l.type as LessonKind, l.id))}
+                      >
                         <Ionicons name="close" size={18} color={Colors.red} />
                       </TouchableOpacity>
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
 
@@ -735,7 +722,7 @@ export default function CourseEditorScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{lessonModal.kind === "video" ? "New video" : "New document"}</Text>
             <TextInput style={styles.input} value={lessonModal.title} onChangeText={(v) => setLessonModal((m) => ({ ...m, title: v }))} placeholder="Lesson title" placeholderTextColor={Colors.textMuted} />
-            <TextInput style={styles.input} value={lessonModal.url} onChangeText={(v) => setLessonModal((m) => ({ ...m, url: v }))} placeholder={lessonModal.kind === "video" ? "Video URL (YouTube)" : "Document URL (PDF)"} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+            <TextInput style={styles.input} value={lessonModal.url} onChangeText={(v) => setLessonModal((m) => ({ ...m, url: v }))} placeholder={lessonModal.kind === "video" ? "Video URL (YouTube)" : "Document URL (PDF / Google Doc)"} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
             {lessonModal.kind === "video" && (
               <TextInput style={styles.input} value={lessonModal.durationMinutes} onChangeText={(v) => setLessonModal((m) => ({ ...m, durationMinutes: v }))} placeholder="Duration (minutes)" placeholderTextColor={Colors.textMuted} keyboardType="numeric" />
             )}
@@ -932,6 +919,7 @@ const styles = StyleSheet.create({
   moduleTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700", flex: 1 },
   moduleActions: { flexDirection: "row", gap: 14, marginLeft: 10 },
   lessonRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
+  lessonBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   lessonText: { color: Colors.textSecondary, fontSize: 14, flex: 1 },
   addLessonRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   addLessonBtn: { flexDirection: "row", alignItems: "center", gap: 4 },

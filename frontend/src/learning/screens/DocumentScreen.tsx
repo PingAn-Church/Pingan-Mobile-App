@@ -1,14 +1,33 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import { markResourceComplete } from "@/services/enrollmentService";
+import { notify } from "@/utils/alerts";
 import PlatformWebView from "../../components/PlatformWebView";
+
+/**
+ * Google Docs/Drive share links point at the editor page, which the gview
+ * wrapper can't render ("No preview available") — swap them for the
+ * document's own embeddable /preview page instead. The doc must be shared
+ * as "Anyone with the link" for learners to see it.
+ */
+const googlePreviewUrl = (url: string): string | null => {
+  const docs = url.match(/docs\.google\.com\/(document|presentation|spreadsheets)\/d\/([^/?#]+)/);
+  if (docs) return `https://docs.google.com/${docs[1]}/d/${docs[2]}/preview`;
+  const file = url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
+  if (file) return `https://drive.google.com/file/d/${file[1]}/preview`;
+  const open = url.match(/drive\.google\.com\/open\?id=([^&#]+)/);
+  if (open) return `https://drive.google.com/file/d/${open[1]}/preview`;
+  return null;
+};
 
 /** Wrap office/pdf documents in the Google viewer; load others directly. */
 const viewerUrl = (url?: string, type?: string): string => {
   if (!url) return "";
+  const google = googlePreviewUrl(url);
+  if (google) return google;
   const officeLike = ["pdf", "document", "ppt", "doc", "docx", "pptx"];
   if (type && officeLike.includes(type.toLowerCase())) {
     return `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`;
@@ -30,11 +49,9 @@ export default function DocumentScreen() {
     setMarking(true);
     try {
       await markResourceComplete(resourceId);
-      Alert.alert("Marked complete", "Your progress has been updated.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      notify("Marked complete", "Your progress has been updated.", () => navigation.goBack());
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Could not update progress.");
+      notify("Error", e?.message || "Could not update progress.");
     } finally {
       setMarking(false);
     }
