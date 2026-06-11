@@ -188,6 +188,11 @@ export default function ProfilePage() {
       screen: "CourseManagement",
       icon: "library-books",
     },
+    {
+      titleKey: "courseStats",
+      screen: "CourseStats",
+      icon: "insights",
+    },
   ];
 
   const handlePressLogout = async () => {

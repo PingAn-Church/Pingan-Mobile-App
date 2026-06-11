@@ -33,6 +33,37 @@ export const getAllCoursesAdmin = async (): Promise<ManagedCourse[]> => {
   return (Array.isArray(data) ? data : []).map(mapManaged);
 };
 
+// Engagement stats per course for the instructor stats screen.
+export interface CourseStatsRow {
+  id: string;
+  title: string;
+  isPublished: boolean;
+  enrolledCount: number;
+  completedCount: number;
+  /** % of enrolled learners who finished every module (0-100). */
+  completionRate: number;
+  /** Mean enrollment progress across learners (0-100). */
+  averageProgress: number;
+  rating: number;
+  totalRatings: number;
+}
+
+export const getCourseStats = async (): Promise<CourseStatsRow[]> => {
+  const res = await apiService.get<any>("/getCourseStats");
+  const data = res?.data ?? res ?? [];
+  return (Array.isArray(data) ? data : []).map((c: any) => ({
+    id: str(c.id),
+    title: str(c.title, "Untitled Course"),
+    isPublished: !!c.is_published,
+    enrolledCount: num(c.enrolled_count),
+    completedCount: num(c.completed_count),
+    completionRate: num(c.completion_rate),
+    averageProgress: num(c.average_progress),
+    rating: num(c.rating),
+    totalRatings: num(c.total_ratings),
+  }));
+};
+
 // Courses
 export const createCourse = (body: Record<string, any>) =>
   apiService.post<any>("/createCourse", body);

@@ -20,5 +20,9 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
 
     long countByCourseId(Long courseId);
 
+    long countByCourseIdAndIsCompletedTrue(Long courseId);
+
     long countByUserIdAndIsCompletedTrue(Long userId);
+
+    void deleteByCourseId(Long courseId);
 }

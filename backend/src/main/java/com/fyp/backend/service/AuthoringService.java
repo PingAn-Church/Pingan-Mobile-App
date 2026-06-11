@@ -1,8 +1,11 @@
 package com.fyp.backend.service;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -12,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.Category;
 import com.fyp.backend.model.Course;
+import com.fyp.backend.model.CourseEnrollment;
 import com.fyp.backend.model.CourseOutcome;
 import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
@@ -20,6 +24,7 @@ import com.fyp.backend.model.CourseVideo;
 import com.fyp.backend.model.QuizQuestion;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CategoryRepository;
+import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseOutcomeRepository;
 import com.fyp.backend.repository.CourseQuizRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
@@ -27,8 +32,12 @@ import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
+import com.fyp.backend.repository.CourseWishlistRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.QuizQuestionRepository;
+import com.fyp.backend.repository.ResourceProgressRepository;
+import com.fyp.backend.repository.UserModuleProgressRepository;
+import com.fyp.backend.repository.UserVideoProgressRepository;
 
 /**
  * Write-side authoring logic for the in-app instructor/admin portal (P3).
@@ -48,6 +57,11 @@ public class AuthoringService {
     @Autowired private CourseQuizRepository quizRepository;
     @Autowired private QuizQuestionRepository questionRepository;
     @Autowired private QuizAttemptRepository attemptRepository;
+    @Autowired private CourseEnrollmentRepository enrollmentRepository;
+    @Autowired private CourseWishlistRepository wishlistRepository;
+    @Autowired private UserVideoProgressRepository videoProgressRepository;
+    @Autowired private ResourceProgressRepository resourceProgressRepository;
+    @Autowired private UserModuleProgressRepository moduleProgressRepository;
     @Autowired private CourseService courseService;
     @Autowired private ObjectMapper objectMapper;
 
@@ -96,9 +110,23 @@ public class AuthoringService {
         for (CourseQuiz quiz : quizRepository.findByCourseIdOrderByOrderIndexAsc(courseId)) {
             deleteQuizCascade(quiz.getId());
         }
+
+        // Per-learner progress rows are keyed by video/resource id, so collect
+        // those ids before the lessons themselves are removed.
+        List<CourseVideo> videos = videoRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
+        List<CourseResource> resources = resourceRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
+        List<Long> videoIds = videos.stream().map(CourseVideo::getId).collect(Collectors.toList());
+        List<Long> resourceIds = resources.stream().map(CourseResource::getId).collect(Collectors.toList());
+        if (!videoIds.isEmpty()) videoProgressRepository.deleteByVideoIdIn(videoIds);
+        if (!resourceIds.isEmpty()) resourceProgressRepository.deleteByResourceIdIn(resourceIds);
+        moduleProgressRepository.deleteByCourseId(courseId);
+        enrollmentRepository.deleteByCourseId(courseId);
+        wishlistRepository.deleteByCourseId(courseId);
+        // Certificates are kept on purpose: they are records of past achievement.
+
         outcomeRepository.deleteAll(outcomeRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
-        resourceRepository.deleteAll(resourceRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
-        videoRepository.deleteAll(videoRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
+        resourceRepository.deleteAll(resources);
+        videoRepository.deleteAll(videos);
         ratingRepository.deleteAll(ratingRepository.findByCourseId(courseId));
         sectionRepository.deleteAll(sectionRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         courseRepository.delete(c);
@@ -117,6 +145,41 @@ public class AuthoringService {
             o.setOrderIndex(i++);
             outcomeRepository.save(o);
         }
+    }
+
+    /**
+     * Per-course engagement stats for the instructor portal: live enrolment
+     * and completion counts plus average learner progress. Counts are computed
+     * from enrollments (not the denormalized {@code Course.studentCount}) so
+     * they stay accurate even if that counter drifts.
+     */
+    public List<Map<String, Object>> courseStats() {
+        List<Course> courses = courseRepository.findAll();
+        courses.sort(Comparator.comparing(Course::getUpdatedAt,
+                Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Course c : courses) {
+            List<CourseEnrollment> enrollments = enrollmentRepository.findByCourseId(c.getId());
+            long enrolled = enrollments.size();
+            long completed = enrollments.stream().filter(CourseEnrollment::isCompleted).count();
+            double progressSum = enrollments.stream()
+                    .mapToDouble(e -> e.getProgressPercentage() == null ? 0 : e.getProgressPercentage())
+                    .sum();
+
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", String.valueOf(c.getId()));
+            m.put("title", c.getTitle());
+            m.put("is_published", c.isPublished());
+            m.put("enrolled_count", enrolled);
+            m.put("completed_count", completed);
+            m.put("completion_rate", enrolled > 0 ? Math.round(completed * 100.0 / enrolled) : 0);
+            m.put("average_progress", enrolled > 0 ? Math.round((progressSum / enrolled) * 10.0) / 10.0 : 0);
+            m.put("rating", c.getRating());
+            m.put("total_ratings", c.getTotalRatings());
+            out.add(m);
+        }
+        return out;
     }
 
     // ---- categories -----------------------------------------------------

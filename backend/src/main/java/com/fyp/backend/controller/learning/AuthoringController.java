@@ -6,6 +6,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -56,6 +57,11 @@ public class AuthoringController {
     public ApiResponse<Object> deleteCourse(@PathVariable Long courseId) {
         authoringService.deleteCourse(courseId);
         return ApiResponse.ok("Course deleted", null);
+    }
+
+    @GetMapping("/getCourseStats")
+    public ApiResponse<List<Map<String, Object>>> getCourseStats() {
+        return ApiResponse.ok(authoringService.courseStats());
     }
 
     @PutMapping("/setCourseOutcomes/{courseId}")
