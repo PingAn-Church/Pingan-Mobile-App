@@ -29,6 +29,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private WebSocketInterceptor webSocketInterceptor;
 
     @Autowired
+    private WebSocketSubscriptionInterceptor subscriptionInterceptor;
+
+    @Autowired
     private RedisService redisService;
 
     private final TaskScheduler messageBrokerTaskScheduler;
@@ -62,7 +65,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(new ChannelInterceptor() {
+        registration.interceptors(subscriptionInterceptor, new ChannelInterceptor() {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
@@ -74,7 +77,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
                     if (userEmail != null && deviceId != null) {
                         redisService.refreshUserOnlineStatus(userEmail, deviceId);
-                        LOGGER.info("🔄 Refreshed TTL for user: {} on device: {}", userEmail, deviceId);
                     }
                 }
 
