@@ -33,17 +33,6 @@ public class ChatController {
         this.jwtUtil = jwtUtil;
     }
 
-//    // Extracts user ID from JWT token
-//    private Long getUserIdFromToken(HttpServletRequest request) {
-//        String token = request.getHeader("Authorization");
-//        if (token != null && token.startsWith("Bearer ")) {
-//            token = token.substring(7); // Remove "Bearer " prefix
-//            String email = jwtUtil.extractEmail(token);
-//            return conversationService.getUserIdByEmail(email);
-//        }
-//        return null;
-//    }
-
     // Fetch user's conversations
     @GetMapping("/conversations")
     public ResponseEntity<List<ConversationDto>> listConversations(@RequestParam Long userId, HttpServletRequest request) {
@@ -91,6 +80,9 @@ public class ChatController {
     @PostMapping("/start")
     public ResponseEntity<ConversationDto> startNewConversation(@RequestBody ConversationDto conversationDto, HttpServletRequest request) {
         Long creatorId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (creatorId == null) {
+            return ResponseEntity.status(403).body(null);
+        }
         if (conversationDto.getParticipants() == null || conversationDto.getParticipants().isEmpty()) {
             return ResponseEntity.badRequest().body(null);
         }
@@ -264,23 +256,6 @@ public class ChatController {
         }
     }
 
-//    @DeleteMapping("/removeAdmin")
-//    public ResponseEntity<String> removeAdminFromGroup(@RequestParam Long conversationId,
-//                                                       @RequestParam Long userId,
-//                                                       HttpServletRequest request) {
-//        Long currentUserId = getUserIdFromToken(request);
-//        if (currentUserId == null) {
-//            return ResponseEntity.status(403).body("Unauthorized access");
-//        }
-//
-//        try {
-//            conversationService.removeAdminFromGroup(conversationId, userId, currentUserId);
-//            return ResponseEntity.ok("Admin removed successfully.");
-//        } catch (IllegalArgumentException e) {
-//            return ResponseEntity.badRequest().body(e.getMessage());
-//        }
-//    }
-
     @DeleteMapping("/removeAdmin")
     public ResponseEntity<ConversationDto> removeAdminFromGroup(@RequestParam Long conversationId,
                                                                 @RequestParam Long userId,
@@ -298,22 +273,6 @@ public class ChatController {
         }
     }
 
-
-//    @DeleteMapping("/leaveGroup")
-//    public ResponseEntity<ConversationDto> leaveGroup(@RequestParam Long conversationId, HttpServletRequest request) {
-//        Long currentUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
-//        if (currentUserId == null) {
-//            return ResponseEntity.status(403).body(null); // Unauthorized
-//        }
-//
-//        try {
-//            // Call service to remove the participant from the group
-//            ConversationDto updatedConversation = conversationService.leaveGroup(conversationId, currentUserId);
-//            return ResponseEntity.ok(updatedConversation);
-//        } catch (IllegalArgumentException e) {
-//            return ResponseEntity.badRequest().body(null);
-//        }
-//    }
 
     @DeleteMapping("/leaveGroup")
     public ResponseEntity<?> leaveGroup(@RequestParam Long conversationId, HttpServletRequest request) {
