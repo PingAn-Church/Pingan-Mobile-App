@@ -20,9 +20,6 @@ export const registerUser = async (userDetails) => {
 
 export const loginUser = async (loginDetails) => {
   try {
-    // Fetch the device ID from context or SecureStore
-    const keys = await AsyncStorage.getAllKeys();
-    console.log("ALLL KEYS IN ASYNCSTORAGE", keys);
     const deviceId = await AsyncStorage.getItem("deviceId");
     if (!deviceId) {
       throw new Error("Device ID is not available");
@@ -52,7 +49,9 @@ export const loginUser = async (loginDetails) => {
 
 
 export const logoutUser = async () => {
-  const authToken = await getAuthToken();  // Ensure the user is authenticated
+  // Read the access token directly: going through getAuthToken() here would
+  // try to refresh, and a rejected refresh calls logoutUser again (recursion).
+  const authToken = await AsyncStorage.getItem("accessToken");
   const refreshToken = await AsyncStorage.getItem("refreshToken"); // Get the stored refresh token
 
   if (!refreshToken) {

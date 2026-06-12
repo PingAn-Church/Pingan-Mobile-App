@@ -17,42 +17,13 @@ export const UserProvider = ({ children }) => {
 
   // Fetch the device ID or generate one if not found
   const getDeviceId = async () => {
-    // let deviceId = await SecureStore.getItemAsync("deviceId");
     let deviceId = await AsyncStorage.getItem("deviceId");
-    console.log("DEVICE ID VALUE", deviceId);
-    // await AsyncStorage.setItem("appLanguage", newLang);
-    // const storedLang = await AsyncStorage.getItem("appLanguage");
     if (!deviceId) {
-      console.log("SETTING DEVICE ID");
       deviceId = uuid.v4(); // Generate a new deviceId if not found
-      console.log("UUIDV4 value", deviceId)
-      
-      await AsyncStorage.setItem("deviceId", deviceId); // Save it to secure storage
+      await AsyncStorage.setItem("deviceId", deviceId);
     }
     setDeviceId(deviceId); // Save it to state for global access
   };
-
-  // const fetchUserData = async () => {
-  //   try {
-  //     const token = await getAuthToken(); // Already handles refresh inside
-  //     if (!token) {
-  //       console.log("🚫 No valid token, user must log in.");
-  //       setUser(null);
-  //       setUserReady(false);
-  //       return;
-  //     }
-  
-  //     const userInfo = await fetchUserProfile();
-  //     setUser(userInfo);
-  //     setUserReady(true);
-  //   } catch (error) {
-  //     console.error("❌ Error fetching user info:", error);
-  //     setUser(null);
-  //     setUserReady(false);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
 
   const fetchUserData = async () => {
     if (userReady) return;
@@ -85,30 +56,11 @@ export const UserProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await logoutService(); // ⬅️ Clears storage + disconnects WebSocket
-    await AsyncStorage.removeItem("authToken"); //remove auth token
-    await AsyncStorage.removeItem("refreshToken"); //remove refresh token
-    // VERIFY: Check if they are actually gone
-    const tokenCheck = await AsyncStorage.getItem("authToken");
-    if (!tokenCheck) {
-      console.log("✅ SUCCESS: authToken removed from storage.");
-    } else {
-      console.warn("⚠️ WARNING: authToken STILL PERSISTS in storage!");
-    }
+    await logoutService(); // Clears accessToken/refreshToken/user + disconnects WebSocket
     setUser(null);
     setUserReady(false);
     setUserStatus({});
   };
-
-  // Get the device ID and then fetch user data
-  // useEffect(() => {
-  //   const initialize = async () => {
-  //     await getDeviceId(); // Fetch the device ID
-  //     await fetchUserData(); // Fetch user data after device ID is ready
-  //   };
-
-  //   initialize(); // Run async function to initialize the data
-  // }, []); // Re-run this effect whenever deviceId is updated
 
   const [hasInitialized, setHasInitialized] = useState(false);
 
@@ -133,7 +85,6 @@ export const UserProvider = ({ children }) => {
   }, [user]);
 
   return (
-    // <UserContext.Provider value={{ user, setUser, fetchUserData, loading, userStatus, fetchOnlineUsers, setUserStatus }}>
     <UserContext.Provider
       value={{
         user,
