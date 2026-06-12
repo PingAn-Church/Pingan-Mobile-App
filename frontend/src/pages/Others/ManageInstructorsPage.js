@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -58,7 +59,7 @@ export default function ManageInstructorsPage() {
       loadUsers();
     } catch (error) {
       console.error("Error removing instructor:", error);
-      Alert.alert(i18n.t("error"), i18n.t("removeInstructorFailed"), [
+      showAlert(i18n.t("error"), i18n.t("removeInstructorFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -70,7 +71,7 @@ export default function ManageInstructorsPage() {
       loadUsers();
     } catch (error) {
       console.error("Error adding instructor:", error);
-      Alert.alert(i18n.t("error"), i18n.t("addInstructorFailed"), [
+      showAlert(i18n.t("error"), i18n.t("addInstructorFailed"), [
         { text: i18n.t("ok") },
       ]);
     }

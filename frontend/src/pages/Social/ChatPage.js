@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   SafeAreaView,
@@ -334,7 +335,7 @@ export default function ChatPage({ route }) {
         },
       }));
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("translationFailed"));
+      showAlert(i18n.t("error"), i18n.t("translationFailed"));
     } finally {
       setTranslatingId(null);
     }
@@ -790,7 +791,7 @@ export default function ChatPage({ route }) {
               : msg
           )
         );
-        Alert.alert("Error", "Could not edit message");
+        showAlert("Error", "Could not edit message");
       }
 
       return;
@@ -850,7 +851,7 @@ export default function ChatPage({ route }) {
         history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
       );
       clearAckTimeout(localId);
-      Alert.alert("Error", "Message failed to send");
+      showAlert("Error", "Message failed to send");
     } finally {
       sendingTextLockRef.current = false;
       setIsSendingText(false);
@@ -882,7 +883,7 @@ export default function ChatPage({ route }) {
       if (snapshotTranslation) {
         setTranslations((prev) => ({ ...prev, [messageIdKey]: snapshotTranslation }));
       }
-      Alert.alert("Error", "Could not delete message");
+      showAlert("Error", "Could not delete message");
     }
   };
 
@@ -1091,7 +1092,7 @@ export default function ChatPage({ route }) {
         history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
       );
       clearAckTimeout(localId);
-      Alert.alert("Error", "Image failed to send");
+      showAlert("Error", "Image failed to send");
     }
   };
 
@@ -1162,7 +1163,7 @@ export default function ChatPage({ route }) {
         history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
       );
       clearAckTimeout(localId);
-      Alert.alert("Error", `Voice message failed to send.\n${error?.message || "Unknown upload error."}`);
+      showAlert("Error", `Voice message failed to send.\n${error?.message || "Unknown upload error."}`);
     } finally {
       sendingVoiceLockRef.current = false;
     }
@@ -1281,7 +1282,7 @@ export default function ChatPage({ route }) {
         resolvedUsers.filter((u) => String(u?.id) !== String(currentUser?.id))
       );
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("cantFetchUsers"), [{ text: i18n.t("ok") }]);
+      showAlert(i18n.t("error"), i18n.t("cantFetchUsers"), [{ text: i18n.t("ok") }]);
     } finally {
       setLoadingNewChatUsers(false);
     }
@@ -1327,7 +1328,7 @@ export default function ChatPage({ route }) {
       if (Platform.OS !== "web") {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert(i18n.t("error"), i18n.t("needPhotoAccess"), [{ text: i18n.t("ok") }]);
+          showAlert(i18n.t("error"), i18n.t("needPhotoAccess"), [{ text: i18n.t("ok") }]);
           return;
         }
       }
@@ -1342,7 +1343,7 @@ export default function ChatPage({ route }) {
         setNewGroupImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("imageUploadFailed"), [{ text: i18n.t("ok") }]);
+      showAlert(i18n.t("error"), i18n.t("imageUploadFailed"), [{ text: i18n.t("ok") }]);
     }
   };
 
@@ -1363,7 +1364,7 @@ export default function ChatPage({ route }) {
 
   const handleCreateGroupFromSidebar = async () => {
     if (!String(newGroupName || "").trim() || !newGroupSelectedParticipants.length) {
-      Alert.alert(i18n.t("error"), i18n.t("createGroupRequirement"), [{ text: i18n.t("ok") }]);
+      showAlert(i18n.t("error"), i18n.t("createGroupRequirement"), [{ text: i18n.t("ok") }]);
       return;
     }
 
@@ -1383,7 +1384,7 @@ export default function ChatPage({ route }) {
       setShowWebNewChatPanel(false);
       navigation.navigate("Chat", { conversationId: createdConversationId });
     } catch (error) {
-      Alert.alert(i18n.t("error"), error?.message || i18n.t("createGroupFailed"), [
+      showAlert(i18n.t("error"), error?.message || i18n.t("createGroupFailed"), [
         { text: i18n.t("ok") },
       ]);
     } finally {
@@ -1413,7 +1414,7 @@ export default function ChatPage({ route }) {
         conversationId: response?.data?.conversationId,
       });
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("unableStartPrivateChat"), [
+      showAlert(i18n.t("error"), i18n.t("unableStartPrivateChat"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -1622,9 +1623,9 @@ export default function ChatPage({ route }) {
                       await Clipboard.setStringAsync(selected?.content || "");
                     }
 
-                    Alert.alert(i18n.t("success"), i18n.t("copied"));
+                    showAlert(i18n.t("success"), i18n.t("copied"));
                   } catch (error) {
-                    Alert.alert(i18n.t("error"), i18n.t("somethingWentWrong"));
+                    showAlert(i18n.t("error"), i18n.t("somethingWentWrong"));
                   }
                 }}
               >
@@ -1641,9 +1642,9 @@ export default function ChatPage({ route }) {
 
                   try {
                     await downloadImageMessage(selected);
-                    Alert.alert(i18n.t("success"), i18n.t("saveImageSuccess"));
+                    showAlert(i18n.t("success"), i18n.t("saveImageSuccess"));
                   } catch (error) {
-                    Alert.alert(
+                    showAlert(
                       i18n.t("error"),
                       error?.message === "Media library permission denied"
                         ? i18n.t("needPhotoAccess")

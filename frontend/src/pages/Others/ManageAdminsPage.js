@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -57,7 +58,7 @@ export default function ManageAdminsPage() {
   const handleRemoveAdmin = async (userId) => {
     try {
       if (admins.length === 1) {
-        Alert.alert(i18n.t("error"), i18n.t("atLeastOneAdmin"), [
+        showAlert(i18n.t("error"), i18n.t("atLeastOneAdmin"), [
           { text: i18n.t("ok") },
         ]);
         return;
@@ -66,7 +67,7 @@ export default function ManageAdminsPage() {
       loadUsers(); // Refresh the lists
     } catch (error) {
       console.error("Error removing admin:", error);
-      Alert.alert(i18n.t("error"), i18n.t("removeAdminFailed"), [
+      showAlert(i18n.t("error"), i18n.t("removeAdminFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -79,7 +80,7 @@ export default function ManageAdminsPage() {
       loadUsers();
     } catch (error) {
       console.error("Error adding admin:", error);
-      Alert.alert(i18n.t("error"), i18n.t("addAdminFailed"), [
+      showAlert(i18n.t("error"), i18n.t("addAdminFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -175,7 +176,7 @@ export function ManageUsersPage() {
       loadUsers();
     } catch (error) {
       console.error("Error removing verified user:", error);
-      Alert.alert(i18n.t("error"), i18n.t("removeVerifiedUserFailed"), [
+      showAlert(i18n.t("error"), i18n.t("removeVerifiedUserFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -188,7 +189,7 @@ export function ManageUsersPage() {
       loadUsers();
     } catch (error) {
       console.error("Error adding verified user:", error);
-      Alert.alert(i18n.t("error"), i18n.t("addVerifiedUserFailed"), [
+      showAlert(i18n.t("error"), i18n.t("addVerifiedUserFailed"), [
         { text: i18n.t("ok") },
       ]);
     }

@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 // // src/pages/Social/ThreadHomePage.js
 // import React, { useState, useEffect } from "react";
 // import {
@@ -43,7 +44,7 @@
 //         const data = await fetchThreads();
 //         setThreads(data);
 //       } catch (error) {
-//         Alert.alert("Error", "Failed to load threads");
+//         showAlert("Error", "Failed to load threads");
 //       } finally {
 //         setLoading(false);
 //       }
@@ -143,7 +144,7 @@ const ThreadHomePage = () => {
   //       const data = await fetchThreads();
   //       setThreads(data);
   //     } catch (error) {
-  //       Alert.alert("Error", "Failed to load threads");
+  //       showAlert("Error", "Failed to load threads");
   //     } finally {
   //       setLoading(false);
   //     }
@@ -167,7 +168,7 @@ const ThreadHomePage = () => {
   //         const data = await fetchThreads();
   //         setThreads(data);
   //       } catch (error) {
-  //         Alert.alert("Error", "Failed to load threads");
+  //         showAlert("Error", "Failed to load threads");
   //       } finally {
   //         setLoading(false);
   //       }
@@ -183,7 +184,7 @@ const ThreadHomePage = () => {
   //     const data = await fetchThreads();
   //     setThreads(data);
   //   } catch (error) {
-  //     Alert.alert("Error", "Failed to load threads");
+  //     showAlert("Error", "Failed to load threads");
   //   } finally {
   //     setLoading(false);
   //   }

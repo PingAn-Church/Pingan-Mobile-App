@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, {
   useContext,
   useEffect,
@@ -175,7 +176,7 @@ const ChatHomePage = () => {
         );
       } catch (error) {
         console.error("Error fetching users:", error);
-        Alert.alert(i18n.t("error"), i18n.t("cantFetchUsers"), [
+        showAlert(i18n.t("error"), i18n.t("cantFetchUsers"), [
           { text: i18n.t("ok") },
         ]);
       }
@@ -234,7 +235,7 @@ const ChatHomePage = () => {
       await fetchInitialData(); // Re-fetch conversations
     } catch (err) {
       console.error("Failed to refresh chats", err);
-      Alert.alert(i18n.t("error"), i18n.t("cantLoadChat"), [
+      showAlert(i18n.t("error"), i18n.t("cantLoadChat"), [
         { text: i18n.t("ok") },
       ]);
     } finally {

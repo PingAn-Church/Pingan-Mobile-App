@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 // import React, { useContext, useEffect, useState } from "react";
 // import {
 //   View,
@@ -163,7 +164,7 @@ const NewChatScreen = () => {
         conversationId: response.data.conversationId,
       });
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("unableStartPrivateChat"), [
+      showAlert(i18n.t("error"), i18n.t("unableStartPrivateChat"), [
         { text: i18n.t("ok") },
       ]);
     }

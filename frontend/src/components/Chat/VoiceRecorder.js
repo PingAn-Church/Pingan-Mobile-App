@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -81,7 +82,7 @@ const VoiceRecorder = ({
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Required", "Please allow microphone access to record voice messages.");
+        showAlert("Permission Required", "Please allow microphone access to record voice messages.");
         return;
       }
 
@@ -101,7 +102,7 @@ const VoiceRecorder = ({
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } catch {
-      Alert.alert("Error", "Failed to start recording. Please try again.");
+      showAlert("Error", "Failed to start recording. Please try again.");
     }
   };
 
@@ -132,7 +133,7 @@ const VoiceRecorder = ({
       setPlaybackProgress(0);
       setShowPreview(true);
     } catch {
-      Alert.alert("Error", "Failed to stop recording. Please try again.");
+      showAlert("Error", "Failed to stop recording. Please try again.");
     }
   };
 
@@ -192,7 +193,7 @@ const VoiceRecorder = ({
         setIsPlaying(true);
       }
     } catch {
-      Alert.alert("Error", "Failed to play recording.");
+      showAlert("Error", "Failed to play recording.");
     }
   };
 

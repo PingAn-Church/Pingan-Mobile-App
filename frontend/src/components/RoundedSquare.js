@@ -1,3 +1,4 @@
+import { showAlert } from "../utils/showAlert";
 import React from "react";
 import {
   View,
@@ -31,12 +32,12 @@ const RoundedSquare = ({
       if (supported) {
         Linking.openURL(webUrl);
       } else {
-        Alert.alert("Error", "Sorry, this URL cannot be opened.");
+        showAlert("Error", "Sorry, this URL cannot be opened.");
       }
     } else if (navigationScreen) {
       navigation.navigate(navigationScreen);
     } else {
-      Alert.alert("Error", "No action defined for this button.");
+      showAlert("Error", "No action defined for this button.");
     }
   };
 

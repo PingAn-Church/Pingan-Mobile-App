@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useState, useContext, useEffect, useCallback } from "react";
 import {
   View,
@@ -43,7 +44,7 @@ export default function ManageVideosPage() {
           console.log("videos: ", fetchedVideos);
           setVideos(fetchedVideos);
         } catch (error) {
-          Alert.alert(i18n.t("error"), i18n.t("loadVideoFailed"), [
+          showAlert(i18n.t("error"), i18n.t("loadVideoFailed"), [
             { text: i18n.t("ok") },
           ]);
         }
@@ -57,7 +58,7 @@ export default function ManageVideosPage() {
       const fetchedVideos = await fetchVideos();
       setVideos(fetchedVideos);
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("loadVideoFailed"), [
+      showAlert(i18n.t("error"), i18n.t("loadVideoFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -78,7 +79,7 @@ export default function ManageVideosPage() {
       await deleteVideo(id);
       loadVideos();
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("deleteVideoFailed"), [
+      showAlert(i18n.t("error"), i18n.t("deleteVideoFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -142,14 +143,14 @@ export function AddVideoPage() {
 
   const handleAddVideo = async () => {
     if (!videoUrl || !title) {
-      Alert.alert(i18n.t("error"), i18n.t("enterTitleAndURL"), [
+      showAlert(i18n.t("error"), i18n.t("enterTitleAndURL"), [
         { text: i18n.t("ok") },
       ]);
       return;
     }
 
     if (title.length > 35) {
-      Alert.alert(i18n.t("error"), i18n.t("videoTitleLessThan50"), [
+      showAlert(i18n.t("error"), i18n.t("videoTitleLessThan50"), [
         { text: i18n.t("ok") },
       ]);
       return;
@@ -157,7 +158,7 @@ export function AddVideoPage() {
 
     const videoData = extractVideoId(videoUrl);
     if (!videoData) {
-      Alert.alert(i18n.t("error"), i18n.t("invalidURL"), [
+      showAlert(i18n.t("error"), i18n.t("invalidURL"), [
         { text: i18n.t("ok") },
       ]);
       return;
@@ -167,11 +168,11 @@ export function AddVideoPage() {
       await addVideo(title, videoData.id, videoData.type);
       setVideoUrl("");
       setTitle("");
-      Alert.alert(i18n.t("success"), i18n.t("addVideoSuccess"), [
+      showAlert(i18n.t("success"), i18n.t("addVideoSuccess"), [
         { text: i18n.t("ok"), onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("addVideoFailed"), [
+      showAlert(i18n.t("error"), i18n.t("addVideoFailed"), [
         { text: i18n.t("ok") },
       ]);
     }

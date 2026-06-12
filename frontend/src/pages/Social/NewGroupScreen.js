@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -51,7 +52,7 @@ const NewGroupScreen = () => {
   const pickGroupImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(i18n.t("error"), i18n.t("needPhotoAccess"), [
+      showAlert(i18n.t("error"), i18n.t("needPhotoAccess"), [
         { text: i18n.t("ok") },
       ]);
       return;
@@ -88,7 +89,7 @@ const NewGroupScreen = () => {
     } catch (error) {
       console.error("Error uploading group image:", error);
       setUploadingGroupImage(false);
-      Alert.alert(i18n.t("error"), i18n.t("imageUploadFailed"), [
+      showAlert(i18n.t("error"), i18n.t("imageUploadFailed"), [
         { text: i18n.t("ok") },
       ]);
       return null;
@@ -97,7 +98,7 @@ const NewGroupScreen = () => {
 
   const handleCreateGroup = async () => {
     if (!groupName || selectedParticipants.length === 0) {
-      Alert.alert(i18n.t("error"), i18n.t("createGroupRequirement"), [
+      showAlert(i18n.t("error"), i18n.t("createGroupRequirement"), [
         { text: i18n.t("ok") },
       ]);
       return;
@@ -133,12 +134,12 @@ const NewGroupScreen = () => {
           });
         }
       } else {
-        Alert.alert(i18n.t("error"), i18n.t("createGroupFailed"), [
+        showAlert(i18n.t("error"), i18n.t("createGroupFailed"), [
           { text: i18n.t("ok") },
         ]);
       }
     } catch (error) {
-      Alert.alert(
+      showAlert(
         i18n.t("error"),
         error.message || i18n.t("somethingWentWrong"),
         [{ text: i18n.t("ok") }]

@@ -146,7 +146,7 @@ export default function MyActivityPage() {
       // MOBILE LOGIC
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert("Permission Denied", "Please allow gallery access.");
+        showAlert("Permission Denied", "Please allow gallery access.");
         return;
       }
 
@@ -159,12 +159,12 @@ export default function MyActivityPage() {
       // downloadResult.uri is a simple string (e.g., "file:///var/mobile/...")
       if (downloadResult && downloadResult.uri) {
         await MediaLibrary.createAssetAsync(downloadResult.uri);
-        Alert.alert("Success", "Image saved to gallery!");
+        showAlert("Success", "Image saved to gallery!");
       }
     }
   } catch (error) {
     console.error("Download error:", error);
-    Alert.alert("Error", "Failed to save image.");
+    showAlert("Error", "Failed to save image.");
   }
 };
 

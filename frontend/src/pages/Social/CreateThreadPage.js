@@ -24,7 +24,7 @@ const CreateThreadPage = () => {
 
   // const handleSubmit = () => {
   //   if (!title.trim() || !content.trim()) {
-  //     Alert.alert("Missing Fields", "Title and content are required.");
+  //     showAlert("Missing Fields", "Title and content are required.");
   //     return;
   //   }
 
