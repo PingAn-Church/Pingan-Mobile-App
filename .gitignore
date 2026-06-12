@@ -2,6 +2,9 @@
 .vscode/
 *.env
 
+# Local secrets (DB / mail credentials) — see backend/env.properties.example
+backend/env.properties
+
 # Deps and builds
 node_modules/
 dist/
