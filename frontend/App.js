@@ -13,7 +13,6 @@ import WelcomePage from "./src/pages/Auth/WelcomePage";
 import ChatPage from "./src/pages/Social/ChatPage"; // Assuming ChatPage is in another file
 import RegisterPage from "./src/pages/Auth/RegisterPage"; // Assuming RegisterPage is in another file
 import LoginPage, { ForgotPasswordPage } from "./src/pages/Auth/LoginPage";
-import TestPage from "./src/pages/TestPage";
 import OthersPage, { OthersSectionPage } from "./src/pages/Others/OthersPage";
 import ProfilePage, {
   ManageApplicationsPage,
@@ -212,6 +211,16 @@ function WebSidebarLayout() {
 
 
 
+// Chat entry point. The two-pane ChatPage only renders its conversation
+// sidebar at >=1024px, so narrower web windows (and native) get the
+// ChatHomePage list — otherwise narrow web users would land on an empty
+// pane with no way to pick or start a conversation.
+function ChatHomeRoute(props) {
+  const { width } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && width >= 1024;
+  return isWebDesktop ? <ChatPage {...props} /> : <ChatHomePage {...props} />;
+}
+
 const linking = {
   prefixes: ["http://localhost:8081", "exp://"],
   config: {
@@ -262,10 +271,7 @@ export default function App() {
                     component={CreateThreadPage}
                   />
                   <Stack.Screen name="EditThread" component={EditThreadPage} />
-                  <Stack.Screen
-                    name="ChatHome"
-                    component={Platform.OS === "web" ? ChatPage : ChatHomePage}
-                  />
+                  <Stack.Screen name="ChatHome" component={ChatHomeRoute} />
                   <Stack.Screen name="Chat" component={ChatPage} />
                   <Stack.Screen name="NewChat" component={NewChatScreen} />
                   <Stack.Screen name="NewGroup" component={NewGroupScreen} />
