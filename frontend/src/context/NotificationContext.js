@@ -42,106 +42,33 @@ export const NotificationProvider = ({ children }) => {
 
     const navigation = useNavigation();
 
-    // Register push notifications and set up listeners
-    // useEffect(() => {
-    //     // Register for push notifications
-    //     // registerForPushNotificationsAsync().then(
-    //     // (token) => setExpoPushToken(token),
-    //     // (error) => setError(error)
-    //     // );
-
-    //     // Listen for incoming notifications
-    //     notificationListener.current =
-    //     Notifications.addNotificationReceivedListener((notification) => {
-    //         console.log("🔔 Notification Received while app is running: ", notification);
-    //         setNotification(notification);
-    //     });
-
-    //     // Listen for notification response (when user taps the notification)
-    //     responseListener.current =
-    //     Notifications.addNotificationResponseReceivedListener(async (response) => {
-    //         const data = response.notification.request.content.data;
-    //         const { conversationId, conversationType } = data;
-        
-    //         // Wait for user to be restored by UserProvider
-    //         await waitForUserToBeReady(2);
-        
-    //         // Account for scenario where user clicks on old notification while logged  out.
-    //         if (!user) {
-    //         console.log("⚠️ Still no user after delay, navigating to login");
-    //         navigation.navigate("Login");
-    //         } else {
-    //         console.log("✅ User restored, navigating to Chat");
-    //         navigation.navigate("Chat", { conversationId, conversationType });
-    //         }
-    //     });
-        
-    //     const waitForUserToBeReady = async (maxRetries = 15) => {
-    //         let attempt = 0;
-    //         while (!user && attempt < maxRetries) {
-    //         await new Promise((resolve) => setTimeout(resolve, 200));
-    //         attempt++;
-    //         }
-    //     };
-  
-    //     // Notifications.addNotificationResponseReceivedListener((response) => {
-    //     //     console.log(
-    //     //     "🔔 Notification Response: User interacts with notification",
-    //     //     JSON.stringify(response, null, 2),
-    //     //     JSON.stringify(response.notification.request.content.data, null, 2)
-    //     //     );
-    //     //     // Handle the notification response here (e.g., navigate to a specific screen)
-    //     //     console.log("THIS IS THE DATA", JSON.stringify(response.notification.request.content.data));
-
-    //     //     const { conversationId, conversationType } = response.notification.request.content.data;
-
-    //     //     if (!user) {
-    //     //         // If the user is not logged in, redirect to the login page
-    //     //         console.log("User is not logged in, redirecting to login page...");
-    //     //         navigation.navigate("Login");  // Redirect to Login Page
-    //     //       } else {
-    //     //         // If the user is logged in, navigate to the Chat screen
-    //     //         if (conversationId) {
-    //     //           navigation.navigate("Chat", { conversationId, conversationType });
-    //     //         }
-    //     //       }
-
-    //     // });
-
-    //     // Clean up listeners when the component is unmounted
-    //     return () => {
-    //         if (notificationListener.current) {
-    //             Notifications.removeNotificationSubscription(notificationListener.current);
-    //         }
-    //         if (responseListener.current) {
-    //             Notifications.removeNotificationSubscription(responseListener.current);
-    //         }
-    //     };
-    // }, []);
+    // The notification-tap handler runs from an event listener whose closure
+    // can hold a stale `user`; the ref always reflects the latest value.
+    const userRef = useRef(user);
+    useEffect(() => {
+        userRef.current = user;
+    }, [user]);
 
     useEffect(() => {
         if (!userReady) return;
       
         const listener1 = Notifications.addNotificationReceivedListener((notification) => {
-          console.log("🔔 Notification received in foreground:", notification);
           setNotification(notification);
         });
-      
+
         const listener2 = Notifications.addNotificationResponseReceivedListener(async (response) => {
           const data = response.notification.request.content.data;
           const { conversationId, conversationType } = data;
-      
+
           await waitForUserToBeReady();
-      
-          if (!user) {
-            console.log("⚠️ No user — navigating to login");
+
+          if (!userRef.current) {
             navigation.navigate("Login");
           } else {
-            console.log("✅ Navigating to Chat from notification");
             navigation.navigate("Chat", { conversationId, conversationType });
           }
         });
-      
+
         return () => {
       listener1.remove();
       listener2.remove();
@@ -150,25 +77,12 @@ export const NotificationProvider = ({ children }) => {
 
       const waitForUserToBeReady = async (maxRetries = 15) => {
         let attempt = 0;
-        while (!user && attempt < maxRetries) {
+        while (!userRef.current && attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, 200));
           attempt++;
         }
-      };      
-      
+      };
 
-    // Handle registering the token after user login
-    // const handleRegisterPushToken = async () => {
-    //     try {
-    //         console.log("PUSH NOTIF CHECK");
-    //         const pushToken = await registerForPushNotificationsAsync();  // Get Expo push token
-    //         setExpoPushToken(pushToken);  // Set token in state
-    //         const deviceType = Platform.OS === "android" ? "android" : "ios"; // Dynamically determine device type
-    //         await registerPushToken(pushToken, deviceType);  // Register token with backend
-    //     } catch (error) {
-    //         setError(error);
-    //     }
-    // };
 
     // Handle push token registration for login (using authToken)
     const handleLoginPushToken = async () => {

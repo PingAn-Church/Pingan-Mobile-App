@@ -56,11 +56,7 @@ export const getConversationById = async (conversationId) => {
 };
 
 export const getChatHistory = async (conversationId, conversationType) => {
-  // console.log("TYPES:", conversationId, conversationType);
-
   const token = await getAuthToken();
-
-  console.log("TOKEN", token);
 
   if (!token) {
     throw new Error("No token found."); // If no token is found, throw an error
