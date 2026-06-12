@@ -20,6 +20,8 @@
 
 package com.fyp.backend.dto;
 
+import com.fyp.backend.model.User;
+
 public class UserProfileDto {
 
     private Long id;
@@ -29,6 +31,7 @@ public class UserProfileDto {
     private String profileImage;
     private boolean isVerifiedUser;
     private boolean isAdmin;
+    private boolean isInstructor;
     private String birthday;
 
     public UserProfileDto(Long id, String firstName, String lastName, String email, String profileImage,
@@ -41,6 +44,24 @@ public class UserProfileDto {
         this.isVerifiedUser = isVerifiedUser;
         this.isAdmin = isAdmin;
         this.birthday = birthday;
+    }
+
+    /**
+     * Builds a full profile DTO including the e-learning instructor flag.
+     * Prefer this over the constructor so new role fields stay in one place.
+     */
+    public static UserProfileDto from(User user) {
+        UserProfileDto dto = new UserProfileDto(
+                user.getId(),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getEmail(),
+                user.getProfileImage(),
+                user.isVerifiedUser(),
+                user.isAdmin(),
+                user.getBirthday());
+        dto.isInstructor = user.isInstructor();
+        return dto;
     }
 
     // Getters and setters
@@ -98,6 +119,14 @@ public class UserProfileDto {
 
     public void setAdmin(Boolean isAdmin) {
         this.isAdmin = isAdmin;
+    }
+
+    public boolean isInstructor() {
+        return isInstructor;
+    }
+
+    public void setInstructor(Boolean isInstructor) {
+        this.isInstructor = isInstructor;
     }
 
     public String getBirthday() {

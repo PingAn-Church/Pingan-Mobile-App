@@ -40,7 +40,6 @@ export async function registerForPushNotificationsAsync() {
           projectId,
         })
       ).data;
-      console.log("PUSH TOKEN STRING", pushTokenString);
       return pushTokenString;
     } catch (e) {
       throw new Error(`${e}`);

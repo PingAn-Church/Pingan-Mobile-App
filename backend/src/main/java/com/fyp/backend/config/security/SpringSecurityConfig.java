@@ -1,85 +1,3 @@
-//package com.fyp.chat.config;
-//
-//import org.springframework.context.annotation.Bean;
-//import org.springframework.context.annotation.Configuration;
-//import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-//import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-//import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-//import org.springframework.security.crypto.password.PasswordEncoder;
-//import org.springframework.security.web.SecurityFilterChain;
-//
-//@Configuration
-//@EnableWebSecurity
-//public class SpringSecurity {
-//
-//    @Bean
-//    public static PasswordEncoder passwordEncoder(){
-//        return new BCryptPasswordEncoder();
-//    }
-//
-//    @Bean
-//    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-//        http
-//                .csrf().disable()  // Disable CSRF for stateless APIs
-//                .authorizeHttpRequests((authorize) ->
-//                        authorize
-//                                .requestMatchers("/auth/**").permitAll() // Allow access to all `/auth` endpoints
-//                                .anyRequest().authenticated() // All other requests must be authenticated
-//                )
-//                .httpBasic();  // Use HTTP Basic authentication or replace with stateless authentication like JWT
-//
-//        return http.build();
-//    }
-//}
-
-//package com.fyp.backend.config;
-//
-//import com.fyp.backend.service.CustomUserDetailsService; // Import your UserDetailsService implementation
-//import org.springframework.beans.factory.annotation.Autowired;
-//import org.springframework.context.annotation.Bean;
-//import org.springframework.context.annotation.Configuration;
-//import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
-//import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-//import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-//import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-//import org.springframework.security.crypto.password.PasswordEncoder;
-//import org.springframework.security.web.SecurityFilterChain;
-//
-//@Configuration
-//@EnableWebSecurity
-//public class SpringSecurity {
-//
-//    @Autowired
-//    private CustomUserDetailsService userDetailsService; // Inject your UserDetailsService
-//
-//    @Bean
-//    public static PasswordEncoder passwordEncoder() {
-//        return new BCryptPasswordEncoder();
-//    }
-//
-//    @Bean
-//    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-//        http
-//                .csrf().disable()  // Disable CSRF for stateless APIs
-//                .authorizeHttpRequests((authorize) ->
-//                        authorize
-//                                .requestMatchers("/ws/**").permitAll() // Allow WebSocket access w/o authentication
-//                                .requestMatchers("/auth/**").permitAll() // Allow access to all `/auth` endpoints
-//                                .anyRequest().authenticated() // Require authentication for all other requests
-//                )
-//                .httpBasic();  // Use HTTP Basic authentication
-//
-//        return http.build();
-//    }
-//
-//    @Autowired
-//    public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
-//        auth
-//                .userDetailsService(userDetailsService) // Use the injected UserDetailsService
-//                .passwordEncoder(passwordEncoder()); // Use the BCryptPasswordEncoder
-//    }
-//}
-
 package com.fyp.backend.config.security;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -117,11 +35,17 @@ public class SpringSecurityConfig {
                 .cors(cors -> {
                 }) // ✅ NEW: enable CORS rules from WebConfig
                 .authorizeHttpRequests((authorize) -> authorize
+                        // Public read-only content (homepage works pre-login)
                         .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/videos/**", "/api/announcements/**",
-                                "/api/users/**", "/api/others/**")
+                                "/api/others/**")
                         .permitAll()
-                        .requestMatchers("/ws/**", "/auth/**", "/s3/**", "/oss/**", "/api/applications/**",
-                                "/api/push-notifications/**")
+                        // /oss + /s3 stay open because registration uploads an avatar pre-auth
+                        .requestMatchers("/ws/**", "/auth/**", "/s3/**", "/oss/**")
+                        .permitAll()
+                        // Push-token registration happens at signup, before the user has a JWT;
+                        // the token is stored inactive. Everything else under push-notifications
+                        // requires auth + ownership (checked in the controller).
+                        .requestMatchers(HttpMethod.POST, "/api/push-notifications/register")
                         .permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session

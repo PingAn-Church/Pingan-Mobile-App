@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,20 +22,22 @@ public class FormApplicationController {
     @Autowired
     private FormApplicationRepository formApplicationRepository;
 
-    // Save an application
+    // Save an application (any authenticated user)
     @PostMapping
     public ResponseEntity<FormApplication> createApplication(@RequestBody FormApplication application) {
         application.setSubmittedAt(java.time.LocalDateTime.now()); // Ensure timestamp is set
         return ResponseEntity.ok(formApplicationRepository.save(application));
     }
 
-    // Get all applications
+    // Get all applications — applications contain personal data; admins only
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<List<FormApplication>> getAllApplications() {
         return ResponseEntity.ok(formApplicationRepository.findAll());
     }
 
-    // Get a specific application by ID
+    // Get a specific application by ID — admins only
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<FormApplication> getApplicationById(@PathVariable Long id) {
         return formApplicationRepository.findById(id)

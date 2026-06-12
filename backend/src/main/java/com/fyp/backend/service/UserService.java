@@ -53,16 +53,7 @@ public class UserService {
         if (email == null) return Optional.empty();
 
         return userRepository.findByEmail(email)
-                .map(user -> new UserProfileDto(
-                        user.getId(),
-                        user.getFirstName(),
-                        user.getLastName(),
-                        user.getEmail(),
-                        user.getProfileImage(),
-                        user.isVerifiedUser(),
-                        user.isAdmin(),
-                        user.getBirthday()
-                ));
+                .map(UserProfileDto::from);
     }
 
 
@@ -129,6 +120,18 @@ public class UserService {
 
     public List<User> findAdmins() {
         return userRepository.findByIsAdminTrue();
+    }
+
+    public List<User> findInstructors() {
+        return userRepository.findByIsInstructorTrue();
+    }
+
+    @Transactional
+    public void updateUserInstructorStatus(Long userId, boolean isInstructor) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setInstructor(isInstructor);
+        userRepository.save(user);
     }
 
     @Transactional

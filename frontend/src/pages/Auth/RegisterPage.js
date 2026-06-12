@@ -300,14 +300,14 @@ const styles = StyleSheet.create({
 //     });
 
 //     setUploading(false);
-//     Alert.alert("Success", "Image uploaded successfully!");
+//     showAlert("Success", "Image uploaded successfully!");
 
 //     return presignedUploadUrl.split('?')[0]; // Return the public URL of the uploaded image
 
 //   } catch (error) {
 //     console.error("Error uploading image:", error);
 //     setUploading(false);
-//     Alert.alert("Error", "Failed to upload the image.");
+//     showAlert("Error", "Failed to upload the image.");
 //     return null;
 //   }
 // };
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
 
 //         if (response.ok) {
 //             setUploading(false);
-//             Alert.alert("Success", "Image uploaded successfully!");
+//             showAlert("Success", "Image uploaded successfully!");
 
 //             return presignedUploadUrl.split('?')[0]; // Return URL without query params
 //         } else {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
 //     } catch (error) {
 //         console.error("Error uploading image:", error);
 //         setUploading(false);
-//         Alert.alert("Error", "Failed to upload the image.");
+//         showAlert("Error", "Failed to upload the image.");
 //         return null;
 //     }
 // };
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
 
 //       if (response.ok) {
 //           setUploading(false);
-//           Alert.alert("Success", "Image uploaded successfully!");
+//           showAlert("Success", "Image uploaded successfully!");
 //           return presignedUploadUrl.split('?')[0]; // Return URL without query params
 //       } else {
 //           throw new Error(`Upload failed. Status: ${response.status}`);
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
 //   } catch (error) {
 //       console.error("Error uploading image:", error);
 //       setUploading(false);
-//       Alert.alert("Error", "Failed to upload the image.");
+//       showAlert("Error", "Failed to upload the image.");
 //       return null;
 //   }
 // };
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
 
 //       if (response.ok) {
 //           setUploading(false);
-//           Alert.alert("Success", "Image uploaded successfully!");
+//           showAlert("Success", "Image uploaded successfully!");
 //           return presignedUploadUrl.split('?')[0]; // Return URL without query params
 //       } else {
 //           throw new Error(`Upload failed. Status: ${response.status}`);
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
 //   } catch (error) {
 //       console.error("Error uploading image:", error);
 //       setUploading(false);
-//       Alert.alert("Error", "Failed to upload the image.");
+//       showAlert("Error", "Failed to upload the image.");
 //       return null;
 //   }
 // };
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
 
 //       if (response.ok) {
 //           setUploading(false);
-//           Alert.alert("Success", "Image uploaded successfully!");
+//           showAlert("Success", "Image uploaded successfully!");
 //           return presignedUploadUrl.split('?')[0]; // ✅ Return URL without query params
 //       } else {
 //           throw new Error(`Upload failed. Status: ${response.status}`);
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
 //   } catch (error) {
 //       console.error("Error uploading image:", error);
 //       setUploading(false);
-//       Alert.alert("Error", "Failed to upload the image.");
+//       showAlert("Error", "Failed to upload the image.");
 //       return null;
 //   }
 // };
@@ -498,12 +498,12 @@ const styles = StyleSheet.create({
 //     const uploadedFileUrl = await uploadFileToOSS(profileImage, presignedUploadUrl);
 
 //     setUploading(false);
-//     Alert.alert("Success", "Image uploaded successfully!");
+//     showAlert("Success", "Image uploaded successfully!");
 //     return uploadedFileUrl; // ✅ Return the uploaded file URL
 //   } catch (error) {
 //     console.error("Error uploading image:", error);
 //     setUploading(false);
-//     Alert.alert("Error", "Failed to upload the image.");
+//     showAlert("Error", "Failed to upload the image.");
 //     return null;
 //   }
 // };

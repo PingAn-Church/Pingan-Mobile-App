@@ -94,11 +94,8 @@ export const unregisterPushToken = async (token) => {
 // Helper function to fetch the userId from the stored user data
 const getUserId = async () => {
   const user = await AsyncStorage.getItem("user");
-  console.log("USERDET", user);
   if (user) {
-    const parsedUser = JSON.parse(user);
-    console.log("parsed user info", parsedUser);
-    return parsedUser.id;  // Assuming user object has an 'id' field
+    return JSON.parse(user).id;
   }
   return null;
 };

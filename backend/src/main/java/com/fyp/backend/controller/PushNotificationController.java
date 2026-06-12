@@ -1,58 +1,8 @@
-//package com.fyp.backend.controller;
-//
-//import com.fyp.backend.service.PushNotificationService;
-//import org.springframework.beans.factory.annotation.Autowired;
-//import org.springframework.http.ResponseEntity;
-//import org.springframework.web.bind.annotation.*;
-//
-//@RestController
-//@RequestMapping("/api/push-notifications")
-//public class PushNotificationController {
-//
-//    @Autowired
-//    private PushNotificationService pushNotificationService;
-//
-//    // Register a push token
-//    @PostMapping("/register")
-//    public ResponseEntity<?> registerPushToken(
-//            @RequestParam Long userId,
-//            @RequestParam String token,
-//            @RequestParam String deviceType) {
-//        pushNotificationService.registerPushToken(userId, token, deviceType);
-//        return ResponseEntity.ok("Push token registered successfully");
-//    }
-//
-//    // Deactivate a push token
-//    @PostMapping("/deactivate")
-//    public ResponseEntity<?> deactivatePushToken(
-//            @RequestParam Long userId,
-//            @RequestParam String token) {
-//        pushNotificationService.deactivatePushToken(userId, token);
-//        return ResponseEntity.ok("Push token deactivated successfully");
-//    }
-//
-//    // Unregister a push token
-//    @DeleteMapping("/unregister")
-//    public ResponseEntity<?> unregisterPushToken(
-//            @RequestParam Long userId,
-//            @RequestParam String token) {
-//        pushNotificationService.unregisterPushToken(userId, token);
-//        return ResponseEntity.ok("Push token unregistered successfully");
-//    }
-//
-//    // Send a push notification to a user (for testing purposes)
-//    @PostMapping("/send")
-//    public ResponseEntity<?> sendPushNotification(
-//            @RequestParam Long userId,
-//            @RequestParam String message) {
-//        pushNotificationService.sendPushNotification(userId, message);
-//        return ResponseEntity.ok("Push notification sent");
-//    }
-//}
-
 package com.fyp.backend.controller;
 
 import com.fyp.backend.service.PushNotificationService;
+import com.fyp.backend.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -67,16 +17,25 @@ public class PushNotificationController {
     @Autowired
     private PushNotificationService pushNotificationService;
 
-    // Register a push token when user registers
+    @Autowired
+    private UserService userService;
+
+    /** True when the JWT in the request does not belong to {@code userId}. */
+    private boolean isNotSelf(Long userId, HttpServletRequest request) {
+        Long authUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        return authUserId == null || !authUserId.equals(userId);
+    }
+
+    // Register a push token when user registers. Deliberately unauthenticated:
+    // it is called right after signup, before the user has a JWT. The token is
+    // stored INACTIVE and only activated on an authenticated login.
     @PostMapping("/register")
     public ResponseEntity<?> registerPushTokenForNewUser(
             @RequestParam Long userId,
             @RequestParam String token,
             @RequestParam String deviceType,
             @RequestParam String deviceId) {
-        // Decode the token
         String decodedToken = URLDecoder.decode(token, StandardCharsets.UTF_8);
-        // Register the push token with the new user and set it inactive
         pushNotificationService.registerPushTokenForNewUser(userId, decodedToken, deviceType, deviceId);
         return ResponseEntity.ok("Push token registered successfully (inactive for new user)");
     }
@@ -87,10 +46,12 @@ public class PushNotificationController {
             @RequestParam Long userId,
             @RequestParam String token,
             @RequestParam String deviceType,
-            @RequestParam String deviceId) {
-        // Decode the token
+            @RequestParam String deviceId,
+            HttpServletRequest request) {
+        if (isNotSelf(userId, request)) {
+            return ResponseEntity.status(403).body("You can only manage your own push tokens.");
+        }
         String decodedToken = URLDecoder.decode(token, StandardCharsets.UTF_8);
-        // Register the push token and set it active (or re-activate if needed)
         pushNotificationService.registerPushTokenForLogin(userId, decodedToken, deviceType, deviceId);
         return ResponseEntity.ok("Push token registered successfully (active for logged-in user)");
     }
@@ -99,8 +60,11 @@ public class PushNotificationController {
     @PostMapping("/deactivate")
     public ResponseEntity<?> deactivatePushToken(
             @RequestParam Long userId,
-            @RequestParam String token) {
-        // Decode the token
+            @RequestParam String token,
+            HttpServletRequest request) {
+        if (isNotSelf(userId, request)) {
+            return ResponseEntity.status(403).body("You can only manage your own push tokens.");
+        }
         String decodedToken = URLDecoder.decode(token, StandardCharsets.UTF_8);
         pushNotificationService.deactivatePushToken(userId, decodedToken);
         return ResponseEntity.ok("Push token deactivated successfully");
@@ -110,19 +74,13 @@ public class PushNotificationController {
     @DeleteMapping("/unregister")
     public ResponseEntity<?> unregisterPushToken(
             @RequestParam Long userId,
-            @RequestParam String token) {
-        // Decode the token
+            @RequestParam String token,
+            HttpServletRequest request) {
+        if (isNotSelf(userId, request)) {
+            return ResponseEntity.status(403).body("You can only manage your own push tokens.");
+        }
         String decodedToken = URLDecoder.decode(token, StandardCharsets.UTF_8);
         pushNotificationService.unregisterPushToken(userId, decodedToken);
         return ResponseEntity.ok("Push token unregistered successfully");
     }
-
-    // Send a push notification to a user (for testing purposes)
-//    @PostMapping("/send")
-//    public ResponseEntity<?> sendPushNotification(
-//            @RequestParam Long userId,
-//            @RequestParam String message) {
-//        pushNotificationService.sendPushNotification(userId, message);
-//        return ResponseEntity.ok("Push notification sent");
-//    }
 }

@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -132,7 +133,7 @@ export default function ActivityDetailPage() {
 
   const handleCheckIn = async () => {
     if (!user.id) {
-      Alert.alert(i18n.t("error"), i18n.t("mustBeLoggedInToCheckIn"), [
+      showAlert(i18n.t("error"), i18n.t("mustBeLoggedInToCheckIn"), [
         { text: i18n.t("ok") },
       ]);
       return;
@@ -140,12 +141,12 @@ export default function ActivityDetailPage() {
 
     const response = await checkInToEvent(eventId, user.id);
     if (response) {
-      Alert.alert(i18n.t("success"), i18n.t("checkInSuccess"), [
+      showAlert(i18n.t("success"), i18n.t("checkInSuccess"), [
         { text: i18n.t("ok") },
       ]);
       navigation.goBack();
     } else {
-      Alert.alert(i18n.t("error"), i18n.t("checkInFail"), [
+      showAlert(i18n.t("error"), i18n.t("checkInFail"), [
         { text: i18n.t("ok") },
       ]);
     }

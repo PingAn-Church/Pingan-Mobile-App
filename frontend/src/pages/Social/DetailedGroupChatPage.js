@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useEffect, useState, useContext } from "react";
 import {
   SafeAreaView,
@@ -133,12 +134,12 @@ const DetailedGroupChatPage = ({ route }) => {
         const viewingUrl = await fetchViewingPresignedUrl(uploadedUrl, "group");
         setChatIconUrl(viewingUrl);
 
-        Alert.alert(i18n.t("success"), i18n.t("updateGroupIconSuccess"), [
+        showAlert(i18n.t("success"), i18n.t("updateGroupIconSuccess"), [
           { text: i18n.t("ok") },
         ]);
       } catch (error) {
         console.error("❌ Failed to change group icon:", error);
-        Alert.alert(i18n.t("error"), i18n.t("updateGroupIconFailed"), [
+        showAlert(i18n.t("error"), i18n.t("updateGroupIconFailed"), [
           { text: i18n.t("ok") },
         ]);
       }
@@ -158,11 +159,11 @@ const DetailedGroupChatPage = ({ route }) => {
       //       : conv
       //   )
       // );
-      Alert.alert(i18n.t("success"), i18n.t("removeUserSuccess"), [
+      showAlert(i18n.t("success"), i18n.t("removeUserSuccess"), [
         { text: i18n.t("ok") },
       ]);
     } catch (error) {
-      Alert.alert(i18n.t("error"), i18n.t("removeUserFailed"), [
+      showAlert(i18n.t("error"), i18n.t("removeUserFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -182,12 +183,12 @@ const DetailedGroupChatPage = ({ route }) => {
       //   )
       // );
 
-      Alert.alert(i18n.t("success"), i18n.t("addChatAdminSuccess"), [
+      showAlert(i18n.t("success"), i18n.t("addChatAdminSuccess"), [
         { text: i18n.t("ok") },
       ]);
     } catch (error) {
       console.error("❌ Error adding admin:", error);
-      Alert.alert(i18n.t("error"), i18n.t("addChatAdminFailed"), [
+      showAlert(i18n.t("error"), i18n.t("addChatAdminFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -196,7 +197,7 @@ const DetailedGroupChatPage = ({ route }) => {
   const handleRemoveAdmin = async (userId) => {
     try {
       if (conversation.adminIds.length === 1) {
-        Alert.alert(i18n.t("error"), i18n.t("cannotRemoveLastAdmin"), [
+        showAlert(i18n.t("error"), i18n.t("cannotRemoveLastAdmin"), [
           { text: i18n.t("ok") },
         ]);
         return;
@@ -211,12 +212,12 @@ const DetailedGroupChatPage = ({ route }) => {
             : conv
         )
       );
-      Alert.alert(i18n.t("success"), i18n.t("removeChatAdminSuccess"), [
+      showAlert(i18n.t("success"), i18n.t("removeChatAdminSuccess"), [
         { text: i18n.t("ok") },
       ]);
     } catch (error) {
       console.error("❌ Error removing admin:", error);
-      Alert.alert(i18n.t("error"), i18n.t("removeChatAdminFailed"), [
+      showAlert(i18n.t("error"), i18n.t("removeChatAdminFailed"), [
         { text: i18n.t("ok") },
       ]);
     }
@@ -226,7 +227,7 @@ const DetailedGroupChatPage = ({ route }) => {
   const handleLeaveGroup = async () => {
     try {
       await leaveGroup(conversationId);
-      Alert.alert(i18n.t("success"), i18n.t("leftGroupSuccess"), [
+      showAlert(i18n.t("success"), i18n.t("leftGroupSuccess"), [
         { text: i18n.t("ok") },
       ]);
 
@@ -247,17 +248,17 @@ const DetailedGroupChatPage = ({ route }) => {
         error?.response?.data?.message || i18n.t("leftGroupFailed");
 
       if (errorMessage.includes("only admin")) {
-        Alert.alert(i18n.t("onlyAdminLeft"), i18n.t("assignAnotherAdmin"), [
+        showAlert(i18n.t("onlyAdminLeft"), i18n.t("assignAnotherAdmin"), [
           { text: i18n.t("ok") },
         ]);
       } else {
-        Alert.alert(i18n.t("error"), errorMessage, [{ text: i18n.t("ok") }]);
+        showAlert(i18n.t("error"), errorMessage, [{ text: i18n.t("ok") }]);
       }
     }
 
     // catch (error) {
     //   console.error("Error leaving group:", error);
-    //   Alert.alert("Error", "Failed to leave the group.");
+    //   showAlert("Error", "Failed to leave the group.");
     // }
   };
 
@@ -281,7 +282,7 @@ const DetailedGroupChatPage = ({ route }) => {
 
       navigation.navigate("ChatHome");
     } catch (err) {
-      Alert.alert(i18n.t("error"), err.message || i18n.t("deleteChatFailed"), [
+      showAlert(i18n.t("error"), err.message || i18n.t("deleteChatFailed"), [
         { text: i18n.t("ok") },
       ]);
     }

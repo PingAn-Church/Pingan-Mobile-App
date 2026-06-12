@@ -1,0 +1,21 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": false,
+    "allowJs": true,
+    "checkJs": false,
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/learning/*"]
+    }
+  },
+  "include": [
+    "src/learning/**/*.ts",
+    "src/learning/**/*.tsx"
+  ]
+}

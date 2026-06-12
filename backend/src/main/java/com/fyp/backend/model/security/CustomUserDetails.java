@@ -27,6 +27,10 @@ public class CustomUserDetails implements UserDetails {
         if (user.isVerifiedUser()) {
             authorities.add(new SimpleGrantedAuthority("ROLE_VERIFIED"));
         }
+        // Admins inclusively hold instructor privileges for the e-learning portal
+        if (user.isInstructor() || user.isAdmin()) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_INSTRUCTOR"));
+        }
         return authorities;
     }
 

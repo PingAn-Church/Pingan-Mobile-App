@@ -193,6 +193,44 @@ export const getAdminUsers = async () => {
   }
 };
 
+export const getInstructorUsers = async () => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  try {
+    const response = await axios.get(
+      apiUrl(`/api/users/instructors`),
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching instructor users:", error);
+    throw error;
+  }
+};
+
+export const updateUserInstructorStatus = async (userId, isInstructor) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  try {
+    const response = await axios.post(
+      apiUrl(`/api/users/update-instructor/${userId}`),
+      null,
+      {
+        params: { isInstructor },
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating user instructor status:", error);
+    throw error;
+  }
+};
+
 export const updateUserVerifiedStatus = async (userId, isVerifiedUser) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");

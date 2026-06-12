@@ -171,9 +171,32 @@ export default function ProfilePage() {
       icon: "admin-panel-settings",
     },
     {
+      titleKey: "manageInstructors",
+      screen: "ManageInstructors",
+      icon: "school",
+    },
+    {
       titleKey: "manageUsers",
       screen: "ManageUsers",
       icon: "groups",
+    },
+  ];
+
+  const instructorOptions = [
+    {
+      titleKey: "courseManagement",
+      screen: "CourseManagement",
+      icon: "library-books",
+    },
+    {
+      titleKey: "courseStats",
+      screen: "CourseStats",
+      icon: "insights",
+    },
+    {
+      titleKey: "quizGrading",
+      screen: "QuizGrading",
+      icon: "grading",
     },
   ];
 
@@ -226,6 +249,28 @@ export default function ProfilePage() {
             <View style={{ flexShrink: 1 }}>
               <View style={styles.gridContainer}>
                 {options.map((option, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.optionButton}
+                    onPress={() => navigation.navigate(option.screen)}
+                  >
+                    <MaterialIcons name={option.icon} size={40} color="white" />
+                    <Text style={styles.optionText}>
+                      {i18n.t(option.titleKey)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {(user?.admin || user?.instructor) && (
+          <View style={styles.adminContainer}>
+            <Text style={styles.subHeader}>{i18n.t("instructorControls")}</Text>
+            <View style={{ flexShrink: 1 }}>
+              <View style={[styles.gridContainer, styles.instructorGrid]}>
+                {instructorOptions.map((option, index) => (
                   <TouchableOpacity
                     key={index}
                     style={styles.optionButton}
@@ -551,6 +596,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 0,
     gap: 10,
+  },
+  // The instructor grid often has a single item; stretch it to the full row so
+  // the button's percentage width resolves the same as the admin buttons
+  // instead of collapsing around its content.
+  instructorGrid: {
+    alignSelf: "stretch",
   },
   optionButton: {
     width: "45%",

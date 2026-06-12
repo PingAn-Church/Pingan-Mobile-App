@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { getConversations, getChatHistory } from "../service/ChatService";
 import { getOnlineUsers } from "../service/UserService";
 import { getStompClient, subscribeToConversation } from "../service/WebSocketService";
@@ -41,6 +41,10 @@ export const ChatProvider = ({ children }) => {
   const { user, userReady, setUserStatus } = useContext(UserContext);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Delivery receipts already sent this session. handleWebSocketMessage sends
+  // from inside a state updater, which React may invoke more than once — this
+  // set makes the send idempotent.
+  const sentDeliveryReceiptsRef = useRef(new Set());
 
   useEffect(() => {
     if (userReady && user?.id) {
@@ -81,12 +85,9 @@ export const ChatProvider = ({ children }) => {
 
   const fetchInitialData = async () => {
     await fetchConversations();
-    console.log("✅ Initial chat data loaded");
   };
 
   const handleWebSocketMessage = (message) => {
-    console.log("📩 WebSocket message:", message);
-
     setConversations((prev) => {
       let updated = prev.map((conv) => {
         if (String(conv.conversationId) !== String(message.conversationId)) return conv;
@@ -139,13 +140,19 @@ export const ChatProvider = ({ children }) => {
   };
 
   const sendDeliveryStatusUpdate = (statusUpdate) => {
+    const receiptKey = `${statusUpdate.messageId}:${JSON.stringify(statusUpdate.deliveryStatus)}`;
+    if (sentDeliveryReceiptsRef.current.has(receiptKey)) return;
+
     const client = getStompClient();
     if (client?.connected) {
+      sentDeliveryReceiptsRef.current.add(receiptKey);
+      if (sentDeliveryReceiptsRef.current.size > 5000) {
+        sentDeliveryReceiptsRef.current.clear();
+      }
       client.publish({
         destination: "/app/updateDeliveryStatus",
         body: JSON.stringify(statusUpdate),
       });
-      console.log("📡 Delivery status update sent:", statusUpdate);
     }
   };
 
@@ -189,28 +196,7 @@ export const ChatProvider = ({ children }) => {
     );
   };
 
-  const tryGetChatHistoryWithRetry = async (conversationId, conversationType, maxRetries = 3) => {
-    let attempt = 0;
-    while (attempt < maxRetries) {
-      try {
-        const history = await getChatHistory(conversationId, conversationType);
-        return history;
-      } catch (err) {
-        if (err.response?.status === 403) {
-          console.log(`🔁 Retry ${attempt + 1}: waiting before retrying getChatHistory`);
-          await new Promise(res => setTimeout(res, 1000)); // wait 1 sec
-          attempt++;
-        } else {
-          throw err; // throw if it's another error (network, 500, etc.)
-        }
-      }
-    }
-    throw new Error("Failed to fetch chat history after multiple retries");
-  };
-  
-
   const handleChatUpdate = async (newChat) => {
-    console.log("NEW CHAT RECEIVED in handleChatUpdate", newChat);
     if (!newChat) return;
 
     // 🧹 Handle deletion
@@ -231,8 +217,6 @@ export const ChatProvider = ({ children }) => {
     }
 
     let enriched = { ...newChat };
-    
-    console.log("ENRICHED", enriched)
 
     if (!enriched.chatHistory) {
       try {
@@ -244,19 +228,6 @@ export const ChatProvider = ({ children }) => {
       }
     }
 
-    // if (!enriched.chatHistory) {
-    //   try {
-    //     const history = await tryGetChatHistoryWithRetry(
-    //       enriched.conversationId,
-    //       enriched.conversationType
-    //     );
-    //     enriched.chatHistory = history || [];
-    //   } catch (err) {
-    //     console.error("❌ Failed to enrich chat history after retries:", err);
-    //     enriched.chatHistory = [];
-    //   }
-    // }
-    
 
     setConversations((prev) => {
       const existingIdx = prev.findIndex((c) => c.conversationId === enriched.conversationId);
@@ -294,8 +265,10 @@ export const ChatProvider = ({ children }) => {
       return prev;
     });
 
-    if (typeof subscribeToConversation === "function") {
-      subscribeToConversation(enriched.conversationId, handleWebSocketMessage);
+    // New group chats need a live topic subscription on the current connection;
+    // private chats arrive on the per-user queue and need no extra subscription.
+    if (enriched.conversationType === "group") {
+      subscribeToConversation(enriched.conversationId);
     }
   };
 

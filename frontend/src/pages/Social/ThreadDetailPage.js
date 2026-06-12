@@ -32,7 +32,7 @@
 //             const data = await fetchReplies(thread.id);
 //             setReplies(data);
 //           } catch (error) {
-//             Alert.alert("Error", "Failed to load replies");
+//             showAlert("Error", "Failed to load replies");
 //           }
 //         };
 
@@ -60,7 +60,7 @@
 //       setReplies((prev) => [...prev, reply]);
 //       setNewReply("");
 //     } catch (error) {
-//       Alert.alert("Error", "Failed to post reply");
+//       showAlert("Error", "Failed to post reply");
 //     }
 //   };
 
@@ -194,7 +194,7 @@
 //       // ✅ Clear the input after reloading
 //       setNewReply("");
 //     } catch (error) {
-//       Alert.alert("Error", "Failed to post reply");
+//       showAlert("Error", "Failed to post reply");
 //     }
 //   };
 
@@ -203,7 +203,7 @@
 //     const data = await fetchReplies(thread.id);
 //     setReplies(data);
 //   } catch (error) {
-//     Alert.alert("Error", "Failed to load replies");
+//     showAlert("Error", "Failed to load replies");
 //   }
 // };
 
@@ -294,7 +294,7 @@
 //       setThread(updatedThread);
 //       setReplies(fetchedReplies);
 //     } catch (error) {
-//       Alert.alert("Error", "Failed to load thread or replies");
+//       showAlert("Error", "Failed to load thread or replies");
 //     }
 //   };
 
@@ -317,7 +317,7 @@
 
 //       setNewReply("");
 //     } catch (error) {
-//       Alert.alert("Error", "Failed to post reply");
+//       showAlert("Error", "Failed to post reply");
 //     }
 //   };
 
@@ -493,9 +493,6 @@ const ThreadDetailPage = ({ route }) => {
   const { language } = useContext(LanguageContext);
   const { user } = useContext(UserContext);
   const navigation = useNavigation();
-
-  console.log("TESTINTG")
-  console.log("USER", user);
 
   useEffect(() => {
     navigation.setOptions({

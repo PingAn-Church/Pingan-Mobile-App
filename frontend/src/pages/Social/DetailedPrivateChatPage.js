@@ -1,3 +1,4 @@
+import { showAlert } from "../../utils/showAlert";
 import React, { useEffect, useState, useContext } from "react";
 import {
   SafeAreaView,
@@ -66,7 +67,7 @@ const DetailedPrivateChatPage = ({ route }) => {
         });
       } catch (error) {
         console.error("Error fetching participant details:", error);
-        Alert.alert(i18n.t("error"), i18n.t("loadParticipantFailed"), [
+        showAlert(i18n.t("error"), i18n.t("loadParticipantFailed"), [
           { text: i18n.t("ok") },
         ]);
       } finally {
@@ -104,7 +105,7 @@ const DetailedPrivateChatPage = ({ route }) => {
 
       navigation.navigate("ChatHome");
     } catch (err) {
-      Alert.alert(i18n.t("error"), err.message || i18n.t("deleteChatFailed"), [
+      showAlert(i18n.t("error"), err.message || i18n.t("deleteChatFailed"), [
         { text: i18n.t("ok") },
       ]);
     }

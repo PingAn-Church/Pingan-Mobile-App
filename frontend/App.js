@@ -13,7 +13,6 @@ import WelcomePage from "./src/pages/Auth/WelcomePage";
 import ChatPage from "./src/pages/Social/ChatPage"; // Assuming ChatPage is in another file
 import RegisterPage from "./src/pages/Auth/RegisterPage"; // Assuming RegisterPage is in another file
 import LoginPage, { ForgotPasswordPage } from "./src/pages/Auth/LoginPage";
-import TestPage from "./src/pages/TestPage";
 import OthersPage, { OthersSectionPage } from "./src/pages/Others/OthersPage";
 import ProfilePage, {
   ManageApplicationsPage,
@@ -49,6 +48,7 @@ import ManageAnnouncementsPage, {
 import ManageAdminsPage, {
   ManageUsersPage,
 } from "./src/pages/Others/ManageAdminsPage";
+import ManageInstructorsPage from "./src/pages/Others/ManageInstructorsPage";
 import ManageEventsPage, {
   EventFormPage,
 } from "./src/pages/Others/ManageEventsPage";
@@ -59,6 +59,27 @@ import "./i18n";
 import i18n from "./i18n";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import * as Notifications from "expo-notifications";
+
+// E-learning module
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./src/learning/lib/queryClient";
+import { AuthProvider } from "./src/learning/context/AuthContext";
+import CoursesScreen from "./src/learning/screens/CoursesScreen";
+import CourseDetailScreen from "./src/learning/screens/CourseDetailScreen";
+import LearningVideoScreen from "./src/learning/screens/VideoScreen";
+import LearningDocumentScreen from "./src/learning/screens/DocumentScreen";
+import CourseManagementScreen from "./src/learning/screens/instructor/CourseManagementScreen";
+import CourseEditorScreen from "./src/learning/screens/instructor/CourseEditorScreen";
+import CourseStatsScreen from "./src/learning/screens/instructor/CourseStatsScreen";
+import GradingScreen from "./src/learning/screens/instructor/GradingScreen";
+import MyCoursesScreen from "./src/learning/screens/MyCoursesScreen";
+import WishlistScreen from "./src/learning/screens/WishlistScreen";
+import LeaveReviewScreen from "./src/learning/screens/LeaveReviewScreen";
+import QuizScreen from "./src/learning/screens/QuizScreen";
+import CertificatesScreen from "./src/learning/screens/CertificatesScreen";
+import CertificateViewerScreen from "./src/learning/screens/CertificateViewerScreen";
+import AchievementsScreen from "./src/learning/screens/AchievementsScreen";
+import LearningGoalScreen from "./src/learning/screens/LearningGoalScreen";
 
 // Sidebar for desktop browsers
 import { useWindowDimensions, View } from "react-native";
@@ -190,6 +211,16 @@ function WebSidebarLayout() {
 
 
 
+// Chat entry point. The two-pane ChatPage only renders its conversation
+// sidebar at >=1024px, so narrower web windows (and native) get the
+// ChatHomePage list — otherwise narrow web users would land on an empty
+// pane with no way to pick or start a conversation.
+function ChatHomeRoute(props) {
+  const { width } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && width >= 1024;
+  return isWebDesktop ? <ChatPage {...props} /> : <ChatHomePage {...props} />;
+}
+
 const linking = {
   prefixes: ["http://localhost:8081", "exp://"],
   config: {
@@ -212,7 +243,9 @@ export default function App() {
     <NavigationContainer
       linking={Platform.OS === "web" ? linking : undefined}
     >
+      <QueryClientProvider client={queryClient}>
       <UserProvider>
+        <AuthProvider>
         <NotificationProvider>
           <LanguageProvider>
             <ChatProvider>
@@ -238,10 +271,7 @@ export default function App() {
                     component={CreateThreadPage}
                   />
                   <Stack.Screen name="EditThread" component={EditThreadPage} />
-                  <Stack.Screen
-                    name="ChatHome"
-                    component={Platform.OS === "web" ? ChatPage : ChatHomePage}
-                  />
+                  <Stack.Screen name="ChatHome" component={ChatHomeRoute} />
                   <Stack.Screen name="Chat" component={ChatPage} />
                   <Stack.Screen name="NewChat" component={NewChatScreen} />
                   <Stack.Screen name="NewGroup" component={NewGroupScreen} />
@@ -322,6 +352,11 @@ export default function App() {
                     options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
+                    name="ManageInstructors"
+                    component={ManageInstructorsPage}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
                     name="ForgotPassword"
                     component={ForgotPasswordPage}
                   />
@@ -338,12 +373,94 @@ export default function App() {
                     component={isDesktop ? WebSidebarLayout : BottomTabNavigator}
                     options={{ headerShown: false, headerTitle: "" }} // Hide header for bottom tabs
                   />
+                  <Stack.Screen
+                    name="Learning"
+                    component={CoursesScreen}
+                    options={{ headerTitle: "Learning" }}
+                  />
+                  <Stack.Screen
+                    name="LearningCourseDetail"
+                    component={CourseDetailScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LearningVideo"
+                    component={LearningVideoScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LearningDocument"
+                    component={LearningDocumentScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CourseManagement"
+                    component={CourseManagementScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CourseEditor"
+                    component={CourseEditorScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CourseStats"
+                    component={CourseStatsScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="QuizGrading"
+                    component={GradingScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="MyCourses"
+                    component={MyCoursesScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="Wishlist"
+                    component={WishlistScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LeaveReview"
+                    component={LeaveReviewScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="QuizScreen"
+                    component={QuizScreen}
+                    options={{ headerTitle: "Quiz" }}
+                  />
+                  <Stack.Screen
+                    name="Certificates"
+                    component={CertificatesScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="CertificateViewer"
+                    component={CertificateViewerScreen}
+                    options={{ headerTitle: "Certificate" }}
+                  />
+                  <Stack.Screen
+                    name="Achievements"
+                    component={AchievementsScreen}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="LearningGoal"
+                    component={LearningGoalScreen}
+                    options={{ headerTitle: "" }}
+                  />
                 </Stack.Navigator>
               </WebSocketProvider>
             </ChatProvider>
           </LanguageProvider>
         </NotificationProvider>
+        </AuthProvider>
       </UserProvider>
+      </QueryClientProvider>
     </NavigationContainer>
   );
 }

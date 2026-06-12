@@ -21,4 +21,9 @@ public interface GroupConversationRepository extends JpaRepository<GroupConversa
 
     @Query("SELECT g FROM GroupConversation g WHERE LOWER(g.groupName) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<GroupConversation> searchByGroupName(@Param("query") String query);
+
+    // Single-query membership check — safe to call from WebSocket threads
+    // (no lazy collection access outside a transaction).
+    @Query("SELECT COUNT(g) > 0 FROM GroupConversation g JOIN g.participants p WHERE g.id = :conversationId AND p.id = :userId")
+    boolean isParticipant(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 }

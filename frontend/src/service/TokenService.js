@@ -3,9 +3,10 @@ import axios from "axios";
 import { logoutUser } from "./AuthService";
 import { apiUrl } from "./apiConfig";
 
-let hasAttemptedRefresh = false;
-
-// if (!globalThis.hasTriedRefresh) globalThis.hasTriedRefresh = false;
+// Single-flight refresh: the backend rotates the refresh token on every use,
+// so two concurrent refresh calls invalidate each other and force a logout.
+// All callers that hit an expired access token await the same promise.
+let refreshPromise = null;
 
 const decodeJWT = (token) => {
   if (!token) return null;
@@ -38,27 +39,31 @@ const isTokenExpired = (token) => {
 };
 
 export const getAuthToken = async () => {
-  let accessToken = await AsyncStorage.getItem("accessToken");
+  const accessToken = await AsyncStorage.getItem("accessToken");
 
   if (accessToken && !isTokenExpired(accessToken)) {
     return accessToken;
   }
 
-  if (hasAttemptedRefresh) {
-    console.warn("⛔ Already tried refresh in this session. Skipping...");
-    return null;
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
   }
 
-  console.log("⚠️ Access Token expired or missing, attempting refresh...");
-  hasAttemptedRefresh = true;
-
   try {
-    const newTokens = await refreshAccessToken(); // Tries refreshing
-    hasAttemptedRefresh = false; // Reset if successful
+    const newTokens = await refreshPromise;
     return newTokens.accessToken;
   } catch (error) {
-    console.error("❌ Refresh token invalid or expired. Logging out user...");
-    await logoutUser();
+    // Only log out when the backend explicitly rejected the refresh token (or
+    // there is nothing to refresh with). A network blip must not end the session.
+    const status = error?.response?.status;
+    if (status === 401 || status === 403 || error?.message === "Missing refresh token or device ID") {
+      console.error("❌ Refresh token invalid or expired. Logging out user...");
+      await logoutUser();
+    } else {
+      console.warn("⚠️ Token refresh failed (transient):", error?.message || error);
+    }
     return null;
   }
 };

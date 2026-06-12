@@ -54,43 +54,14 @@ public class ChatService {
         this.pushNotificationService = pushNotificationService;
     }
 
-//    private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
-//        if ("group".equals(conversationType)) {
-//            return groupConversationRepository.findById(conversationId)
-//                    .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
-//        } else if ("private".equals(conversationType)) {
-//            return privateConversationRepository.findById(conversationId)
-//                    .orElseThrow(() -> new IllegalArgumentException("Private conversation not found"));
-//        } else {
-//            throw new IllegalArgumentException("Invalid conversation type");
-//        }
-//    }
-
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
-        System.out.println("🔍 [GetConversation] Looking up conversationId = " + conversationId + ", type = " + conversationType);
-
         if ("group".equals(conversationType)) {
             return groupConversationRepository.findById(conversationId)
-                    .map(gc -> {
-                        System.out.println("✅ [GetConversation] Found group conversation");
-                        return gc;
-                    })
-                    .orElseThrow(() -> {
-                        System.out.println("❌ [GetConversation] Group conversation not found");
-                        return new IllegalArgumentException("Group conversation not found");
-                    });
+                    .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
         } else if ("private".equals(conversationType)) {
             return privateConversationRepository.findById(conversationId)
-                    .map(pc -> {
-                        System.out.println("✅ [GetConversation] Found private conversation");
-                        return pc;
-                    })
-                    .orElseThrow(() -> {
-                        System.out.println("❌ [GetConversation] Private conversation not found");
-                        return new IllegalArgumentException("Private conversation not found");
-                    });
+                    .orElseThrow(() -> new IllegalArgumentException("Private conversation not found"));
         } else {
-            System.out.println("❌ [GetConversation] Invalid conversation type: " + conversationType);
             throw new IllegalArgumentException("Invalid conversation type");
         }
     }
@@ -144,31 +115,9 @@ public class ChatService {
                 .orElse(null);
     }
 
-//    public List<MessageDto> getChatHistory(Long conversationId, String conversationType, Long userId) {
-//        Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
-//        checkUserIsParticipant(conversation, userId);
-//
-//        List<Message> messages = messageRepository.findByConversationId(conversationId);
-//        return messages.stream()
-//                .map(MessageDto::new)
-//                .collect(Collectors.toList());
-//    }
-
     public List<MessageDto> getChatHistory(Long conversationId, String conversationType, Long userId) {
-        System.out.println("📩 [ChatHistory] Request received for conversationId = " + conversationId + ", type = " + conversationType + ", userId = " + userId);
-
         Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
-
-        System.out.println("👥 [ChatHistory] Participants in conversation: " +
-                conversation.getParticipants().stream().map(User::getId).toList());
-
-        try {
-            checkUserIsParticipant(conversation, userId);
-            System.out.println("✅ [ChatHistory] User is a participant.");
-        } catch (Exception e) {
-            System.out.println("❌ [ChatHistory] User " + userId + " is NOT a participant — throwing 403");
-            throw e;
-        }
+        checkUserIsParticipant(conversation, userId);
 
         List<Message> messages = messageRepository.findByConversationId(conversationId);
         return messages.stream()
@@ -225,52 +174,6 @@ public class ChatService {
         };
     }
 
-//    @Transactional
-//    public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
-//        Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
-//        User sender = getUserById(messageDto.getSenderId());
-//        checkUserIsParticipant(conversation, sender.getId());
-//
-//        Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-//        Message message = new Message(messageDto, conversation, sender, timestamp.toString());
-//        message = messageRepository.save(message);
-//
-//        createDeliveryStatuses(conversation, sender, message, timestamp);
-//
-//        MessageDto savedMessage = buildResponseDto(message, conversation);
-//
-////        List<String> destinations = getDestination(conversationType, savedMessage);
-////
-////        for (String destination : destinations) {
-////            messagingTemplate.convertAndSend(destination, savedMessage);
-////            System.out.println("✅ Message sent to destination: {}" + destination);
-////        }
-//
-//        for (Long recipientId : savedMessage.getRecipientIds()) {
-//            String email = userRepository.findById(recipientId).map(User::getEmail).orElse(null);
-//            if (email != null) {
-//                if (redisService.isUserOnline(email)) {
-//                    messagingTemplate.convertAndSend("/user/" + recipientId + "/queue/messages", savedMessage);
-//                } else {
-//                    messagePublisher.queueMessage(email, savedMessage); // 👈 Queue by email
-//                }
-//            }
-//        }
-//
-//        // Always send to sender
-//        messagingTemplate.convertAndSend("/user/" + savedMessage.getSenderId() + "/queue/messages", savedMessage);
-//
-//        // Send push notifications to recipients (directly passing recipientIds from MessageDto)
-////        pushNotificationService.sendPushNotification(savedMessage.getRecipientIds(), messageDto.getContent());
-//
-//        // Send push notifications to recipients with proper title (from ChatService)
-//        String notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
-////        pushNotificationService.sendPushNotification(savedMessage.getRecipientIds(), messageDto.getContent(), notificationTitle);
-//        pushNotificationService.sendPushNotification(savedMessage.getRecipientIds(), messageDto.getContent(), notificationTitle, savedMessage.getConversationId(), conversationType);
-//
-//        return savedMessage;
-//    }
-
     @Transactional
     public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
@@ -287,32 +190,55 @@ public class ChatService {
         String notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
         String notificationBody = getPushNotificationBody(savedMessage);
 
-        // ✅ Defer messaging and notifications
+        // ✅ Defer messaging and notifications. Each recipient is isolated so a
+        // Redis/RabbitMQ hiccup for one user cannot silently skip the rest of
+        // the fan-out (the message row is already committed at this point).
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 for (Long recipientId : savedMessage.getRecipientIds()) {
-                    String email = userRepository.findById(recipientId).map(User::getEmail).orElse(null);
-                    if (email != null) {
-                        if (redisService.isUserOnlineAnywhere(email)) {
+                    try {
+                        String email = userRepository.findById(recipientId).map(User::getEmail).orElse(null);
+                        if (email == null) continue;
+
+                        boolean online;
+                        try {
+                            online = redisService.isUserOnlineAnywhere(email);
+                        } catch (Exception redisDown) {
+                            // Presence unknown — deliver over the live socket; push covers offline.
+                            online = true;
+                        }
+
+                        if (online) {
                             messagingTemplate.convertAndSend("/user/" + recipientId + "/queue/messages", savedMessage);
                         } else {
                             messagePublisher.queueMessage(email, savedMessage);
                         }
+                    } catch (Exception e) {
+                        System.err.println("❌ Failed to fan out message " + savedMessage.getMessageId()
+                                + " to user " + recipientId + ": " + e.getMessage());
                     }
                 }
 
                 // Always notify sender
-                messagingTemplate.convertAndSend("/user/" + savedMessage.getSenderId() + "/queue/messages", savedMessage);
+                try {
+                    messagingTemplate.convertAndSend("/user/" + savedMessage.getSenderId() + "/queue/messages", savedMessage);
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to echo message to sender: " + e.getMessage());
+                }
 
                 // Push Notification
-                pushNotificationService.sendPushNotification(
-                        savedMessage.getRecipientIds(),
-                        notificationBody,
-                        notificationTitle,
-                        savedMessage.getConversationId(),
-                        conversationType
-                );
+                try {
+                    pushNotificationService.sendPushNotification(
+                            savedMessage.getRecipientIds(),
+                            notificationBody,
+                            notificationTitle,
+                            savedMessage.getConversationId(),
+                            conversationType
+                    );
+                } catch (Exception e) {
+                    System.err.println("❌ Failed to send push notifications: " + e.getMessage());
+                }
             }
         });
 
@@ -362,43 +288,6 @@ public class ChatService {
         }
         return messageRepository.save(message);
     }
-
-//    @Transactional
-//    public MessageDto editMessageAndBroadcast(Long messageId, String newContent, String conversationType, Long loggedInUserId) {
-//        // Get conversation and message
-//        Message message = messageRepository.findById(messageId)
-//                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
-//
-//        // Ensure only the sender can edit
-//        if (!message.getSender().getId().equals(loggedInUserId)) {
-//            throw new IllegalArgumentException("You can only edit your own messages.");
-//        }
-//
-//        // ✅ Prevent editing image messages
-//        if ("image".equalsIgnoreCase(message.getType())) {
-//            throw new IllegalArgumentException("Image messages cannot be edited.");
-//        }
-//
-//        // Update the content of the message
-//        message.setContent(newContent);
-//        message.setTimestamp(new Timestamp(System.currentTimeMillis()));
-//
-//        // Save the updated message in the database
-//        message = messageRepository.save(message);
-//
-//        // Build the MessageDto to return
-//        MessageDto updatedMessageDto = new MessageDto(message);
-//        updatedMessageDto.setEdited(true);
-//        List<String> destinations = getDestination(conversationType, updatedMessageDto);
-//
-//        // Broadcast the updated message to the relevant destinations
-//        for (String destination : destinations) {
-//            messagingTemplate.convertAndSend(destination, updatedMessageDto);
-//        }
-//
-//        // Return the updated message DTO
-//        return updatedMessageDto;
-//    }
 
     @Transactional
     public MessageDto editMessageAndBroadcast(Long messageId, String newContent, String conversationType, Long loggedInUserId) {
@@ -454,37 +343,6 @@ public class ChatService {
         }
     }
 
-//    @Transactional
-//    public MessageDto deleteMessageAndBroadcast(Long messageId) {
-//        Message message = messageRepository.findById(messageId)
-//                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
-//
-//        // Prepare MessageDto for broadcasting
-//        MessageDto deletedMessageDto = new MessageDto(message);
-//        deletedMessageDto.setDeleted(true);
-//
-//        // ✅ If it's an image, also delete from OSS
-//        if ("image".equalsIgnoreCase(message.getType())) {
-//            String imageUrl = message.getContent();
-//            String objectKey = extractObjectKeyFromUrl(imageUrl);
-//            ossService.deleteObject(objectKey);
-//        }
-//
-//        // Delete message from DB
-//        messageRepository.delete(message);
-//
-//        // Broadcast the deletion to all connected clients
-//        List<String> destinations = getDestination(message.getConversationType(), deletedMessageDto);
-//        System.out.println("DESTINATIONS" + destinations + deletedMessageDto);
-//        for (String destination : destinations) {
-//            System.out.println("SENDING TO" + destination);
-//            messagingTemplate.convertAndSend(destination, deletedMessageDto);
-//        }
-//
-//        // Return the deleted message details
-//        return deletedMessageDto;
-//    }
-
     @Transactional
     public MessageDto deleteMessageAndBroadcast(Long messageId) {
         Message message = messageRepository.findById(messageId)
@@ -493,20 +351,24 @@ public class ChatService {
         MessageDto deletedMessageDto = new MessageDto(message);
         deletedMessageDto.setDeleted(true);
 
-        // If image, delete from OSS
-        if ("image".equalsIgnoreCase(message.getType())) {
-            String imageUrl = message.getContent();
-            String objectKey = extractObjectKeyFromUrl(imageUrl);
-            ossService.deleteObject(objectKey);
-        }
+        boolean isImage = "image".equalsIgnoreCase(message.getType());
+        String imageContent = message.getContent();
 
         messageRepository.delete(message);
         List<String> destinations = getDestination(message.getConversationType(), deletedMessageDto);
 
-        // ✅ Defer broadcasting
+        // ✅ Defer OSS cleanup and broadcasting until the delete has committed —
+        // removing the object first would orphan-delete the image on rollback.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                if (isImage) {
+                    try {
+                        ossService.deleteObject(extractObjectKeyFromUrl(imageContent));
+                    } catch (Exception e) {
+                        System.err.println("❌ Failed to delete OSS object for message " + messageId + ": " + e.getMessage());
+                    }
+                }
                 for (String destination : destinations) {
                     messagingTemplate.convertAndSend(destination, deletedMessageDto);
                 }
