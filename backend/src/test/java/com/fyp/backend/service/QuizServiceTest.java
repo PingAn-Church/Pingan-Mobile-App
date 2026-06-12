@@ -3,6 +3,9 @@ package com.fyp.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -21,16 +24,21 @@ import org.mockito.quality.Strictness;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.QuizAttempt;
 import com.fyp.backend.model.QuizQuestion;
 import com.fyp.backend.repository.CourseQuizRepository;
+import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.QuizQuestionRepository;
+import com.fyp.backend.repository.UserRepository;
 
 /**
- * Unit tests for the quiz auto-grading engine — the migration's highest-risk
- * port. Repositories and progress recompute are mocked; a real ObjectMapper
+ * Unit tests for the quiz grading engine — the migration's highest-risk port.
+ * Auto-graded types are scored immediately; short-answer questions are held
+ * for manual instructor review (provisional score, not passable until graded).
+ * Repositories and progress recompute are mocked; a real ObjectMapper
  * exercises the JSON answer/correct-answer handling.
  */
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +48,8 @@ class QuizServiceTest {
     @Mock private CourseQuizRepository quizRepository;
     @Mock private QuizQuestionRepository questionRepository;
     @Mock private QuizAttemptRepository attemptRepository;
+    @Mock private CourseRepository courseRepository;
+    @Mock private UserRepository userRepository;
     @Mock private ProgressService progressService;
     @Mock private PushNotificationService pushNotificationService;
     @Mock private AchievementService achievementService;
@@ -50,6 +60,8 @@ class QuizServiceTest {
 
     private static final long USER = 5L;
     private static final long QUIZ = 1L;
+    private static final long COURSE = 10L;
+    private static final long INSTRUCTOR = 77L;
 
     private CourseQuiz quiz;
 
@@ -57,7 +69,7 @@ class QuizServiceTest {
     void setUp() {
         quiz = new CourseQuiz();
         quiz.setId(QUIZ);
-        quiz.setCourseId(10L);
+        quiz.setCourseId(COURSE);
         quiz.setSectionId(100L);
         quiz.setPassingScore(50);
         quiz.setMaxAttempts(null);
@@ -84,26 +96,26 @@ class QuizServiceTest {
     }
 
     @Test
-    void gradesEveryQuestionTypeCorrectly() {
+    void gradesEveryAutoQuestionTypeCorrectly() {
         when(questionRepository.findByQuizIdOrderByOrderIndexAsc(QUIZ)).thenReturn(List.of(
                 question(1, "multiple-choice", "Paris"),
                 question(2, "multiple-correct", "[\"A\",\"C\"]"),
                 question(3, "true-false", "True"),
-                question(4, "short-answer", "Hello World"),
-                question(5, "matching", "[{\"left\":\"x\",\"right\":\"1\"},{\"left\":\"y\",\"right\":\"2\"}]")));
+                question(4, "matching", "[{\"left\":\"x\",\"right\":\"1\"},{\"left\":\"y\",\"right\":\"2\"}]")));
 
         List<Map<String, Object>> answers = List.of(
                 Map.of("questionId", "1", "answer", "Paris"),
                 Map.of("questionId", "2", "answer", List.of("C", "A")), // order-insensitive
                 Map.of("questionId", "3", "answer", "True"),
-                Map.of("questionId", "4", "answer", "  hello   WORLD "), // normalized match
-                Map.of("questionId", "5", "answer",
+                Map.of("questionId", "4", "answer",
                         List.of(Map.of("left", "x", "right", "1"), Map.of("left", "y", "right", "2"))));
 
         Map<String, Object> data = dataOf(quizService.submitQuiz(USER, QUIZ, answers, null));
-        assertEquals(5, data.get("correctAnswers"));
+        assertEquals(4, data.get("correctAnswers"));
         assertEquals(100, data.get("score"));
         assertEquals(true, data.get("isPassed"));
+        assertEquals(false, data.get("pendingReview"));
+        assertEquals(true, data.get("gradesReleased"));
     }
 
     @Test
@@ -111,7 +123,7 @@ class QuizServiceTest {
         when(questionRepository.findByQuizIdOrderByOrderIndexAsc(QUIZ)).thenReturn(List.of(
                 question(1, "multiple-choice", "Paris"),
                 question(2, "multiple-correct", "[\"A\",\"C\"]"),
-                question(3, "short-answer", "Yes")));
+                question(3, "multiple-choice", "Yes")));
 
         List<Map<String, Object>> answers = List.of(
                 Map.of("questionId", "1", "answer", "London"),     // wrong
@@ -122,6 +134,32 @@ class QuizServiceTest {
         assertEquals(1, data.get("correctAnswers"));
         assertEquals(33, data.get("score")); // round(100/3)
         assertEquals(false, data.get("isPassed"));
+    }
+
+    @Test
+    void holdsShortAnswersForManualReviewWithProvisionalScore() {
+        when(questionRepository.findByQuizIdOrderByOrderIndexAsc(QUIZ)).thenReturn(List.of(
+                question(1, "multiple-choice", "Paris"),
+                question(2, "short-answer", "Hello World")));
+        Course course = new Course();
+        course.setId(COURSE);
+        course.setInstructorId(INSTRUCTOR);
+        when(courseRepository.findById(COURSE)).thenReturn(Optional.of(course));
+
+        List<Map<String, Object>> answers = List.of(
+                Map.of("questionId", "1", "answer", "Paris"),
+                Map.of("questionId", "2", "answer", "free text the instructor must read"));
+
+        Map<String, Object> data = dataOf(quizService.submitQuiz(USER, QUIZ, answers, null));
+        assertEquals(1, data.get("correctAnswers"));  // short answer is not auto-graded
+        assertEquals(100, data.get("score"));         // provisional: auto-gradable portion only
+        assertEquals(false, data.get("isPassed"));    // cannot pass until instructor grades
+        assertEquals(true, data.get("pendingReview"));
+        assertEquals(1, data.get("pendingCount"));
+        assertEquals(false, data.get("gradesReleased"));
+
+        // The course instructor is asked to review the held answers.
+        verify(pushNotificationService).notifyLearningEvent(eq(INSTRUCTOR), eq("Answers to review"), anyString());
     }
 
     @Test

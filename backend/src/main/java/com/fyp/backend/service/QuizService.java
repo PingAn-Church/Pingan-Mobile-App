@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,8 @@ import com.fyp.backend.repository.UserRepository;
  */
 @Service
 public class QuizService {
+
+    private static final Logger log = LoggerFactory.getLogger(QuizService.class);
 
     /** Question types graded manually by the instructor ("text" is the legacy alias). */
     private static final List<String> MANUAL_TYPES = List.of("short-answer", "text");
@@ -186,15 +190,30 @@ public class QuizService {
         progressService.recomputeModuleCompletion(userId, quiz.getCourseId(), quiz.getSectionId());
         progressService.recomputeCourseProgress(userId, quiz.getCourseId());
 
+        // Post-submission side effects are best-effort: the attempt is already
+        // saved, and a notification/achievement/goal failure must not fail the
+        // learner's submission.
         if (isPassed) {
-            pushNotificationService.notifyLearningEvent(userId, "Quiz passed",
-                    "You scored " + score + "% on \"" + quiz.getTitle() + "\". Well done!");
-            achievementService.evaluate(userId, quiz.getCourseId());
+            try {
+                pushNotificationService.notifyLearningEvent(userId, "Quiz passed",
+                        "You scored " + score + "% on \"" + quiz.getTitle() + "\". Well done!");
+                achievementService.evaluate(userId, quiz.getCourseId());
+            } catch (Exception e) {
+                log.warn("Quiz pass side effects failed for user {} quiz {}: {}", userId, quizId, e.getMessage());
+            }
         }
         if (hasShortAnswer) {
-            notifyInstructorOfPendingReview(quiz);
+            try {
+                notifyInstructorOfPendingReview(quiz);
+            } catch (Exception e) {
+                log.warn("Instructor review notification failed for quiz {}: {}", quizId, e.getMessage());
+            }
         }
-        goalService.onLearningActivity(userId, timeTakenMinutes == null ? 1 : timeTakenMinutes);
+        try {
+            goalService.onLearningActivity(userId, timeTakenMinutes == null ? 1 : timeTakenMinutes);
+        } catch (Exception e) {
+            log.warn("Goal tracking failed for user {}: {}", userId, e.getMessage());
+        }
 
         Integer remaining = maxAttempts == null ? null : Math.max(0, maxAttempts - attemptNumber);
         Map<String, Object> data = new LinkedHashMap<>();
