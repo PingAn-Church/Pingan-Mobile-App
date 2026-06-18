@@ -103,7 +103,6 @@ import {
   Text,
   SafeAreaView,
   StyleSheet,
-  ActivityIndicator,
   Image,
   TouchableOpacity,
 } from "react-native";
@@ -112,6 +111,7 @@ import { UserContext } from "../../context/UserContext";
 import { useState } from "react";
 import i18n from "../../../i18n";
 import logo from "../../../assets/logo.jpg";
+import EntryScreen from "../../components/EntryScreen";
 
 export default function WelcomePage() {
   const navigation = useNavigation();
@@ -130,11 +130,7 @@ export default function WelcomePage() {
   }, [user, loading]);
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </SafeAreaView>
-    );
+    return <EntryScreen />;
   }
 
   return (
