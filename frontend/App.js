@@ -1,5 +1,5 @@
 import 'react-native-reanimated';
-import React, { useContext } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import { Text } from "react-native";
 import { Platform } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
@@ -33,7 +33,7 @@ import DetailedGroupChatPage from "./src/pages/Social/DetailedGroupChatPage";
 import DetailedPrivateChatPage from "./src/pages/Social/DetailedPrivateChatPage";
 import MyActivityPage from "./src/pages/Activity/MyActivityPage";
 import ActivityDetailPage from "./src/pages/Activity/ActivityDetailPage";
-import { UserProvider } from "./src/context/UserContext";
+import { UserProvider, UserContext } from "./src/context/UserContext";
 import { ChatProvider } from "./src/context/ChatContext";
 import { WebSocketProvider } from "./src/context/WebSocketProvider";
 import ManageVideosPage, {
@@ -82,9 +82,10 @@ import AchievementsScreen from "./src/learning/screens/AchievementsScreen";
 import LearningGoalScreen from "./src/learning/screens/LearningGoalScreen";
 
 // Sidebar for desktop browsers
-import { useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View, Animated, StyleSheet } from "react-native";
 //import { createDrawerNavigator } from "@react-navigation/drawer";
 import Sidebar from "./src/components/Sidebar";
+import EntryScreen from "./src/components/EntryScreen";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -234,6 +235,62 @@ const linking = {
 };
 
 
+// Minimum time the branded entry overlay stays up so the ~1.6s dove animation
+// (plus its wordmark fade) plays through, even when the session check resolves
+// almost instantly (e.g. web with no stored token). Tune to taste.
+const MIN_SPLASH_MS = 2000;
+// Cross-fade duration when the entry overlay dissolves into the app.
+const ENTRY_FADE_MS = 450;
+
+// App-level entry overlay. The live navigator renders underneath from the very
+// first frame; the branded EntryScreen is held on top until the session check
+// is done AND the minimum splash time has elapsed, then cross-fades out to
+// reveal whatever the app settled on (welcome screen or dashboard). Because it
+// sits above the navigator, the dissolve is seamless on both native and web and
+// survives the redirect to HomeTabs.
+function EntryGate({ children }) {
+  const { loading } = useContext(UserContext);
+  const [minElapsed, setMinElapsed] = useState(false);
+  const [overlayMounted, setOverlayMounted] = useState(true);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Ready once the session is resolved and the splash has had its moment. A
+  // slow session check (slow network) extends the overlay past the floor.
+  const ready = !loading && minElapsed;
+
+  useEffect(() => {
+    if (!ready) return;
+    const anim = Animated.timing(opacity, {
+      toValue: 0,
+      duration: ENTRY_FADE_MS,
+      useNativeDriver: Platform.OS !== "web",
+    });
+    anim.start(({ finished }) => {
+      if (finished) setOverlayMounted(false);
+    });
+    return () => anim.stop();
+  }, [ready, opacity]);
+
+  return (
+    <View style={{ flex: 1 }}>
+      {children}
+      {overlayMounted && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { opacity }]}
+          pointerEvents={ready ? "none" : "auto"}
+        >
+          <EntryScreen />
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
 // Main App Navigator for stack and bottom tabs
 export default function App() {
   const { width } = useWindowDimensions();
@@ -250,6 +307,7 @@ export default function App() {
           <LanguageProvider>
             <ChatProvider>
               <WebSocketProvider>
+                <EntryGate>
                 <Stack.Navigator initialRouteName="Welcome">
                   <Stack.Screen
                     name="Welcome"
@@ -454,6 +512,7 @@ export default function App() {
                     options={{ headerTitle: "" }}
                   />
                 </Stack.Navigator>
+                </EntryGate>
               </WebSocketProvider>
             </ChatProvider>
           </LanguageProvider>

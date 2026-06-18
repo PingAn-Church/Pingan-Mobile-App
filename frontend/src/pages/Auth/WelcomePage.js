@@ -111,26 +111,23 @@ import { UserContext } from "../../context/UserContext";
 import { useState } from "react";
 import i18n from "../../../i18n";
 import logo from "../../../assets/logo.jpg";
-import EntryScreen from "../../components/EntryScreen";
 
 export default function WelcomePage() {
   const navigation = useNavigation();
   const { user, loading } = useContext(UserContext);
   const [logoUrl, setLogoUrl] = useState(null);
 
-  // automatically redirect if user is logged in
+  // Redirect a signed-in user to the app once the session check resolves. The
+  // App-level EntryGate overlay stays up over this transition and cross-fades
+  // out to reveal HomeTabs, so the redirect happens unseen behind the splash.
   useEffect(() => {
-    if (!user) return;
-    if (!loading) {
-      if (user) {
-        console.log("✅ User authenticated, redirecting to HomeTabs...");
-        navigation.replace("HomeTabs");
-      }
+    if (!loading && user) {
+      navigation.replace("HomeTabs");
     }
   }, [user, loading]);
 
   if (loading) {
-    return <EntryScreen />;
+    return null;
   }
 
   return (
