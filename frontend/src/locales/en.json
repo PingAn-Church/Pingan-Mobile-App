@@ -206,6 +206,17 @@
   "addVerifiedUserFailed": "Failed to verify user.",
   "removeVerifiedUserFailed": "Failed to remove verified user.",
 
+  "deactivateUserTitle": "Deactivate user?",
+  "deactivateUserMessage": "they will be signed out and blocked from logging in. Their data is kept and can be restored.",
+  "deactivateConfirmMessage": "This can be reverted later from the Inactive users list.",
+  "continue": "Continue",
+  "deactivate": "Deactivate",
+  "deactivateFailed": "Failed to deactivate user.",
+  "reactivate": "Reactivate",
+  "reactivateFailed": "Failed to reactivate user.",
+  "inactiveUsers": "Inactive Users",
+  "noInactiveUsers": "No inactive users.",
+
   "profile": "Profile",
   "name": "Name",
   "birthday": "Birthday",

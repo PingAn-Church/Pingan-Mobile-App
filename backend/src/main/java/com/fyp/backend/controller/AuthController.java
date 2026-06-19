@@ -68,6 +68,10 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or expired refresh token");
         }
 
+        if (!authService.isAccountActive(email)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("This account has been deactivated.");
+        }
+
         String newAccessToken = jwtUtil.generateAccessToken(email);
         String newRefreshToken = jwtUtil.generateRefreshToken(email);
 

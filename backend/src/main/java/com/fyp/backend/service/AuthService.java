@@ -86,7 +86,16 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid email or password.");
         }
 
+        if (!user.isActive()) {
+            throw new IllegalArgumentException("This account has been deactivated. Please contact an administrator.");
+        }
+
         return user;
+    }
+
+    /** Whether an account exists and is active (used to gate token refresh). */
+    public boolean isAccountActive(String email) {
+        return userRepository.findByEmail(email).map(User::isActive).orElse(false);
     }
 
     public void resetUserPassword(String email) {

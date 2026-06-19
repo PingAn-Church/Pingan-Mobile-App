@@ -115,7 +115,9 @@ public class UserService {
     }
 
     public List<User> findVerifiedUsers() {
-        return userRepository.findByIsVerifiedUserTrue();
+        return userRepository.findByIsVerifiedUserTrue().stream()
+                .filter(User::isActive)
+                .collect(Collectors.toList());
     }
 
     public List<User> findAdmins() {
@@ -123,7 +125,18 @@ public class UserService {
     }
 
     public List<User> findInstructors() {
-        return userRepository.findByIsInstructorTrue();
+        return userRepository.findByIsInstructorTrue().stream()
+                .filter(User::isActive)
+                .collect(Collectors.toList());
+    }
+
+    public List<User> findInactiveUsers() {
+        return userRepository.findByActiveFalse();
+    }
+
+    /** Whether an account exists and is active (used to gate login/refresh). */
+    public boolean isAccountActive(String email) {
+        return userRepository.findByEmail(email).map(User::isActive).orElse(false);
     }
 
     @Transactional
@@ -144,6 +157,19 @@ public class UserService {
         } else {
             throw new RuntimeException("User not found");
         }
+    }
+
+    @Transactional
+    public void updateUserActiveStatus(Long userId, boolean active) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        // Admins must be downgraded before deactivation, so the account lifecycle
+        // can't strand the system without an admin.
+        if (!active && user.isAdmin()) {
+            throw new RuntimeException("Downgrade this admin before deactivating the account.");
+        }
+        user.setActive(active);
+        userRepository.save(user);
     }
 
     @Transactional

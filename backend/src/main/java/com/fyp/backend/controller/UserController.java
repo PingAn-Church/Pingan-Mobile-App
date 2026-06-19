@@ -126,6 +126,7 @@ public class UserController {
         List<User> allUsers = userRepository.findAll();
         List<UserProfileDto> usersWithoutCurrentUser = allUsers.stream()
                 .filter(user -> !user.getId().equals(currentUser.getId())) // Exclude the current user
+                .filter(User::isActive) // Hide deactivated accounts
                 .map(UserProfileDto::from)
                 .collect(Collectors.toList());
 
@@ -176,6 +177,28 @@ public class UserController {
             @RequestParam boolean isAdmin) {
         userService.updateUserAdminStatus(id, isAdmin);
         return ResponseEntity.ok("User admin status updated!");
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/inactive")
+    public ResponseEntity<List<UserProfileDto>> getInactiveUsers() {
+        List<UserProfileDto> inactive = userService.findInactiveUsers().stream()
+                .map(UserProfileDto::from)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(inactive);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/update-active/{id}")
+    public ResponseEntity<String> updateUserActiveStatus(
+            @PathVariable Long id,
+            @RequestParam boolean active) {
+        try {
+            userService.updateUserActiveStatus(id, active);
+            return ResponseEntity.ok("User active status updated!");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
     }
 
     @GetMapping("/instructors")

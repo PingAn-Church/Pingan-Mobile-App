@@ -13,6 +13,7 @@ import {
   getInstructorUsers,
   getVerifiedUsers,
   updateUserInstructorStatus,
+  updateUserActiveStatus,
 } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
 import i18n from "../../../i18n";
@@ -77,6 +78,38 @@ export default function ManageInstructorsPage() {
     }
   };
 
+  // Deactivation is irreversible-looking to the user, so double-confirm. Admins
+  // and the current user never get the button (see canDeactivate).
+  const canDeactivate = (u) => !u.admin && u.id !== user.id;
+
+  const confirmDeactivate = (target) => {
+    showAlert(
+      i18n.t("deactivateUserTitle"),
+      `${target.firstName} ${target.lastName} — ${i18n.t("deactivateUserMessage")}`,
+      [
+        { text: i18n.t("cancel"), style: "cancel" },
+        { text: i18n.t("continue"), onPress: () => confirmDeactivateFinal(target) },
+      ]
+    );
+  };
+
+  const confirmDeactivateFinal = (target) => {
+    showAlert(i18n.t("areYouSure"), i18n.t("deactivateConfirmMessage"), [
+      { text: i18n.t("cancel"), style: "cancel" },
+      { text: i18n.t("deactivate"), onPress: () => doDeactivate(target.id) },
+    ]);
+  };
+
+  const doDeactivate = async (userId) => {
+    try {
+      await updateUserActiveStatus(userId, false);
+      loadUsers();
+    } catch (error) {
+      console.error("Error deactivating user:", error);
+      showAlert(i18n.t("error"), i18n.t("deactivateFailed"), [{ text: i18n.t("ok") }]);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>{i18n.t("manageInstructors")}</Text>
@@ -85,9 +118,20 @@ export default function ManageInstructorsPage() {
       {instructors.length > 0 ? (
         instructors.map((instructor) => (
           <View key={instructor.id} style={styles.userItem}>
-            <Text style={styles.userName}>
-              {instructor.firstName} {instructor.lastName}
-            </Text>
+            <View style={styles.userLeft}>
+              {canDeactivate(instructor) && (
+                <TouchableOpacity
+                  onPress={() => confirmDeactivate(instructor)}
+                  style={styles.iconButton}
+                  accessibilityLabel={i18n.t("deactivate")}
+                >
+                  <Ionicons name="remove-circle" size={24} color="red" />
+                </TouchableOpacity>
+              )}
+              <Text style={styles.userName}>
+                {instructor.firstName} {instructor.lastName}
+              </Text>
+            </View>
             <TouchableOpacity
               onPress={() => handleRemoveInstructor(instructor.id)}
               style={styles.iconButton}
@@ -104,9 +148,20 @@ export default function ManageInstructorsPage() {
       {candidates.length > 0 ? (
         candidates.map((candidate) => (
           <View key={candidate.id} style={styles.userItem}>
-            <Text style={styles.userName}>
-              {candidate.firstName} {candidate.lastName}
-            </Text>
+            <View style={styles.userLeft}>
+              {canDeactivate(candidate) && (
+                <TouchableOpacity
+                  onPress={() => confirmDeactivate(candidate)}
+                  style={styles.iconButton}
+                  accessibilityLabel={i18n.t("deactivate")}
+                >
+                  <Ionicons name="remove-circle" size={24} color="red" />
+                </TouchableOpacity>
+              )}
+              <Text style={styles.userName}>
+                {candidate.firstName} {candidate.lastName}
+              </Text>
+            </View>
             <TouchableOpacity
               onPress={() => handleAddInstructor(candidate.id)}
               style={styles.iconButton}
@@ -149,6 +204,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     marginBottom: 8,
     elevation: 2,
+  },
+  userLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
   },
   userName: {
     fontSize: 18,
