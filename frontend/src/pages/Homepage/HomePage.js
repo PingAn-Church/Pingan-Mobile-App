@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Platform,
-  Image,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Carousel from "../../components/Carousel";
@@ -19,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import PlatformWebView from "../../components/PlatformWebView";
 import { fetchPictures } from "../../service/OSSService";
 import { getPublishedCourses } from "../../learning/services/courseService";
+import CourseCoverImage from "../../learning/components/CourseCoverImage";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 
@@ -207,12 +207,9 @@ export default function HomePage() {
                     navigation.navigate("LearningCourseDetail", { courseId: course.id })
                   }
                 >
-                  <Image
-                    source={{
-                      uri:
-                        course.thumbnailUrl ||
-                        "https://picsum.photos/seed/course/400/250",
-                    }}
+                  <CourseCoverImage
+                    uri={course.thumbnailUrl}
+                    fallback="https://picsum.photos/seed/course/400/250"
                     style={styles.courseImage}
                   />
                   <Text style={styles.courseTitle} numberOfLines={2}>
