@@ -42,6 +42,7 @@ const mapLesson = (l: any): LearningLesson => ({
   resourceType: l.resource_type ?? undefined,
   isPreview: !!l.is_preview,
   orderIndex: num(l.order_index),
+  isCompleted: !!l.is_completed,
 });
 
 export const getCategories = async (): Promise<LearningCategory[]> => {

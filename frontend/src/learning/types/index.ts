@@ -39,6 +39,8 @@ export interface LearningLesson {
   resourceType?: string;
   isPreview?: boolean;
   orderIndex?: number;
+  /** Whether the requesting user has completed this content (video/resource). */
+  isCompleted?: boolean;
 }
 
 export interface LearningModule {

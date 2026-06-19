@@ -96,6 +96,8 @@ export default function CourseDetailScreen() {
         title: lesson.title,
         videoUrl: lesson.videoUrl,
         videoId: lesson.id,
+        isCompleted: !!lesson.isCompleted,
+        courseId,
       });
     } else if (lesson.type === "quiz") {
       navigation.navigate("QuizScreen", { quizId: lesson.id, title: lesson.title });
@@ -105,6 +107,8 @@ export default function CourseDetailScreen() {
         resourceUrl: lesson.resourceUrl,
         resourceType: lesson.resourceType,
         resourceId: lesson.id,
+        isCompleted: !!lesson.isCompleted,
+        courseId,
       });
     }
   };

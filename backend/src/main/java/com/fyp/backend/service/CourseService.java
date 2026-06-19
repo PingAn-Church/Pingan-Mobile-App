@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,8 @@ import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
 import com.fyp.backend.model.CourseSection;
 import com.fyp.backend.model.CourseVideo;
+import com.fyp.backend.model.ResourceProgress;
+import com.fyp.backend.model.UserVideoProgress;
 import com.fyp.backend.repository.CategoryRepository;
 import com.fyp.backend.repository.CourseOutcomeRepository;
 import com.fyp.backend.repository.CourseQuizRepository;
@@ -28,6 +31,8 @@ import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
+import com.fyp.backend.repository.ResourceProgressRepository;
+import com.fyp.backend.repository.UserVideoProgressRepository;
 
 /**
  * Read-side catalog logic (P2). Returns loosely-typed maps matching the JSON
@@ -45,6 +50,8 @@ public class CourseService {
     @Autowired private CourseQuizRepository quizRepository;
     @Autowired private CourseRatingRepository ratingRepository;
     @Autowired private CourseWishlistRepository wishlistRepository;
+    @Autowired private UserVideoProgressRepository videoProgressRepository;
+    @Autowired private ResourceProgressRepository resourceProgressRepository;
 
     public List<Map<String, Object>> listCategories() {
         return categoryRepository.findAll().stream()
@@ -127,6 +134,11 @@ public class CourseService {
                     .findBySectionIdOrderByOrderIndexAsc(section.getId()).stream()
                     .map(this::quizLessonMap).collect(Collectors.toList());
 
+            // Per-user completion flags so the app can show "Completed" instead of
+            // an always-on "Mark as complete" button (lessons share these refs).
+            markVideoCompletion(videos, userId);
+            markResourceCompletion(resources, userId);
+
             List<Map<String, Object>> lessons = new ArrayList<>();
             lessons.addAll(videos);
             lessons.addAll(resources);
@@ -145,6 +157,36 @@ public class CourseService {
         response.put("success", true);
         response.put("data", data);
         return response;
+    }
+
+    private void markVideoCompletion(List<Map<String, Object>> videos, Long userId) {
+        if (videos.isEmpty()) return;
+        Set<Long> done = Set.of();
+        if (userId != null) {
+            List<Long> ids = videos.stream()
+                    .map(v -> Long.valueOf((String) v.get("id"))).collect(Collectors.toList());
+            done = videoProgressRepository.findByUserIdAndVideoIdIn(userId, ids).stream()
+                    .filter(UserVideoProgress::isCompleted)
+                    .map(UserVideoProgress::getVideoId)
+                    .collect(Collectors.toSet());
+        }
+        final Set<Long> completed = done;
+        videos.forEach(v -> v.put("is_completed", completed.contains(Long.valueOf((String) v.get("id")))));
+    }
+
+    private void markResourceCompletion(List<Map<String, Object>> resources, Long userId) {
+        if (resources.isEmpty()) return;
+        Set<Long> done = Set.of();
+        if (userId != null) {
+            List<Long> ids = resources.stream()
+                    .map(r -> Long.valueOf((String) r.get("id"))).collect(Collectors.toList());
+            done = resourceProgressRepository.findByUserIdAndResourceIdIn(userId, ids).stream()
+                    .filter(ResourceProgress::isCompleted)
+                    .map(ResourceProgress::getResourceId)
+                    .collect(Collectors.toSet());
+        }
+        final Set<Long> completed = done;
+        resources.forEach(r -> r.put("is_completed", completed.contains(Long.valueOf((String) r.get("id")))));
     }
 
     public Map<String, Object> getVideoDetail(Long videoId) {
