@@ -125,8 +125,11 @@ public class AuthService {
     }
 
     /**
-     * Validate a verification code and mark the account verified. Returns the
-     * user so the caller can issue session tokens (auto-login after sign-up).
+     * Validate a registration email verification code. This only confirms the
+     * user controls the email address — a security add-on at sign-up. It does
+     * NOT change the account's "verified user" status, which is a separate,
+     * admin-managed flag. Returns the user so the caller can issue session
+     * tokens (auto-login after sign-up).
      */
     public User verifyCode(String email, String code) {
         User user = userRepository.findByEmail(email)
@@ -137,8 +140,6 @@ public class AuthService {
             throw ApiException.badRequest("Invalid or expired verification code.");
         }
 
-        user.setVerifiedUser(true);
-        userRepository.save(user);
         return user;
     }
 
