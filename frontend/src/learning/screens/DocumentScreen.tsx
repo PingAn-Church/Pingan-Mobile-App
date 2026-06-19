@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Linking, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -45,6 +45,11 @@ export default function DocumentScreen() {
   const resourceId = route.params?.resourceId ? String(route.params.resourceId) : null;
   const courseId = route.params?.courseId ? String(route.params.courseId) : null;
   const uri = viewerUrl(rawUrl, route.params?.resourceType);
+  const { height: windowHeight } = useWindowDimensions();
+  // The embedded viewer needs a definite height — flex:1 collapses the WebView
+  // on phones — so size it to the screen (minus header + complete button) and
+  // let it scale across devices and orientations.
+  const viewerHeight = Math.max(windowHeight - (resourceId ? 170 : 90), 320);
   const [marking, setMarking] = useState(false);
   const [completed, setCompleted] = useState<boolean>(!!route.params?.isCompleted);
 
@@ -82,7 +87,7 @@ export default function DocumentScreen() {
       {uri ? (
         <PlatformWebView
           source={{ uri }}
-          style={styles.viewer}
+          style={[styles.viewer, { height: viewerHeight }]}
           javaScriptEnabled
           domStorageEnabled
         />
@@ -124,7 +129,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   openBtnText: { color: Colors.white, fontWeight: "600" },
-  viewer: { flex: 1, backgroundColor: Colors.white },
+  viewer: { width: "100%", backgroundColor: Colors.white },
   completeBtn: {
     flexDirection: "row",
     alignItems: "center",
