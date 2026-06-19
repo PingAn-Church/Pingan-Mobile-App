@@ -21,7 +21,8 @@ public class EmailService {
 
     // The authenticated SMTP account; used as the actual From address while the
     // displayed sender name stays friendly ("Pingan Church SG <address>").
-    @Value("${spring.mail.username}")
+    // Defaulted to empty so the context still loads when the var is unset (CI).
+    @Value("${spring.mail.username:}")
     private String fromAddress;
 
     public void sendPasswordResetEmail(String toEmail, String newPassword) {
