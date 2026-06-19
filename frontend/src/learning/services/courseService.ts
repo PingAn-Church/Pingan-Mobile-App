@@ -42,6 +42,11 @@ const mapLesson = (l: any): LearningLesson => ({
   resourceType: l.resource_type ?? undefined,
   isPreview: !!l.is_preview,
   orderIndex: num(l.order_index),
+  isCompleted: !!l.is_completed,
+  quizAttempted: !!l.attempted,
+  quizScore: num(l.score),
+  quizPassed: !!l.is_passed,
+  gradesReleased: l.grades_released === undefined ? true : !!l.grades_released,
 });
 
 export const getCategories = async (): Promise<LearningCategory[]> => {
@@ -107,5 +112,6 @@ export const getCourseDetail = async (
     ...base,
     outcomes: Array.isArray(d?.outcomes) ? d.outcomes : [],
     modules,
+    isInWishlist: !!d?.is_in_wishlist,
   };
 };

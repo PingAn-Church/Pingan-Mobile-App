@@ -271,6 +271,42 @@ export const updateUserAdminStatus = async (userId, isAdmin) => {
   }
 };
 
+// Soft delete: deactivate (active=false) or reactivate (active=true) an account.
+export const updateUserActiveStatus = async (userId, active) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  try {
+    const response = await axios.post(
+      apiUrl(`/api/users/update-active/${userId}`),
+      null,
+      {
+        params: { active },
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating user active status:", error);
+    throw error;
+  }
+};
+
+export const getInactiveUsers = async () => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  try {
+    const response = await axios.get(apiUrl(`/api/users/inactive`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching inactive users:", error);
+    throw error;
+  }
+};
+
 export const updateUserProfile = async (userData) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");

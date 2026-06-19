@@ -47,6 +47,13 @@ public class User {
     @Column(nullable = false)
     private boolean isInstructor = false;
 
+    // Soft-delete flag. Inactive accounts are blocked from logging in and hidden
+    // from the user/role listings, but their data is retained so an admin can
+    // reactivate them.
+    @ColumnDefault("true")
+    @Column(nullable = false)
+    private boolean active = true;
+
     // E-learning: gamification credits balance
     @ColumnDefault("0")
     @Column(nullable = false)

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import com.fyp.backend.dto.LoginDto;
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
+import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.User;
 import com.fyp.backend.service.AuthService;
 import com.fyp.backend.service.RedisService;
@@ -39,6 +40,9 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginDto loginDto, @RequestParam String deviceId) {
+        if (deviceId == null || deviceId.isBlank()) {
+            return ResponseEntity.badRequest().body("Device ID is required.");
+        }
         try {
             User user = authService.authenticateUser(loginDto);
 
@@ -60,11 +64,18 @@ public class AuthController {
 
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> requestBody, @RequestParam String deviceId) {
+        if (deviceId == null || deviceId.isBlank()) {
+            return ResponseEntity.badRequest().body("Device ID is required.");
+        }
         String refreshToken = requestBody.get("refreshToken");
         String email = jwtUtil.extractEmail(refreshToken);
 
         if (email == null || !refreshTokenService.validateRefreshToken(email, deviceId, refreshToken)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or expired refresh token");
+        }
+
+        if (!authService.isAccountActive(email)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("This account has been deactivated.");
         }
 
         String newAccessToken = jwtUtil.generateAccessToken(email);
@@ -98,10 +109,59 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto userDto) {
         try {
+            // Create the (unverified) account. Tokens are issued only after the
+            // emailed verification code is confirmed via /verify-code.
             UserProfileDto registeredUser = authService.registerUser(userDto);
             return ResponseEntity.ok(registeredUser);
+        } catch (IllegalStateException e) {
+            // Email belongs to a deactivated account.
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+            // Email already in use by an active account.
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/send-verification-code")
+    public ResponseEntity<?> sendVerificationCode(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body("Email is required.");
+        }
+        try {
+            authService.sendVerificationCode(email);
+            return ResponseEntity.ok("Verification code sent.");
+        } catch (ApiException e) {
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/verify-code")
+    public ResponseEntity<?> verifyCode(@RequestBody Map<String, String> body, @RequestParam String deviceId) {
+        String email = body.get("email");
+        String code = body.get("code");
+        if (email == null || code == null) {
+            return ResponseEntity.badRequest().body("Email and code are required.");
+        }
+        if (deviceId == null || deviceId.isBlank()) {
+            return ResponseEntity.badRequest().body("Device ID is required.");
+        }
+        try {
+            User user = authService.verifyCode(email, code);
+
+            // Verified — issue tokens so the app logs the user in automatically.
+            String accessToken = jwtUtil.generateAccessToken(user.getEmail());
+            String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+            refreshTokenService.saveRefreshToken(user.getEmail(), deviceId, refreshToken, 1000L * 60 * 60 * 24 * 30);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("accessToken", accessToken);
+            response.put("refreshToken", refreshToken);
+            response.put("user", UserProfileDto.from(user));
+
+            return ResponseEntity.ok(response);
+        } catch (ApiException e) {
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
         }
     }
 

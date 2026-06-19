@@ -63,10 +63,12 @@ export default function CourseEditorScreen() {
   const [categories, setCategories] = useState<LearningCategory[]>([]);
   const [detail, setDetail] = useState<LearningCourseDetail | null>(null);
 
-  // category modal
-  const [categoryModal, setCategoryModal] = useState<{ visible: boolean; name: string; color: string }>(
+  // category create/edit modal (id present => editing an existing category)
+  const [categoryModal, setCategoryModal] = useState<{ visible: boolean; id?: string; name: string; color: string; origName?: string }>(
     { visible: false, name: "", color: CATEGORY_COLORS[0] }
   );
+  // manage-categories modal (list with edit/delete)
+  const [manageVisible, setManageVisible] = useState(false);
   // section modal
   const [sectionModal, setSectionModal] = useState<{ visible: boolean; id?: string; title: string; description: string }>(
     { visible: false, title: "", description: "" }
@@ -224,13 +226,39 @@ export default function CourseEditorScreen() {
       return;
     }
     try {
-      await authoring.createCategory({ name, color: categoryModal.color });
+      if (categoryModal.id) {
+        await authoring.updateCategory(categoryModal.id, { name, color: categoryModal.color });
+        // Follow the rename if we just edited the currently selected category.
+        if (categoryName === categoryModal.origName) setCategoryName(name);
+      } else {
+        await authoring.createCategory({ name, color: categoryModal.color });
+        setCategoryName(name);
+      }
       setCategories(await getCategories());
-      setCategoryName(name);
       setCategoryModal({ visible: false, name: "", color: CATEGORY_COLORS[0] });
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to create category.");
+      notify("Error", e?.message || "Failed to save category.");
     }
+  };
+
+  const openEditCategory = (c: LearningCategory) =>
+    setCategoryModal({ visible: true, id: c.id, name: c.name, color: c.color || CATEGORY_COLORS[0], origName: c.name });
+
+  const removeCategory = (c: LearningCategory) => {
+    confirmDestructive(
+      "Delete category",
+      `Delete "${c.name}"? Courses in it move to General.`,
+      "Delete",
+      async () => {
+        try {
+          await authoring.deleteCategory(c.id);
+          setCategories(await getCategories());
+          if (categoryName === c.name) setCategoryName("General");
+        } catch (e: any) {
+          notify("Error", e?.message || "Failed to delete the category.");
+        }
+      }
+    );
   };
 
   // ---- outcomes -----------------------------------------------------
@@ -514,6 +542,13 @@ export default function CourseEditorScreen() {
           <Ionicons name="add" size={15} color={Colors.secondary} />
           <Text style={[styles.chipText, { color: Colors.secondary }]}>New</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.chip, styles.chipManage]}
+          onPress={() => setManageVisible(true)}
+          accessibilityLabel="Manage categories"
+        >
+          <Ionicons name="settings-outline" size={15} color={Colors.textSecondary} />
+        </TouchableOpacity>
       </ScrollView>
 
       <View style={styles.row2}>
@@ -669,11 +704,61 @@ export default function CourseEditorScreen() {
         </View>
       )}
 
-      {/* Category modal */}
+      {/* Manage categories modal */}
+      <Modal visible={manageVisible} transparent animationType="fade" onRequestClose={() => setManageVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: "85%" }]}>
+            <View style={styles.moduleHeader}>
+              <Text style={styles.modalTitle} numberOfLines={1}>Manage categories</Text>
+              <TouchableOpacity onPress={() => setManageVisible(false)}>
+                <Ionicons name="close" size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {categories.length === 0 ? (
+              <Text style={styles.muted}>No categories yet. Add one below.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }}>
+                {categories.map((c) => {
+                  const isGeneral = c.name.trim().toLowerCase() === "general";
+                  return (
+                    <View key={c.id} style={styles.lessonRow}>
+                      <View style={[styles.catDot, { backgroundColor: c.color || Colors.textMuted }]} />
+                      <Text style={styles.lessonText} numberOfLines={1}>
+                        {c.name}
+                        {c.courseCount ? `  ·  ${c.courseCount}` : ""}
+                      </Text>
+                      {isGeneral ? (
+                        <Text style={styles.catDefaultTag}>default</Text>
+                      ) : (
+                        <>
+                          <TouchableOpacity onPress={() => openEditCategory(c)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="create-outline" size={18} color={Colors.textSecondary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => removeCategory(c)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="trash-outline" size={18} color={Colors.red} />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={[styles.modalSaveBtn, { alignSelf: "stretch", alignItems: "center", marginTop: 14 }]}
+              onPress={() => setCategoryModal({ visible: true, name: "", color: CATEGORY_COLORS[0] })}
+            >
+              <Text style={styles.saveBtnText}>Add category</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Category create/edit modal */}
       <Modal visible={categoryModal.visible} transparent animationType="fade" onRequestClose={() => setCategoryModal((m) => ({ ...m, visible: false }))}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>New category</Text>
+            <Text style={styles.modalTitle}>{categoryModal.id ? "Edit category" : "New category"}</Text>
             <TextInput style={styles.input} value={categoryModal.name} onChangeText={(v) => setCategoryModal((m) => ({ ...m, name: v }))} placeholder="Category name" placeholderTextColor={Colors.textMuted} />
             <Text style={styles.label}>Color</Text>
             <View style={styles.swatchRow}>
@@ -690,7 +775,7 @@ export default function CourseEditorScreen() {
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveCategory}>
-                <Text style={styles.saveBtnText}>Create</Text>
+                <Text style={styles.saveBtnText}>{categoryModal.id ? "Save" : "Create"}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -903,8 +988,11 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: Colors.backgroundGray, marginRight: 8 },
   chipActive: { backgroundColor: Colors.secondary },
   chipNew: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "transparent", borderWidth: 1, borderColor: Colors.secondary },
+  chipManage: { alignItems: "center", justifyContent: "center", backgroundColor: "transparent", borderWidth: 1, borderStyle: "dashed", borderColor: Colors.textSecondary, paddingHorizontal: 12 },
   chipText: { color: Colors.textSecondary, fontWeight: "600" },
   chipTextActive: { color: Colors.white },
+  catDot: { width: 14, height: 14, borderRadius: 7 },
+  catDefaultTag: { color: Colors.textMuted, fontSize: 12, fontStyle: "italic" },
   swatchRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
   swatch: { width: 30, height: 30, borderRadius: 15 },
   swatchActive: { borderWidth: 3, borderColor: Colors.white },

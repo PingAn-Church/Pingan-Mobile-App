@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import WelcomePage from "./src/pages/Auth/WelcomePage";
 import ChatPage from "./src/pages/Social/ChatPage"; // Assuming ChatPage is in another file
 import RegisterPage from "./src/pages/Auth/RegisterPage"; // Assuming RegisterPage is in another file
+import VerificationCodePage from "./src/pages/Auth/VerificationCodePage";
 import LoginPage, { ForgotPasswordPage } from "./src/pages/Auth/LoginPage";
 import OthersPage, { OthersSectionPage } from "./src/pages/Others/OthersPage";
 import ProfilePage, {
@@ -76,6 +77,7 @@ import MyCoursesScreen from "./src/learning/screens/MyCoursesScreen";
 import WishlistScreen from "./src/learning/screens/WishlistScreen";
 import LeaveReviewScreen from "./src/learning/screens/LeaveReviewScreen";
 import QuizScreen from "./src/learning/screens/QuizScreen";
+import QuizResultsScreen from "./src/learning/screens/QuizResultsScreen";
 import CertificatesScreen from "./src/learning/screens/CertificatesScreen";
 import CertificateViewerScreen from "./src/learning/screens/CertificateViewerScreen";
 import AchievementsScreen from "./src/learning/screens/AchievementsScreen";
@@ -342,6 +344,7 @@ export default function App() {
                     component={DetailedGroupChatPage}
                   />
                   <Stack.Screen name="Register" component={RegisterPage} />
+                  <Stack.Screen name="VerificationCode" component={VerificationCodePage} />
                   <Stack.Screen name="Login" component={LoginPage} />
                   <Stack.Screen
                     name="OthersSection"
@@ -490,6 +493,11 @@ export default function App() {
                     name="QuizScreen"
                     component={QuizScreen}
                     options={{ headerTitle: "Quiz" }}
+                  />
+                  <Stack.Screen
+                    name="QuizResults"
+                    component={QuizResultsScreen}
+                    options={{ headerTitle: "Quiz results" }}
                   />
                   <Stack.Screen
                     name="Certificates"

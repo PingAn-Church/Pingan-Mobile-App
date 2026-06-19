@@ -355,6 +355,20 @@ public class PushNotificationService {
         }
     }
 
+    /**
+     * Quiz-graded push that deep-links the learner to the quiz results screen.
+     * The quiz id rides on the existing conversationId field, tagged with the
+     * "quiz-graded" type so the app routes it to results rather than chat.
+     */
+    public void notifyQuizGraded(Long userId, String title, String message, Long quizId) {
+        if (userId == null) return;
+        try {
+            sendPushNotification(List.of(userId), message, title, quizId, "quiz-graded");
+        } catch (Exception ignored) {
+            // best-effort notification; never disrupt the originating action
+        }
+    }
+
     // Send push notifications to all devices associated with the user
     public void sendPushNotification(List<Long> recipientIds, String message, String title, Long conversationId, String conversationType) {
         for (Long userId : recipientIds) {

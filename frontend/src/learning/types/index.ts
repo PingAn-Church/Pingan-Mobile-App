@@ -39,6 +39,14 @@ export interface LearningLesson {
   resourceType?: string;
   isPreview?: boolean;
   orderIndex?: number;
+  /** Whether the requesting user has completed this content (video/resource). */
+  isCompleted?: boolean;
+  // Quiz lessons only: the requesting user's result, so the list can show marks.
+  quizAttempted?: boolean;
+  quizScore?: number;
+  quizPassed?: boolean;
+  /** false => an attempt is awaiting the instructor's review (show "Pending review"). */
+  gradesReleased?: boolean;
 }
 
 export interface LearningModule {
@@ -51,4 +59,6 @@ export interface LearningModule {
 export interface LearningCourseDetail extends LearningCourse {
   outcomes: string[];
   modules: LearningModule[];
+  /** Whether the requesting user has this course in their wishlist. */
+  isInWishlist?: boolean;
 }

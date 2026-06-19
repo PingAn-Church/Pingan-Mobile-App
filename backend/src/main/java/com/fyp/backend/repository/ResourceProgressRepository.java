@@ -12,6 +12,8 @@ import com.fyp.backend.model.ResourceProgress;
 public interface ResourceProgressRepository extends JpaRepository<ResourceProgress, Long> {
     Optional<ResourceProgress> findByUserIdAndResourceId(Long userId, Long resourceId);
 
+    List<ResourceProgress> findByUserIdAndResourceIdIn(Long userId, List<Long> resourceIds);
+
     long countByUserIdAndResourceIdInAndIsCompletedTrue(Long userId, List<Long> resourceIds);
 
     void deleteByResourceIdIn(List<Long> resourceIds);

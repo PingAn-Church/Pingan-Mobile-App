@@ -145,18 +145,25 @@ export default function RegisterPage() {
       };
 
       const response = await registerUser(user);
-      console.log("REGISTER LOG", response.data);
 
-      if (response.status === 200)
-        await handleRegisterPushToken(response.data.id);
-      showAlert(i18n.t("success"), i18n.t("userRegisteredSuccess"), [
-        {
-          text: i18n.t("ok"),
-          onPress: () => navigation.navigate("Welcome"), // Navigate after dismissing alert
-        },
-      ]);
+      // Account created (unverified). Register the push token now (stored
+      // inactive pre-JWT) and send the user to enter the emailed code.
+      if (response.status === 200) {
+        const newUser = response.data;
+        if (newUser?.id) await handleRegisterPushToken(newUser.id);
+        navigation.navigate("VerificationCode", { email });
+      }
     } catch (error) {
-      showAlert(i18n.t("error"), i18n.t("registerFailed"));
+      const status = error?.response?.status;
+      let message;
+      if (status === 403) {
+        message = i18n.t("accountDeactivatedContactAdmin");
+      } else if (status === 409) {
+        message = i18n.t("emailAlreadyExists");
+      } else {
+        message = i18n.t("registerFailed");
+      }
+      showAlert(i18n.t("error"), message);
     }
   };
 

@@ -4,15 +4,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.dto.LoginDto;
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
+import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.TotpUtil;
 
 @Service
 public class AuthService {
@@ -21,13 +24,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
+    private final RedisService redisService;
 
     @Autowired
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil, EmailService emailService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+            EmailService emailService, RedisService redisService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.emailService = emailService;
+        this.redisService = redisService;
     }
 
     /**
@@ -36,7 +42,15 @@ public class AuthService {
      * @param userDto The user details to register.
      */
     public UserProfileDto registerUser(UserDto userDto) {
-        if (userRepository.findByEmail(userDto.getEmail()).isPresent()) {
+        Optional<User> existing = userRepository.findByEmail(userDto.getEmail());
+        if (existing.isPresent()) {
+            // A deactivated account still owns the email; surface a distinct
+            // signal (handled as 403) so the app can guide them to an admin
+            // rather than showing a generic "already exists".
+            if (!existing.get().isActive()) {
+                throw new IllegalStateException(
+                        "This account has been deactivated. Please contact an administrator.");
+            }
             throw new IllegalArgumentException("An account with this email already exists.");
         }
 
@@ -80,7 +94,16 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid email or password.");
         }
 
+        if (!user.isActive()) {
+            throw new IllegalArgumentException("This account has been deactivated. Please contact an administrator.");
+        }
+
         return user;
+    }
+
+    /** Whether an account exists and is active (used to gate token refresh). */
+    public boolean isAccountActive(String email) {
+        return userRepository.findByEmail(email).map(User::isActive).orElse(false);
     }
 
     public void resetUserPassword(String email) {
@@ -97,6 +120,67 @@ public class AuthService {
             // Send email to user
             emailService.sendPasswordResetEmail(user.getEmail(), newPassword);
         }
+    }
+
+    /**
+     * Email a time-based verification code, enforcing a 60s per-email cooldown
+     * and a daily cap. Codes are stable within a time window (see TotpUtil), so
+     * a resend inside the window returns the same code the user already received.
+     */
+    public void sendVerificationCode(String email) {
+        // Only send codes for existing, active accounts — prevents using this as
+        // an email-spam vector and avoids burning cooldown/daily quota on unknown
+        // addresses. (Slight enumeration tradeoff, acceptable for a sign-up
+        // verification endpoint; password reset stays silent for unknown emails.)
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> ApiException.badRequest("No account found for this email."));
+        if (!user.isActive()) {
+            throw ApiException.forbidden("This account has been deactivated. Please contact an administrator.");
+        }
+        if (!redisService.tryStartOtpCooldown(email)) {
+            long wait = redisService.otpCooldownRemaining(email);
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Please wait " + wait + " seconds before requesting another code.");
+        }
+        if (!redisService.withinOtpDailyLimit(email)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Daily verification limit reached. Please try again tomorrow.");
+        }
+        String secret = redisService.getOrCreateOtpSecret(email);
+        emailService.sendVerificationCodeEmail(email, TotpUtil.currentCode(secret));
+    }
+
+    /**
+     * Validate a registration email verification code. This only confirms the
+     * user controls the email address — a security add-on at sign-up. It does
+     * NOT change the account's "verified user" status, which is a separate,
+     * admin-managed flag. Returns the user so the caller can issue session
+     * tokens (auto-login after sign-up).
+     */
+    public User verifyCode(String email, String code) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> ApiException.badRequest("No account found for this email."));
+
+        // A deactivated account must not be able to obtain tokens via verification.
+        if (!user.isActive()) {
+            throw ApiException.forbidden("This account has been deactivated. Please contact an administrator.");
+        }
+
+        // Throttle brute-force guessing of the 6-digit code.
+        if (redisService.isOtpVerifyLocked(email)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many incorrect attempts. Please try again later.");
+        }
+
+        String secret = redisService.peekOtpSecret(email);
+        if (secret == null || !TotpUtil.verify(secret, code)) {
+            redisService.recordOtpVerifyFailure(email);
+            throw ApiException.badRequest("Invalid or expired verification code.");
+        }
+
+        // Success: invalidate the code (single-use) and clear the failure counter.
+        redisService.clearOtpState(email);
+        return user;
     }
 
     public void changeUserPassword(String email, String currentPassword, String newPassword) {

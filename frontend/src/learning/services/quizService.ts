@@ -99,8 +99,74 @@ export const submitQuiz = async (
   };
 };
 
-export const getQuizResults = (quizId: string) =>
-  apiService.get<any>(`/getQuizResults/${encodeURIComponent(quizId)}`);
+// Per-question review of the user's latest attempt. `isCorrect` is null while a
+// short answer awaits the instructor's review.
+export interface QuizAnswerReview {
+  id: string;
+  question: string;
+  questionType: QuestionType;
+  yourAnswer: any;
+  correctAnswer: any;
+  isCorrect: boolean | null;
+  pendingReview: boolean;
+  pointsAwarded?: number;
+  maxPoints?: number;
+  feedback?: string | null;
+  explanation?: string | null;
+}
+
+export interface QuizResultDetail {
+  /** False when the user has no attempt on record yet. */
+  attempted: boolean;
+  score: number;
+  isPassed: boolean;
+  attemptNumber: number;
+  totalQuestions: number;
+  correctAnswers: number;
+  /** False while short answers are still awaiting the instructor's review. */
+  gradesReleased: boolean;
+  questions: QuizAnswerReview[];
+}
+
+export const getQuizResults = async (quizId: string): Promise<QuizResultDetail> => {
+  const res = await apiService.get<any>(`/getQuizResults/${encodeURIComponent(quizId)}`);
+  // The envelope is { success, data }, and data is null when there's no attempt.
+  const d = res?.data;
+  if (!d) {
+    return {
+      attempted: false,
+      score: 0,
+      isPassed: false,
+      attemptNumber: 0,
+      totalQuestions: 0,
+      correctAnswers: 0,
+      gradesReleased: true,
+      questions: [],
+    };
+  }
+  return {
+    attempted: true,
+    score: num(d.score),
+    isPassed: !!d.isPassed,
+    attemptNumber: num(d.attemptNumber),
+    totalQuestions: num(d.totalQuestions),
+    correctAnswers: num(d.correctAnswers),
+    gradesReleased: d.gradesReleased === undefined ? true : !!d.gradesReleased,
+    questions: (Array.isArray(d.questions) ? d.questions : []).map((q: any) => ({
+      id: str(q.id),
+      question: str(q.question),
+      questionType: (q.question_type as QuestionType) || "multiple-choice",
+      yourAnswer: q.your_answer ?? null,
+      correctAnswer: q.correct_answer ?? null,
+      isCorrect: q.is_correct === undefined ? null : q.is_correct,
+      pendingReview: !!q.pending_review,
+      pointsAwarded: q.points_awarded != null ? num(q.points_awarded) : undefined,
+      maxPoints: q.max_points != null ? num(q.max_points) : undefined,
+      feedback: q.feedback ?? null,
+      explanation: q.explanation ?? null,
+    })),
+  };
+};
 
 // ---- authoring ------------------------------------------------------
 export const createQuiz = (body: Record<string, any>) =>

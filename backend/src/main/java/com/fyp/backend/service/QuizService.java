@@ -463,9 +463,10 @@ public class QuizService {
         if (fullyGraded) {
             progressService.recomputeModuleCompletion(attempt.getUserId(), quiz.getCourseId(), quiz.getSectionId());
             progressService.recomputeCourseProgress(attempt.getUserId(), quiz.getCourseId());
-            pushNotificationService.notifyLearningEvent(attempt.getUserId(), "Quiz graded",
+            pushNotificationService.notifyQuizGraded(attempt.getUserId(), "Quiz graded",
                     "Your answers for \"" + quiz.getTitle() + "\" were reviewed. Score: " + score + "%"
-                            + (isPassed ? " — passed!" : "."));
+                            + (isPassed ? " — passed!" : "."),
+                    quiz.getId());
             if (isPassed && !wasPassed) {
                 achievementService.evaluate(attempt.getUserId(), quiz.getCourseId());
             }

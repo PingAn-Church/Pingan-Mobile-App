@@ -6,15 +6,44 @@ import { apiUrl } from "./apiConfig";
 
 export const registerUser = async (userDetails) => {
   try {
-    const response = await axios.post(
-      apiUrl(`/auth/register`),
-      userDetails
-    );
-    console.log("User registered successfully:", response.data);
-    return response; // This will return the response, likely the registered user data or a success message
+    // Creates the (unverified) account; tokens are issued later by verifyCode.
+    const response = await axios.post(apiUrl(`/auth/register`), userDetails);
+    return response;
   } catch (error) {
     console.error("Error registering user:", error);
     throw error; // You might return false or an error message depending on how you want to handle errors
+  }
+};
+
+// Request an email verification code (60s cooldown + daily cap enforced server-side).
+// Throws on rate-limit so the caller can surface the message.
+export const sendVerificationCode = async (email) => {
+  return axios.post(apiUrl(`/auth/send-verification-code`), { email });
+};
+
+// Verify the emailed code. On success the account is verified and tokens are
+// stored, logging the user in automatically (mirrors loginUser).
+export const verifyCode = async (email, code) => {
+  try {
+    const deviceId = await AsyncStorage.getItem("deviceId");
+    if (!deviceId) {
+      throw new Error("Device ID is not available");
+    }
+    const response = await axios.post(
+      apiUrl(`/auth/verify-code`),
+      { email, code },
+      { params: { deviceId } }
+    );
+    if (response.status === 200) {
+      const { accessToken, refreshToken, user } = response.data;
+      await AsyncStorage.setItem("accessToken", accessToken);
+      await AsyncStorage.setItem("refreshToken", refreshToken);
+      await AsyncStorage.setItem("user", JSON.stringify(user));
+      return { success: true, user };
+    }
+    return { success: false };
+  } catch (error) {
+    return { success: false, error: error.response?.data || "Verification failed." };
   }
 };
 
@@ -25,10 +54,12 @@ export const loginUser = async (loginDetails) => {
       throw new Error("Device ID is not available");
     }
 
-    // Make the API call to the backend login endpoint, passing deviceId as a query parameter
+    // Make the API call to the backend login endpoint, passing deviceId as a
+    // properly-encoded query parameter.
     const response = await axios.post(
-      apiUrl(`/auth/login?deviceId=${deviceId}`), // Include deviceId as a query parameter
-      loginDetails
+      apiUrl(`/auth/login`),
+      loginDetails,
+      { params: { deviceId } }
     );
 
     if (response.status === 200) {
@@ -69,9 +100,10 @@ export const logoutUser = async () => {
   try {
     // Make the logout request with refreshToken in the request body and deviceId as a query parameter
     const response = await axios.post(
-      apiUrl(`/auth/logout?deviceId=${deviceId}`), // Your API endpoint
+      apiUrl(`/auth/logout`),
       { refreshToken },  // Request body contains the refreshToken
       {
+        params: { deviceId },  // properly-encoded query parameter
         headers: { Authorization: `Bearer ${authToken}` },  // Include the authorization header
       }
     );

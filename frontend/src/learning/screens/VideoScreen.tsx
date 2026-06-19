@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { markVideoComplete } from "@/services/enrollmentService";
 import { notify } from "@/utils/alerts";
@@ -21,16 +22,24 @@ const getEmbedUrl = (url?: string): string => {
 export default function VideoScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const queryClient = useQueryClient();
   const title = String(route.params?.title ?? "Lesson");
   const videoId = route.params?.videoId ? String(route.params.videoId) : null;
+  const courseId = route.params?.courseId ? String(route.params.courseId) : null;
   const uri = getEmbedUrl(route.params?.videoUrl);
   const [marking, setMarking] = useState(false);
+  const [completed, setCompleted] = useState<boolean>(!!route.params?.isCompleted);
 
   const markComplete = async () => {
     if (!videoId) return;
     setMarking(true);
     try {
       await markVideoComplete(videoId);
+      setCompleted(true);
+      if (courseId) {
+        queryClient.invalidateQueries({ queryKey: ["learning", "course", courseId] });
+        queryClient.invalidateQueries({ queryKey: ["learning", "my-courses"] });
+      }
       notify("Marked complete", "Your progress has been updated.", () => navigation.goBack());
     } catch (e: any) {
       notify("Error", e?.message || "Could not update progress.");
@@ -55,12 +64,18 @@ export default function VideoScreen() {
         )}
       </View>
       <Text style={styles.title}>{title}</Text>
-      {videoId && (
-        <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
-          <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
-          <Text style={styles.completeText}>{marking ? "Saving..." : "Mark as complete"}</Text>
-        </TouchableOpacity>
-      )}
+      {videoId &&
+        (completed ? (
+          <View style={[styles.completeBtn, styles.completedBtn]}>
+            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+            <Text style={styles.completeText}>Completed</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+            <Text style={styles.completeText}>{marking ? "Saving..." : "Mark as complete"}</Text>
+          </TouchableOpacity>
+        ))}
     </View>
   );
 }
@@ -91,6 +106,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
   },
+  completedBtn: { backgroundColor: Colors.green },
   completeText: { color: Colors.white, fontWeight: "700", fontSize: 15 },
   muted: { color: Colors.textSecondary },
 });

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Linking, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { markResourceComplete } from "@/services/enrollmentService";
 import { notify } from "@/utils/alerts";
@@ -38,17 +39,30 @@ const viewerUrl = (url?: string, type?: string): string => {
 export default function DocumentScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const queryClient = useQueryClient();
   const title = String(route.params?.title ?? "Document");
   const rawUrl: string | undefined = route.params?.resourceUrl;
   const resourceId = route.params?.resourceId ? String(route.params.resourceId) : null;
+  const courseId = route.params?.courseId ? String(route.params.courseId) : null;
   const uri = viewerUrl(rawUrl, route.params?.resourceType);
+  const { height: windowHeight } = useWindowDimensions();
+  // The embedded viewer needs a definite height — flex:1 collapses the WebView
+  // on phones — so size it to the screen (minus header + complete button) and
+  // let it scale across devices and orientations.
+  const viewerHeight = Math.max(windowHeight - (resourceId ? 170 : 90), 320);
   const [marking, setMarking] = useState(false);
+  const [completed, setCompleted] = useState<boolean>(!!route.params?.isCompleted);
 
   const markComplete = async () => {
     if (!resourceId) return;
     setMarking(true);
     try {
       await markResourceComplete(resourceId);
+      setCompleted(true);
+      if (courseId) {
+        queryClient.invalidateQueries({ queryKey: ["learning", "course", courseId] });
+        queryClient.invalidateQueries({ queryKey: ["learning", "my-courses"] });
+      }
       notify("Marked complete", "Your progress has been updated.", () => navigation.goBack());
     } catch (e: any) {
       notify("Error", e?.message || "Could not update progress.");
@@ -73,19 +87,25 @@ export default function DocumentScreen() {
       {uri ? (
         <PlatformWebView
           source={{ uri }}
-          style={styles.viewer}
+          style={[styles.viewer, { height: viewerHeight }]}
           javaScriptEnabled
           domStorageEnabled
         />
       ) : (
         <Text style={styles.muted}>This resource is unavailable.</Text>
       )}
-      {resourceId && (
-        <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
-          <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
-          <Text style={styles.completeText}>{marking ? "Saving..." : "Mark as complete"}</Text>
-        </TouchableOpacity>
-      )}
+      {resourceId &&
+        (completed ? (
+          <View style={[styles.completeBtn, styles.completedBtn]}>
+            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+            <Text style={styles.completeText}>Completed</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+            <Text style={styles.completeText}>{marking ? "Saving..." : "Mark as complete"}</Text>
+          </TouchableOpacity>
+        ))}
     </View>
   );
 }
@@ -109,7 +129,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   openBtnText: { color: Colors.white, fontWeight: "600" },
-  viewer: { flex: 1, backgroundColor: Colors.white },
+  viewer: { width: "100%", backgroundColor: Colors.white },
   completeBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -120,6 +140,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
   },
+  completedBtn: { backgroundColor: Colors.green },
   completeText: { color: Colors.white, fontWeight: "700", fontSize: 15 },
   muted: { color: Colors.textSecondary, padding: 18 },
 });

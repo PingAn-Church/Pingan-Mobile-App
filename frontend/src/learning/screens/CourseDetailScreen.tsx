@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -52,6 +52,12 @@ export default function CourseDetailScreen() {
   const enrolled = enrolledQuery.data ?? false;
   const reviews = reviewsQuery.data ?? [];
 
+  // Sync the heart from the server's wishlist status on load and after refetch,
+  // so it stays filled when the screen is re-opened (not just within a session).
+  useEffect(() => {
+    if (detailQuery.data) setWishlisted(!!detailQuery.data.isInWishlist);
+  }, [detailQuery.data]);
+
   const handleEnroll = async () => {
     setEnrolling(true);
     try {
@@ -67,15 +73,15 @@ export default function CourseDetailScreen() {
   };
 
   const toggleWishlist = async () => {
+    const next = !wishlisted;
+    setWishlisted(next); // optimistic; server truth re-syncs via the effect below
     try {
-      if (wishlisted) {
-        await removeFromWishlist(courseId);
-        setWishlisted(false);
-      } else {
-        await addToWishlist(courseId);
-        setWishlisted(true);
-      }
+      if (next) await addToWishlist(courseId);
+      else await removeFromWishlist(courseId);
+      queryClient.invalidateQueries({ queryKey: ["learning", "course", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["learning", "wishlist"] });
     } catch (e: any) {
+      setWishlisted(!next); // revert on failure
       notify("Error", e?.message || "Could not update wishlist.");
     }
   };
@@ -90,15 +96,24 @@ export default function CourseDetailScreen() {
         title: lesson.title,
         videoUrl: lesson.videoUrl,
         videoId: lesson.id,
+        isCompleted: !!lesson.isCompleted,
+        courseId,
       });
     } else if (lesson.type === "quiz") {
-      navigation.navigate("QuizScreen", { quizId: lesson.id, title: lesson.title });
+      // Already attempted → show results/feedback; otherwise start the attempt.
+      if (lesson.quizAttempted) {
+        navigation.navigate("QuizResults", { quizId: lesson.id, title: lesson.title });
+      } else {
+        navigation.navigate("QuizScreen", { quizId: lesson.id, title: lesson.title });
+      }
     } else {
       navigation.navigate("LearningDocument", {
         title: lesson.title,
         resourceUrl: lesson.resourceUrl,
         resourceType: lesson.resourceType,
         resourceId: lesson.id,
+        isCompleted: !!lesson.isCompleted,
+        courseId,
       });
     }
   };
@@ -198,6 +213,21 @@ export default function CourseDetailScreen() {
                       {lesson.title}
                     </Text>
                     {lesson.isPreview && <Text style={styles.previewTag}>Preview</Text>}
+                    {enrolled && lesson.type !== "quiz" && lesson.isCompleted && (
+                      <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
+                    )}
+                    {enrolled && lesson.type === "quiz" &&
+                      (lesson.quizAttempted ? (
+                        lesson.gradesReleased ? (
+                          <Text style={[styles.quizScore, { color: lesson.quizPassed ? Colors.green : Colors.starGold }]}>
+                            {lesson.quizScore}%
+                          </Text>
+                        ) : (
+                          <Text style={styles.quizPending}>Pending review</Text>
+                        )
+                      ) : (
+                        <Text style={styles.quizNotAttempted}>Not attempted</Text>
+                      ))}
                     {!enrolled && !lesson.isPreview && (
                       <Ionicons name="lock-closed" size={14} color={Colors.textMuted} />
                     )}
@@ -282,6 +312,9 @@ const styles = StyleSheet.create({
   lessonRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   lessonText: { color: Colors.textSecondary, fontSize: 14, flex: 1 },
   previewTag: { color: Colors.starGold, fontSize: 11, fontWeight: "700" },
+  quizScore: { fontSize: 13, fontWeight: "800" },
+  quizPending: { color: Colors.starGold, fontSize: 11, fontWeight: "700" },
+  quizNotAttempted: { color: Colors.textMuted, fontSize: 11, fontWeight: "600" },
   reviewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   leaveReview: { color: Colors.secondary, fontWeight: "700" },
   review: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 12, marginBottom: 10 },
