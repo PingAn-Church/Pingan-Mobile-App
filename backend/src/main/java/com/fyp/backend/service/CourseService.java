@@ -20,6 +20,7 @@ import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
 import com.fyp.backend.model.CourseSection;
 import com.fyp.backend.model.CourseVideo;
+import com.fyp.backend.model.QuizAttempt;
 import com.fyp.backend.model.ResourceProgress;
 import com.fyp.backend.model.UserVideoProgress;
 import com.fyp.backend.repository.CategoryRepository;
@@ -31,6 +32,7 @@ import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
+import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.UserVideoProgressRepository;
 
@@ -52,6 +54,7 @@ public class CourseService {
     @Autowired private CourseWishlistRepository wishlistRepository;
     @Autowired private UserVideoProgressRepository videoProgressRepository;
     @Autowired private ResourceProgressRepository resourceProgressRepository;
+    @Autowired private QuizAttemptRepository quizAttemptRepository;
 
     public List<Map<String, Object>> listCategories() {
         return categoryRepository.findAll().stream()
@@ -138,6 +141,7 @@ public class CourseService {
             // an always-on "Mark as complete" button (lessons share these refs).
             markVideoCompletion(videos, userId);
             markResourceCompletion(resources, userId);
+            markQuizResults(quizzes, userId);
 
             List<Map<String, Object>> lessons = new ArrayList<>();
             lessons.addAll(videos);
@@ -187,6 +191,36 @@ public class CourseService {
         }
         final Set<Long> completed = done;
         resources.forEach(r -> r.put("is_completed", completed.contains(Long.valueOf((String) r.get("id")))));
+    }
+
+    /**
+     * Annotate quiz lessons with the user's result so the app can show actual
+     * marks ("85%") rather than a bare "completed" tick. Reports the best score
+     * across graded attempts; "grades_released=false" means an attempt is still
+     * awaiting the instructor's short-answer review (show "Pending review").
+     */
+    private void markQuizResults(List<Map<String, Object>> quizzes, Long userId) {
+        if (quizzes.isEmpty()) return;
+        Map<Long, List<QuizAttempt>> byQuiz = Map.of();
+        if (userId != null) {
+            List<Long> ids = quizzes.stream()
+                    .map(q -> Long.valueOf((String) q.get("id"))).collect(Collectors.toList());
+            byQuiz = quizAttemptRepository.findByUserIdAndQuizIdIn(userId, ids).stream()
+                    .collect(Collectors.groupingBy(QuizAttempt::getQuizId));
+        }
+        final Map<Long, List<QuizAttempt>> attemptsByQuiz = byQuiz;
+        quizzes.forEach(q -> {
+            Long qid = Long.valueOf((String) q.get("id"));
+            List<QuizAttempt> attempts = attemptsByQuiz.getOrDefault(qid, List.of());
+            List<QuizAttempt> released = attempts.stream()
+                    .filter(QuizAttempt::isGradesReleased).collect(Collectors.toList());
+            int bestScore = released.stream()
+                    .mapToInt(a -> a.getScore() == null ? 0 : a.getScore()).max().orElse(0);
+            q.put("attempted", !attempts.isEmpty());
+            q.put("grades_released", !attempts.isEmpty() && !released.isEmpty());
+            q.put("score", bestScore);
+            q.put("is_passed", released.stream().anyMatch(QuizAttempt::isPassed));
+        });
     }
 
     public Map<String, Object> getVideoDetail(Long videoId) {

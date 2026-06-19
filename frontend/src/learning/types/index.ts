@@ -41,6 +41,12 @@ export interface LearningLesson {
   orderIndex?: number;
   /** Whether the requesting user has completed this content (video/resource). */
   isCompleted?: boolean;
+  // Quiz lessons only: the requesting user's result, so the list can show marks.
+  quizAttempted?: boolean;
+  quizScore?: number;
+  quizPassed?: boolean;
+  /** false => an attempt is awaiting the instructor's review (show "Pending review"). */
+  gradesReleased?: boolean;
 }
 
 export interface LearningModule {

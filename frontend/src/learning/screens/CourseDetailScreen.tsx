@@ -211,6 +211,18 @@ export default function CourseDetailScreen() {
                     {enrolled && lesson.type !== "quiz" && lesson.isCompleted && (
                       <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
                     )}
+                    {enrolled && lesson.type === "quiz" &&
+                      (lesson.quizAttempted ? (
+                        lesson.gradesReleased ? (
+                          <Text style={[styles.quizScore, { color: lesson.quizPassed ? Colors.green : Colors.starGold }]}>
+                            {lesson.quizScore}%
+                          </Text>
+                        ) : (
+                          <Text style={styles.quizPending}>Pending review</Text>
+                        )
+                      ) : (
+                        <Text style={styles.quizNotAttempted}>Not attempted</Text>
+                      ))}
                     {!enrolled && !lesson.isPreview && (
                       <Ionicons name="lock-closed" size={14} color={Colors.textMuted} />
                     )}
@@ -295,6 +307,9 @@ const styles = StyleSheet.create({
   lessonRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   lessonText: { color: Colors.textSecondary, fontSize: 14, flex: 1 },
   previewTag: { color: Colors.starGold, fontSize: 11, fontWeight: "700" },
+  quizScore: { fontSize: 13, fontWeight: "800" },
+  quizPending: { color: Colors.starGold, fontSize: 11, fontWeight: "700" },
+  quizNotAttempted: { color: Colors.textMuted, fontSize: 11, fontWeight: "600" },
   reviewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   leaveReview: { color: Colors.secondary, fontWeight: "700" },
   review: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 12, marginBottom: 10 },

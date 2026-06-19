@@ -43,6 +43,10 @@ const mapLesson = (l: any): LearningLesson => ({
   isPreview: !!l.is_preview,
   orderIndex: num(l.order_index),
   isCompleted: !!l.is_completed,
+  quizAttempted: !!l.attempted,
+  quizScore: num(l.score),
+  quizPassed: !!l.is_passed,
+  gradesReleased: l.grades_released === undefined ? true : !!l.grades_released,
 });
 
 export const getCategories = async (): Promise<LearningCategory[]> => {
