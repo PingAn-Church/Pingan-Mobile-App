@@ -208,6 +208,9 @@ export default function CourseDetailScreen() {
                       {lesson.title}
                     </Text>
                     {lesson.isPreview && <Text style={styles.previewTag}>Preview</Text>}
+                    {enrolled && lesson.type !== "quiz" && lesson.isCompleted && (
+                      <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
+                    )}
                     {!enrolled && !lesson.isPreview && (
                       <Ionicons name="lock-closed" size={14} color={Colors.textMuted} />
                     )}
