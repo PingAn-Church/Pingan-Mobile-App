@@ -107,8 +107,12 @@ public class AuthController {
             // emailed verification code is confirmed via /verify-code.
             UserProfileDto registeredUser = authService.registerUser(userDto);
             return ResponseEntity.ok(registeredUser);
+        } catch (IllegalStateException e) {
+            // Email belongs to a deactivated account.
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+            // Email already in use by an active account.
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         }
     }
 

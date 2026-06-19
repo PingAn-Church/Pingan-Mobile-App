@@ -154,7 +154,16 @@ export default function RegisterPage() {
         navigation.navigate("VerificationCode", { email });
       }
     } catch (error) {
-      showAlert(i18n.t("error"), i18n.t("registerFailed"));
+      const status = error?.response?.status;
+      let message;
+      if (status === 403) {
+        message = i18n.t("accountDeactivatedContactAdmin");
+      } else if (status === 409) {
+        message = i18n.t("emailAlreadyExists");
+      } else {
+        message = i18n.t("registerFailed");
+      }
+      showAlert(i18n.t("error"), message);
     }
   };
 

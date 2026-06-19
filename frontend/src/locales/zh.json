@@ -39,6 +39,8 @@
   "ok": "好的",
   "userRegisteredSuccess": "用户注册成功",
   "registerFailed": "用户注册失败",
+  "emailAlreadyExists": "该邮箱已被注册。",
+  "accountDeactivatedContactAdmin": "该账户已被停用，请联系管理员。",
   "uploading": "正在上传...",
   "loginFailed": "登录失败",
   "loginSuccess": "登录成功",

@@ -39,6 +39,8 @@
   "ok": "OK",
   "userRegisteredSuccess": "User registered successfully.",
   "registerFailed": "Registration failed.",
+  "emailAlreadyExists": "An account with this email already exists.",
+  "accountDeactivatedContactAdmin": "This account has been deactivated. Please contact an administrator.",
   "uploading": "Uploading...",
   "loginFailed": "Login failed.",
   "loginSuccess": "Login successful.",

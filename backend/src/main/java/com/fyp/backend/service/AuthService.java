@@ -42,7 +42,15 @@ public class AuthService {
      * @param userDto The user details to register.
      */
     public UserProfileDto registerUser(UserDto userDto) {
-        if (userRepository.findByEmail(userDto.getEmail()).isPresent()) {
+        Optional<User> existing = userRepository.findByEmail(userDto.getEmail());
+        if (existing.isPresent()) {
+            // A deactivated account still owns the email; surface a distinct
+            // signal (handled as 403) so the app can guide them to an admin
+            // rather than showing a generic "already exists".
+            if (!existing.get().isActive()) {
+                throw new IllegalStateException(
+                        "This account has been deactivated. Please contact an administrator.");
+            }
             throw new IllegalArgumentException("An account with this email already exists.");
         }
 
