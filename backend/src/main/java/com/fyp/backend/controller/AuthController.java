@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import com.fyp.backend.dto.LoginDto;
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
+import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.User;
 import com.fyp.backend.service.AuthService;
 import com.fyp.backend.service.RedisService;
@@ -96,24 +97,54 @@ public class AuthController {
 
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto userDto, @RequestParam String deviceId) {
+    public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto userDto) {
         try {
+            // Create the (unverified) account. Tokens are issued only after the
+            // emailed verification code is confirmed via /verify-code.
             UserProfileDto registeredUser = authService.registerUser(userDto);
+            return ResponseEntity.ok(registeredUser);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
 
-            // Issue tokens straight away so the app can drop the user into the
-            // session without a second manual login.
-            String accessToken = jwtUtil.generateAccessToken(userDto.getEmail());
-            String refreshToken = jwtUtil.generateRefreshToken(userDto.getEmail());
-            refreshTokenService.saveRefreshToken(userDto.getEmail(), deviceId, refreshToken, 1000L * 60 * 60 * 24 * 30);
+    @PostMapping("/send-verification-code")
+    public ResponseEntity<?> sendVerificationCode(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body("Email is required.");
+        }
+        try {
+            authService.sendVerificationCode(email);
+            return ResponseEntity.ok("Verification code sent.");
+        } catch (ApiException e) {
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/verify-code")
+    public ResponseEntity<?> verifyCode(@RequestBody Map<String, String> body, @RequestParam String deviceId) {
+        String email = body.get("email");
+        String code = body.get("code");
+        if (email == null || code == null) {
+            return ResponseEntity.badRequest().body("Email and code are required.");
+        }
+        try {
+            User user = authService.verifyCode(email, code);
+
+            // Verified — issue tokens so the app logs the user in automatically.
+            String accessToken = jwtUtil.generateAccessToken(user.getEmail());
+            String refreshToken = jwtUtil.generateRefreshToken(user.getEmail());
+            refreshTokenService.saveRefreshToken(user.getEmail(), deviceId, refreshToken, 1000L * 60 * 60 * 24 * 30);
 
             Map<String, Object> response = new HashMap<>();
             response.put("accessToken", accessToken);
             response.put("refreshToken", refreshToken);
-            response.put("user", registeredUser);
+            response.put("user", UserProfileDto.from(user));
 
             return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (ApiException e) {
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
         }
     }
 

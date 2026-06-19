@@ -15,8 +15,17 @@ public class EmailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(toEmail);
         message.setSubject("Ping An App - Password Reset Request");
-        message.setText("Your new password is: " + newPassword + 
+        message.setText("Your new password is: " + newPassword +
                         "\nPlease change it after logging in.");
+        mailSender.send(message);
+    }
+
+    public void sendVerificationCodeEmail(String toEmail, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject("Ping An App - Your verification code");
+        message.setText("Your verification code is: " + code +
+                        "\nIt is valid for a few minutes. If you didn't request this, you can ignore this email.");
         mailSender.send(message);
     }
 }

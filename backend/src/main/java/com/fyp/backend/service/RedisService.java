@@ -1,6 +1,7 @@
 package com.fyp.backend.service;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.TotpUtil;
 
 @Service
 public class RedisService {
@@ -20,6 +22,14 @@ public class RedisService {
     private static final String REFRESH_TOKEN_KEY = "refresh_token:";
     private static final long ONLINE_TTL_MINUTES = 1; // Expiry time in minutes
     private static final long REFRESH_EXPIRY_DAYS = 30;
+
+    // Registration email verification (OTP)
+    private static final String OTP_SECRET_KEY = "otp_secret:";
+    private static final String OTP_COOLDOWN_KEY = "otp_cooldown:";
+    private static final String OTP_COUNT_KEY = "otp_count:";
+    private static final long OTP_SECRET_TTL_HOURS = 24;
+    private static final long OTP_COOLDOWN_SECONDS = 60;
+    private static final long OTP_DAILY_MAX = 10;
 
     @Autowired
     private StringRedisTemplate redisTemplate;
@@ -122,5 +132,49 @@ public class RedisService {
 
         // Example: Check the expiration date from the JWT's 'exp' field (you may need to implement a decoding function here)
         return jwtUtil.isTokenExpired(refreshToken);
+    }
+
+    // ---- registration email verification (OTP) --------------------------
+
+    /**
+     * Stable per-email TOTP secret so a code resent within the same time window
+     * matches the one already emailed. Created on first request, expires in a day.
+     */
+    public String getOrCreateOtpSecret(String email) {
+        String key = OTP_SECRET_KEY + email;
+        String secret = redisTemplate.opsForValue().get(key);
+        if (secret == null) {
+            secret = TotpUtil.generateSecret();
+            redisTemplate.opsForValue().set(key, secret, Duration.ofHours(OTP_SECRET_TTL_HOURS));
+        }
+        return secret;
+    }
+
+    /** Read the stored secret without creating one (null if none/expired). */
+    public String peekOtpSecret(String email) {
+        return redisTemplate.opsForValue().get(OTP_SECRET_KEY + email);
+    }
+
+    /** Acquire the 60s per-email cooldown slot. Returns false if one is already active. */
+    public boolean tryStartOtpCooldown(String email) {
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(OTP_COOLDOWN_KEY + email, "1", Duration.ofSeconds(OTP_COOLDOWN_SECONDS));
+        return Boolean.TRUE.equals(acquired);
+    }
+
+    /** Seconds left on the cooldown (0 if none active). */
+    public long otpCooldownRemaining(String email) {
+        Long ttl = redisTemplate.getExpire(OTP_COOLDOWN_KEY + email);
+        return ttl == null || ttl < 0 ? 0 : ttl;
+    }
+
+    /** Increment today's request count for the email; false once the daily cap is exceeded. */
+    public boolean withinOtpDailyLimit(String email) {
+        String key = OTP_COUNT_KEY + email + ":" + LocalDate.now();
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, Duration.ofDays(1));
+        }
+        return count != null && count <= OTP_DAILY_MAX;
     }
 }

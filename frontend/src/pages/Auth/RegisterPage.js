@@ -21,7 +21,6 @@ import {
 } from "../../service/OSSService";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
-import { UserContext } from "../../context/UserContext";
 import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert"
 
@@ -35,7 +34,6 @@ export default function RegisterPage() {
 
   const navigation = useNavigation(); // React Navigation
   const { language } = useContext(LanguageContext);
-  const { fetchUserData } = useContext(UserContext);
   const { handleRegisterPushToken } = useNotification();
 
   useEffect(() => {
@@ -148,13 +146,12 @@ export default function RegisterPage() {
 
       const response = await registerUser(user);
 
-      // Registration logs the user in (tokens stored in registerUser), so refresh
-      // the session and drop them straight into the app.
+      // Account created (unverified). Register the push token now (stored
+      // inactive pre-JWT) and send the user to enter the emailed code.
       if (response.status === 200) {
-        const newUser = response.data?.user ?? response.data;
+        const newUser = response.data;
         if (newUser?.id) await handleRegisterPushToken(newUser.id);
-        await fetchUserData();
-        navigation.navigate("HomeTabs", { screen: "Home" });
+        navigation.navigate("VerificationCode", { email });
       }
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("registerFailed"));

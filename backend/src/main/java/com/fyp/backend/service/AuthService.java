@@ -4,15 +4,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.dto.LoginDto;
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
+import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.TotpUtil;
 
 @Service
 public class AuthService {
@@ -21,13 +24,16 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
+    private final RedisService redisService;
 
     @Autowired
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil, EmailService emailService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+            EmailService emailService, RedisService redisService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.emailService = emailService;
+        this.redisService = redisService;
     }
 
     /**
@@ -97,6 +103,43 @@ public class AuthService {
             // Send email to user
             emailService.sendPasswordResetEmail(user.getEmail(), newPassword);
         }
+    }
+
+    /**
+     * Email a time-based verification code, enforcing a 60s per-email cooldown
+     * and a daily cap. Codes are stable within a time window (see TotpUtil), so
+     * a resend inside the window returns the same code the user already received.
+     */
+    public void sendVerificationCode(String email) {
+        if (!redisService.tryStartOtpCooldown(email)) {
+            long wait = redisService.otpCooldownRemaining(email);
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Please wait " + wait + " seconds before requesting another code.");
+        }
+        if (!redisService.withinOtpDailyLimit(email)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Daily verification limit reached. Please try again tomorrow.");
+        }
+        String secret = redisService.getOrCreateOtpSecret(email);
+        emailService.sendVerificationCodeEmail(email, TotpUtil.currentCode(secret));
+    }
+
+    /**
+     * Validate a verification code and mark the account verified. Returns the
+     * user so the caller can issue session tokens (auto-login after sign-up).
+     */
+    public User verifyCode(String email, String code) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> ApiException.badRequest("No account found for this email."));
+
+        String secret = redisService.peekOtpSecret(email);
+        if (secret == null || !TotpUtil.verify(secret, code)) {
+            throw ApiException.badRequest("Invalid or expired verification code.");
+        }
+
+        user.setVerifiedUser(true);
+        userRepository.save(user);
+        return user;
     }
 
     public void changeUserPassword(String email, String currentPassword, String newPassword) {

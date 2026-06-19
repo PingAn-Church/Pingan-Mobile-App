@@ -6,22 +6,40 @@ import { apiUrl } from "./apiConfig";
 
 export const registerUser = async (userDetails) => {
   try {
-    const deviceId = await AsyncStorage.getItem("deviceId");
-    const response = await axios.post(
-      apiUrl(`/auth/register?deviceId=${deviceId}`),
-      userDetails
-    );
-    // Registration now returns tokens so the user is logged in automatically.
-    if (response.status === 200 && response.data?.accessToken) {
-      const { accessToken, refreshToken, user } = response.data;
-      await AsyncStorage.setItem("accessToken", accessToken);
-      await AsyncStorage.setItem("refreshToken", refreshToken);
-      await AsyncStorage.setItem("user", JSON.stringify(user));
-    }
+    // Creates the (unverified) account; tokens are issued later by verifyCode.
+    const response = await axios.post(apiUrl(`/auth/register`), userDetails);
     return response;
   } catch (error) {
     console.error("Error registering user:", error);
     throw error; // You might return false or an error message depending on how you want to handle errors
+  }
+};
+
+// Request an email verification code (60s cooldown + daily cap enforced server-side).
+// Throws on rate-limit so the caller can surface the message.
+export const sendVerificationCode = async (email) => {
+  return axios.post(apiUrl(`/auth/send-verification-code`), { email });
+};
+
+// Verify the emailed code. On success the account is verified and tokens are
+// stored, logging the user in automatically (mirrors loginUser).
+export const verifyCode = async (email, code) => {
+  try {
+    const deviceId = await AsyncStorage.getItem("deviceId");
+    const response = await axios.post(
+      apiUrl(`/auth/verify-code?deviceId=${deviceId}`),
+      { email, code }
+    );
+    if (response.status === 200) {
+      const { accessToken, refreshToken, user } = response.data;
+      await AsyncStorage.setItem("accessToken", accessToken);
+      await AsyncStorage.setItem("refreshToken", refreshToken);
+      await AsyncStorage.setItem("user", JSON.stringify(user));
+      return { success: true, user };
+    }
+    return { success: false };
+  } catch (error) {
+    return { success: false, error: error.response?.data || "Verification failed." };
   }
 };
 

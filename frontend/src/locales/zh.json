@@ -12,6 +12,16 @@
   "forgotPasswordPageTitle": "忘记密码",
   "back": "返回",
 
+  "verificationCodeTitle": "验证您的邮箱",
+  "verificationCodeSubtitle": "请输入我们发送至以下邮箱的验证码：",
+  "enterVerificationCode": "输入验证码",
+  "verify": "验证",
+  "verifying": "验证中…",
+  "resendCode": "重新发送验证码",
+  "resendIn": "{seconds} 秒后可重新发送",
+  "verificationCodeSent": "验证码已发送到您的邮箱。",
+  "invalidCode": "验证码无效。",
+
   "permissionDenied": "没有权限",
   "needPhotoAccess": "我们需要访问您的照片库",
   "error": "错误",

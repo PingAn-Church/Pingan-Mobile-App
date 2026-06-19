@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import WelcomePage from "./src/pages/Auth/WelcomePage";
 import ChatPage from "./src/pages/Social/ChatPage"; // Assuming ChatPage is in another file
 import RegisterPage from "./src/pages/Auth/RegisterPage"; // Assuming RegisterPage is in another file
+import VerificationCodePage from "./src/pages/Auth/VerificationCodePage";
 import LoginPage, { ForgotPasswordPage } from "./src/pages/Auth/LoginPage";
 import OthersPage, { OthersSectionPage } from "./src/pages/Others/OthersPage";
 import ProfilePage, {
@@ -342,6 +343,7 @@ export default function App() {
                     component={DetailedGroupChatPage}
                   />
                   <Stack.Screen name="Register" component={RegisterPage} />
+                  <Stack.Screen name="VerificationCode" component={VerificationCodePage} />
                   <Stack.Screen name="Login" component={LoginPage} />
                   <Stack.Screen
                     name="OthersSection"

@@ -12,6 +12,16 @@
   "forgotPasswordPageTitle": "Forgot Password",
   "back": "Back",
 
+  "verificationCodeTitle": "Verify your email",
+  "verificationCodeSubtitle": "Enter the code we sent to",
+  "enterVerificationCode": "Enter verification code",
+  "verify": "Verify",
+  "verifying": "Verifying...",
+  "resendCode": "Resend code",
+  "resendIn": "Resend in {seconds}s",
+  "verificationCodeSent": "Verification code sent to your email.",
+  "invalidCode": "Invalid verification code.",
+
   "permissionDenied": "Permission Denied",
   "needPhotoAccess": "We need access to your photo library.",
   "error": "Error",
