@@ -38,6 +38,14 @@ export default function VerificationCodePage() {
 
   // Send the first code automatically when the screen opens.
   useEffect(() => {
+    if (!String(email).trim()) {
+      // Reached without an email (e.g. bad deep link) — don't call the backend
+      // with a blank address; send the user back to fix it.
+      showAlert(i18n.t("error"), i18n.t("enterValidEmail"), [
+        { text: i18n.t("ok"), onPress: () => navigation.goBack() },
+      ]);
+      return;
+    }
     requestCode(true);
     return () => clearInterval(timerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps

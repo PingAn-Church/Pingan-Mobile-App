@@ -27,9 +27,12 @@ public class RedisService {
     private static final String OTP_SECRET_KEY = "otp_secret:";
     private static final String OTP_COOLDOWN_KEY = "otp_cooldown:";
     private static final String OTP_COUNT_KEY = "otp_count:";
+    private static final String OTP_VERIFY_FAIL_KEY = "otp_verify_fail:";
     private static final long OTP_SECRET_TTL_HOURS = 24;
     private static final long OTP_COOLDOWN_SECONDS = 60;
     private static final long OTP_DAILY_MAX = 10;
+    private static final long OTP_VERIFY_MAX_FAILURES = 5;
+    private static final long OTP_VERIFY_LOCK_MINUTES = 10;
 
     @Autowired
     private StringRedisTemplate redisTemplate;
@@ -176,5 +179,31 @@ public class RedisService {
             redisTemplate.expire(key, Duration.ofDays(1));
         }
         return count != null && count <= OTP_DAILY_MAX;
+    }
+
+    /** True once too many incorrect codes have been entered for this email recently. */
+    public boolean isOtpVerifyLocked(String email) {
+        String v = redisTemplate.opsForValue().get(OTP_VERIFY_FAIL_KEY + email);
+        if (v == null) return false;
+        try {
+            return Long.parseLong(v) >= OTP_VERIFY_MAX_FAILURES;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** Record a failed verification attempt; the window resets after the lock period. */
+    public void recordOtpVerifyFailure(String email) {
+        String key = OTP_VERIFY_FAIL_KEY + email;
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1L) {
+            redisTemplate.expire(key, Duration.ofMinutes(OTP_VERIFY_LOCK_MINUTES));
+        }
+    }
+
+    /** Clear OTP state after a successful verification: the (single-use) secret and the failure counter. */
+    public void clearOtpState(String email) {
+        redisTemplate.delete(OTP_SECRET_KEY + email);
+        redisTemplate.delete(OTP_VERIFY_FAIL_KEY + email);
     }
 }

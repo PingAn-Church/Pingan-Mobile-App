@@ -40,6 +40,9 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginDto loginDto, @RequestParam String deviceId) {
+        if (deviceId == null || deviceId.isBlank()) {
+            return ResponseEntity.badRequest().body("Device ID is required.");
+        }
         try {
             User user = authService.authenticateUser(loginDto);
 
@@ -61,6 +64,9 @@ public class AuthController {
 
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> requestBody, @RequestParam String deviceId) {
+        if (deviceId == null || deviceId.isBlank()) {
+            return ResponseEntity.badRequest().body("Device ID is required.");
+        }
         String refreshToken = requestBody.get("refreshToken");
         String email = jwtUtil.extractEmail(refreshToken);
 
@@ -136,6 +142,9 @@ public class AuthController {
         String code = body.get("code");
         if (email == null || code == null) {
             return ResponseEntity.badRequest().body("Email and code are required.");
+        }
+        if (deviceId == null || deviceId.isBlank()) {
+            return ResponseEntity.badRequest().body("Device ID is required.");
         }
         try {
             User user = authService.verifyCode(email, code);

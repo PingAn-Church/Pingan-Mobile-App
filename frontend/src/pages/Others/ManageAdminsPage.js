@@ -260,7 +260,7 @@ export function ManageUsersPage() {
   };
 
   const renderUserItem = (rowUser, action, icon, iconColor) => (
-    <View key={rowUser.id} style={styles.userItem}>
+    <View style={styles.userItem}>
       <View style={styles.userLeft}>
         {canDeactivate(rowUser) && (
           <TouchableOpacity

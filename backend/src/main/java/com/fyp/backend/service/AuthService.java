@@ -128,6 +128,15 @@ public class AuthService {
      * a resend inside the window returns the same code the user already received.
      */
     public void sendVerificationCode(String email) {
+        // Only send codes for existing, active accounts — prevents using this as
+        // an email-spam vector and avoids burning cooldown/daily quota on unknown
+        // addresses. (Slight enumeration tradeoff, acceptable for a sign-up
+        // verification endpoint; password reset stays silent for unknown emails.)
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> ApiException.badRequest("No account found for this email."));
+        if (!user.isActive()) {
+            throw ApiException.forbidden("This account has been deactivated. Please contact an administrator.");
+        }
         if (!redisService.tryStartOtpCooldown(email)) {
             long wait = redisService.otpCooldownRemaining(email);
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
@@ -152,11 +161,25 @@ public class AuthService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> ApiException.badRequest("No account found for this email."));
 
+        // A deactivated account must not be able to obtain tokens via verification.
+        if (!user.isActive()) {
+            throw ApiException.forbidden("This account has been deactivated. Please contact an administrator.");
+        }
+
+        // Throttle brute-force guessing of the 6-digit code.
+        if (redisService.isOtpVerifyLocked(email)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many incorrect attempts. Please try again later.");
+        }
+
         String secret = redisService.peekOtpSecret(email);
         if (secret == null || !TotpUtil.verify(secret, code)) {
+            redisService.recordOtpVerifyFailure(email);
             throw ApiException.badRequest("Invalid or expired verification code.");
         }
 
+        // Success: invalidate the code (single-use) and clear the failure counter.
+        redisService.clearOtpState(email);
         return user;
     }
 
