@@ -21,6 +21,7 @@ import {
 } from "../../service/OSSService";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import { UserContext } from "../../context/UserContext";
 import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert"
 
@@ -34,6 +35,7 @@ export default function RegisterPage() {
 
   const navigation = useNavigation(); // React Navigation
   const { language } = useContext(LanguageContext);
+  const { fetchUserData } = useContext(UserContext);
   const { handleRegisterPushToken } = useNotification();
 
   useEffect(() => {
@@ -145,16 +147,15 @@ export default function RegisterPage() {
       };
 
       const response = await registerUser(user);
-      console.log("REGISTER LOG", response.data);
 
-      if (response.status === 200)
-        await handleRegisterPushToken(response.data.id);
-      showAlert(i18n.t("success"), i18n.t("userRegisteredSuccess"), [
-        {
-          text: i18n.t("ok"),
-          onPress: () => navigation.navigate("Welcome"), // Navigate after dismissing alert
-        },
-      ]);
+      // Registration logs the user in (tokens stored in registerUser), so refresh
+      // the session and drop them straight into the app.
+      if (response.status === 200) {
+        const newUser = response.data?.user ?? response.data;
+        if (newUser?.id) await handleRegisterPushToken(newUser.id);
+        await fetchUserData();
+        navigation.navigate("HomeTabs", { screen: "Home" });
+      }
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("registerFailed"));
     }

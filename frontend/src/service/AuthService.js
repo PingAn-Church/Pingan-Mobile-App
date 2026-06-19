@@ -6,12 +6,19 @@ import { apiUrl } from "./apiConfig";
 
 export const registerUser = async (userDetails) => {
   try {
+    const deviceId = await AsyncStorage.getItem("deviceId");
     const response = await axios.post(
-      apiUrl(`/auth/register`),
+      apiUrl(`/auth/register?deviceId=${deviceId}`),
       userDetails
     );
-    console.log("User registered successfully:", response.data);
-    return response; // This will return the response, likely the registered user data or a success message
+    // Registration now returns tokens so the user is logged in automatically.
+    if (response.status === 200 && response.data?.accessToken) {
+      const { accessToken, refreshToken, user } = response.data;
+      await AsyncStorage.setItem("accessToken", accessToken);
+      await AsyncStorage.setItem("refreshToken", refreshToken);
+      await AsyncStorage.setItem("user", JSON.stringify(user));
+    }
+    return response;
   } catch (error) {
     console.error("Error registering user:", error);
     throw error; // You might return false or an error message depending on how you want to handle errors

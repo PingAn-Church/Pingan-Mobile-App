@@ -96,10 +96,22 @@ public class AuthController {
 
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto userDto) {
+    public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto userDto, @RequestParam String deviceId) {
         try {
             UserProfileDto registeredUser = authService.registerUser(userDto);
-            return ResponseEntity.ok(registeredUser);
+
+            // Issue tokens straight away so the app can drop the user into the
+            // session without a second manual login.
+            String accessToken = jwtUtil.generateAccessToken(userDto.getEmail());
+            String refreshToken = jwtUtil.generateRefreshToken(userDto.getEmail());
+            refreshTokenService.saveRefreshToken(userDto.getEmail(), deviceId, refreshToken, 1000L * 60 * 60 * 24 * 30);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("accessToken", accessToken);
+            response.put("refreshToken", refreshToken);
+            response.put("user", registeredUser);
+
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
