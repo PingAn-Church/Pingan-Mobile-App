@@ -64,6 +64,9 @@ export const NotificationProvider = ({ children }) => {
 
           if (!userRef.current) {
             navigation.navigate("Login");
+          } else if (conversationType === "quiz-graded") {
+            // "Quiz graded" learning notification: quizId rides on conversationId.
+            navigation.navigate("QuizResults", { quizId: conversationId });
           } else {
             navigation.navigate("Chat", { conversationId, conversationType });
           }

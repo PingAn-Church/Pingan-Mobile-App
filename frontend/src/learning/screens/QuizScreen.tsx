@@ -115,6 +115,12 @@ export default function QuizScreen() {
           we'll notify you.
         </Text>
         <View style={{ height: 24 }} />
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={() => navigation.replace("QuizResults", { quizId, title: quiz.title })}
+        >
+          <Text style={styles.primaryBtnText}>View detailed feedback</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.ghostBtnText}>Back to course</Text>
         </TouchableOpacity>
@@ -141,9 +147,15 @@ export default function QuizScreen() {
           {result.attemptsRemaining !== null ? ` • ${result.attemptsRemaining} attempts left` : ""}
         </Text>
         <View style={{ height: 24 }} />
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={() => navigation.replace("QuizResults", { quizId, title: quiz.title })}
+        >
+          <Text style={styles.primaryBtnText}>View detailed feedback</Text>
+        </TouchableOpacity>
         {canRetry && (
-          <TouchableOpacity style={styles.primaryBtn} onPress={retry}>
-            <Text style={styles.primaryBtnText}>Try again</Text>
+          <TouchableOpacity style={styles.ghostBtn} onPress={retry}>
+            <Text style={styles.ghostBtnText}>Try again</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>

@@ -77,6 +77,7 @@ import MyCoursesScreen from "./src/learning/screens/MyCoursesScreen";
 import WishlistScreen from "./src/learning/screens/WishlistScreen";
 import LeaveReviewScreen from "./src/learning/screens/LeaveReviewScreen";
 import QuizScreen from "./src/learning/screens/QuizScreen";
+import QuizResultsScreen from "./src/learning/screens/QuizResultsScreen";
 import CertificatesScreen from "./src/learning/screens/CertificatesScreen";
 import CertificateViewerScreen from "./src/learning/screens/CertificateViewerScreen";
 import AchievementsScreen from "./src/learning/screens/AchievementsScreen";
@@ -492,6 +493,11 @@ export default function App() {
                     name="QuizScreen"
                     component={QuizScreen}
                     options={{ headerTitle: "Quiz" }}
+                  />
+                  <Stack.Screen
+                    name="QuizResults"
+                    component={QuizResultsScreen}
+                    options={{ headerTitle: "Quiz results" }}
                   />
                   <Stack.Screen
                     name="Certificates"

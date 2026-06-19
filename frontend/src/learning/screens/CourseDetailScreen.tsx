@@ -100,7 +100,12 @@ export default function CourseDetailScreen() {
         courseId,
       });
     } else if (lesson.type === "quiz") {
-      navigation.navigate("QuizScreen", { quizId: lesson.id, title: lesson.title });
+      // Already attempted → show results/feedback; otherwise start the attempt.
+      if (lesson.quizAttempted) {
+        navigation.navigate("QuizResults", { quizId: lesson.id, title: lesson.title });
+      } else {
+        navigation.navigate("QuizScreen", { quizId: lesson.id, title: lesson.title });
+      }
     } else {
       navigation.navigate("LearningDocument", {
         title: lesson.title,
