@@ -7,12 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.ApiResponse;
 import com.fyp.backend.service.CourseService;
+import com.fyp.backend.service.UserService;
 
 /**
  * Learner-facing catalog read endpoints. Mirrors the source Supabase edge
@@ -24,6 +26,9 @@ public class CourseController {
 
     @Autowired
     private CourseService courseService;
+
+    @Autowired
+    private UserService userService;
 
     @GetMapping("/getAllPublishedCourse")
     public Map<String, Object> getAllPublishedCourse(
@@ -48,8 +53,11 @@ public class CourseController {
     }
 
     @GetMapping("/getModuleDetail/{courseId}")
-    public Map<String, Object> getModuleDetail(@PathVariable Long courseId) {
-        return courseService.getModuleDetail(courseId);
+    public Map<String, Object> getModuleDetail(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            @PathVariable Long courseId) {
+        Long userId = userService.getUserIdFromToken(auth);
+        return courseService.getModuleDetail(courseId, userId);
     }
 
     @GetMapping("/getVideoDetail/{videoId}")

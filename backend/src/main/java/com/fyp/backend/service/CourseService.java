@@ -27,6 +27,7 @@ import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseResourceRepository;
 import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
+import com.fyp.backend.repository.CourseWishlistRepository;
 
 /**
  * Read-side catalog logic (P2). Returns loosely-typed maps matching the JSON
@@ -43,6 +44,7 @@ public class CourseService {
     @Autowired private CourseOutcomeRepository outcomeRepository;
     @Autowired private CourseQuizRepository quizRepository;
     @Autowired private CourseRatingRepository ratingRepository;
+    @Autowired private CourseWishlistRepository wishlistRepository;
 
     public List<Map<String, Object>> listCategories() {
         return categoryRepository.findAll().stream()
@@ -94,11 +96,13 @@ public class CourseService {
         return response;
     }
 
-    public Map<String, Object> getModuleDetail(Long courseId) {
+    public Map<String, Object> getModuleDetail(Long courseId, Long userId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> ApiException.notFound("Course not found"));
 
         Map<String, Object> data = courseSummaryMap(course);
+        data.put("is_in_wishlist",
+                userId != null && wishlistRepository.existsByUserIdAndCourseId(userId, courseId));
 
         List<String> outcomes = outcomeRepository.findByCourseIdOrderByOrderIndexAsc(courseId).stream()
                 .map(CourseOutcome::getOutcome).collect(Collectors.toList());

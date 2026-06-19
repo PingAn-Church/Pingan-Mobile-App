@@ -51,4 +51,6 @@ export interface LearningModule {
 export interface LearningCourseDetail extends LearningCourse {
   outcomes: string[];
   modules: LearningModule[];
+  /** Whether the requesting user has this course in their wishlist. */
+  isInWishlist?: boolean;
 }

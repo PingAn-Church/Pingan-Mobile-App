@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -52,6 +52,12 @@ export default function CourseDetailScreen() {
   const enrolled = enrolledQuery.data ?? false;
   const reviews = reviewsQuery.data ?? [];
 
+  // Sync the heart from the server's wishlist status on load and after refetch,
+  // so it stays filled when the screen is re-opened (not just within a session).
+  useEffect(() => {
+    if (detailQuery.data) setWishlisted(!!detailQuery.data.isInWishlist);
+  }, [detailQuery.data]);
+
   const handleEnroll = async () => {
     setEnrolling(true);
     try {
@@ -67,15 +73,15 @@ export default function CourseDetailScreen() {
   };
 
   const toggleWishlist = async () => {
+    const next = !wishlisted;
+    setWishlisted(next); // optimistic; server truth re-syncs via the effect below
     try {
-      if (wishlisted) {
-        await removeFromWishlist(courseId);
-        setWishlisted(false);
-      } else {
-        await addToWishlist(courseId);
-        setWishlisted(true);
-      }
+      if (next) await addToWishlist(courseId);
+      else await removeFromWishlist(courseId);
+      queryClient.invalidateQueries({ queryKey: ["learning", "course", courseId] });
+      queryClient.invalidateQueries({ queryKey: ["learning", "wishlist"] });
     } catch (e: any) {
+      setWishlisted(!next); // revert on failure
       notify("Error", e?.message || "Could not update wishlist.");
     }
   };

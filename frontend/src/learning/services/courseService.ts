@@ -107,5 +107,6 @@ export const getCourseDetail = async (
     ...base,
     outcomes: Array.isArray(d?.outcomes) ? d.outcomes : [],
     modules,
+    isInWishlist: !!d?.is_in_wishlist,
   };
 };
