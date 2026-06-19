@@ -206,6 +206,7 @@
   "addVerifiedUserFailed": "Failed to verify user.",
   "removeVerifiedUserFailed": "Failed to remove verified user.",
 
+  "searchUsers": "Search by name or email",
   "deactivateUserTitle": "Deactivate user?",
   "deactivateUserMessage": "they will be signed out and blocked from logging in. Their data is kept and can be restored.",
   "deactivateConfirmMessage": "This can be reverted later from the Inactive users list.",

@@ -3,6 +3,7 @@ import React, { useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   TouchableOpacity,
   StyleSheet,
@@ -23,11 +24,13 @@ import { UserContext } from "../../context/UserContext";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNavigation } from "@react-navigation/native";
+import { userMatchesSearch } from "../../utils/userSearch";
 
 export default function ManageAdminsPage() {
   const { user } = useContext(UserContext);
   const [admins, setAdmins] = useState([]);
   const [verifiedUsers, setVerifiedUsers] = useState([]);
+  const [search, setSearch] = useState("");
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
 
@@ -88,13 +91,28 @@ export default function ManageAdminsPage() {
     }
   };
 
+  const filteredAdmins = admins.filter((u) => userMatchesSearch(u, search));
+  const filteredVerified = verifiedUsers.filter((u) => userMatchesSearch(u, search));
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>{i18n.t("manageAdmins")}</Text>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={18} color="#888" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={i18n.t("searchUsers")}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
       <Text style={styles.subHeader}>{i18n.t("currentAdmins")}</Text>
-      {admins.length > 0 ? (
-        admins.map((admin) => (
+      {filteredAdmins.length > 0 ? (
+        filteredAdmins.map((admin) => (
           <View key={admin.id} style={styles.userItem}>
             <Text style={styles.userName}>
               {admin.firstName} {admin.lastName}
@@ -115,8 +133,8 @@ export default function ManageAdminsPage() {
       )}
 
       <Text style={styles.subHeader}>{i18n.t("verifiedUsers")}</Text>
-      {verifiedUsers.length > 0 ? (
-        verifiedUsers.map((user) => (
+      {filteredVerified.length > 0 ? (
+        filteredVerified.map((user) => (
           <View key={user.id} style={styles.userItem}>
             <Text style={styles.userName}>
               {user.firstName} {user.lastName}
@@ -141,6 +159,7 @@ export function ManageUsersPage() {
   const [verifiedUsers, setVerifiedUsers] = useState([]);
   const [notVerifiedUsers, setNotVerifiedUsers] = useState([]);
   const [inactiveUsers, setInactiveUsers] = useState([]);
+  const [search, setSearch] = useState("");
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
 
@@ -265,6 +284,10 @@ export function ManageUsersPage() {
     </View>
   );
 
+  const shownVerified = verifiedUsers.filter((u) => userMatchesSearch(u, search));
+  const shownNotVerified = notVerifiedUsers.filter((u) => userMatchesSearch(u, search));
+  const shownInactive = inactiveUsers.filter((u) => userMatchesSearch(u, search));
+
   return (
     <ScrollView
       style={styles.container}
@@ -272,9 +295,21 @@ export function ManageUsersPage() {
     >
       <Text style={styles.header}>{i18n.t("manageUsers")}</Text>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={18} color="#888" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={i18n.t("searchUsers")}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
       <Text style={styles.subHeader}>{i18n.t("verifiedUsers")}</Text>
-      {verifiedUsers.length > 0 ? (
-        verifiedUsers.map((item) => (
+      {shownVerified.length > 0 ? (
+        shownVerified.map((item) => (
           <View key={item.id}>
             {renderUserItem(item, handleRemoveVerified, "person-remove", "red")}
           </View>
@@ -284,8 +319,8 @@ export function ManageUsersPage() {
       )}
 
       <Text style={styles.subHeader}>{i18n.t("notVerifiedUsers")}</Text>
-      {notVerifiedUsers.length > 0 ? (
-        notVerifiedUsers.map((item) => (
+      {shownNotVerified.length > 0 ? (
+        shownNotVerified.map((item) => (
           <View key={item.id}>
             {renderUserItem(item, handleAddVerified, "person-add", "green")}
           </View>
@@ -295,8 +330,8 @@ export function ManageUsersPage() {
       )}
 
       <Text style={styles.subHeader}>{i18n.t("inactiveUsers")}</Text>
-      {inactiveUsers.length > 0 ? (
-        inactiveUsers.map((item) => (
+      {shownInactive.length > 0 ? (
+        shownInactive.map((item) => (
           <View key={item.id} style={styles.userItem}>
             <Text style={styles.userName}>
               {item.firstName} {item.lastName}
@@ -335,6 +370,22 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginVertical: 10,
     marginTop: 25,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 2,
   },
   userItem: {
     flexDirection: "row",

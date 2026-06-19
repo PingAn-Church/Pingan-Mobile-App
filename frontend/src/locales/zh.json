@@ -206,6 +206,7 @@
   "addVerifiedUserFailed": "验证用户失败",
   "removeVerifiedUserFailed": "移除已验证用户失败",
 
+  "searchUsers": "按姓名或邮箱搜索",
   "deactivateUserTitle": "停用该用户？",
   "deactivateUserMessage": "该用户将被登出并无法再登录。其数据会保留，可随时恢复。",
   "deactivateConfirmMessage": "之后可在“已停用用户”列表中恢复。",

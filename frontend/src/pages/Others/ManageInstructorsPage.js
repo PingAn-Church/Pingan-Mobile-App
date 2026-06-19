@@ -3,6 +3,7 @@ import React, { useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -19,11 +20,13 @@ import { UserContext } from "../../context/UserContext";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNavigation } from "@react-navigation/native";
+import { userMatchesSearch } from "../../utils/userSearch";
 
 export default function ManageInstructorsPage() {
   const { user } = useContext(UserContext);
   const [instructors, setInstructors] = useState([]);
   const [candidates, setCandidates] = useState([]);
+  const [search, setSearch] = useState("");
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
 
@@ -110,13 +113,28 @@ export default function ManageInstructorsPage() {
     }
   };
 
+  const filteredInstructors = instructors.filter((u) => userMatchesSearch(u, search));
+  const filteredCandidates = candidates.filter((u) => userMatchesSearch(u, search));
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>{i18n.t("manageInstructors")}</Text>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={18} color="#888" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={i18n.t("searchUsers")}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
       <Text style={styles.subHeader}>{i18n.t("currentInstructors")}</Text>
-      {instructors.length > 0 ? (
-        instructors.map((instructor) => (
+      {filteredInstructors.length > 0 ? (
+        filteredInstructors.map((instructor) => (
           <View key={instructor.id} style={styles.userItem}>
             <View style={styles.userLeft}>
               {canDeactivate(instructor) && (
@@ -145,8 +163,8 @@ export default function ManageInstructorsPage() {
       )}
 
       <Text style={styles.subHeader}>{i18n.t("verifiedUsers")}</Text>
-      {candidates.length > 0 ? (
-        candidates.map((candidate) => (
+      {filteredCandidates.length > 0 ? (
+        filteredCandidates.map((candidate) => (
           <View key={candidate.id} style={styles.userItem}>
             <View style={styles.userLeft}>
               {canDeactivate(candidate) && (
@@ -194,6 +212,22 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginVertical: 10,
     marginTop: 25,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 2,
   },
   userItem: {
     flexDirection: "row",
