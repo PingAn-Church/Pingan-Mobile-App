@@ -63,6 +63,7 @@ public class AuthoringService {
     @Autowired private ResourceProgressRepository resourceProgressRepository;
     @Autowired private UserModuleProgressRepository moduleProgressRepository;
     @Autowired private CourseService courseService;
+    @Autowired private OSSService ossService;
     @Autowired private ObjectMapper objectMapper;
 
     // ---- courses --------------------------------------------------------
@@ -115,6 +116,12 @@ public class AuthoringService {
         // those ids before the lessons themselves are removed.
         List<CourseVideo> videos = videoRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
         List<CourseResource> resources = resourceRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
+
+        // Collect OSS-hosted assets (cover + uploaded resource documents) before the
+        // rows are gone, so they can be cleaned up once the DB deletes succeed.
+        List<String> orphanedAssetUrls = new ArrayList<>();
+        orphanedAssetUrls.add(c.getThumbnailUrl());
+        resources.forEach(r -> orphanedAssetUrls.add(r.getResourceUrl()));
         List<Long> videoIds = videos.stream().map(CourseVideo::getId).collect(Collectors.toList());
         List<Long> resourceIds = resources.stream().map(CourseResource::getId).collect(Collectors.toList());
         if (!videoIds.isEmpty()) videoProgressRepository.deleteByVideoIdIn(videoIds);
@@ -130,6 +137,9 @@ public class AuthoringService {
         ratingRepository.deleteAll(ratingRepository.findByCourseId(courseId));
         sectionRepository.deleteAll(sectionRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         courseRepository.delete(c);
+
+        // DB deletes succeeded; remove the now-unreferenced OSS assets (best-effort).
+        orphanedAssetUrls.forEach(ossService::deleteObjectByUrl);
     }
 
     @Transactional
