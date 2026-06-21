@@ -178,10 +178,21 @@ public class UserController {
         return ResponseEntity.ok(usersWithoutCurrentUser);
     }
 
+    // Presence is stored by email internally, but exposed keyed by user id so the
+    // client never needs emails to resolve online status (no PII over the wire).
     @GetMapping("/online-users")
     public ResponseEntity<Map<String, String>> getOnlineUsers() {
-        Map<String, String> onlineUsers = redisService.getAllOnlineUsers();
-        return ResponseEntity.ok(onlineUsers);
+        Map<String, String> onlineByEmail = redisService.getAllOnlineUsers();
+        if (onlineByEmail.isEmpty()) {
+            return ResponseEntity.ok(Map.of());
+        }
+        Map<String, String> onlineById = new LinkedHashMap<>();
+        for (User u : userRepository.findByEmailIn(onlineByEmail.keySet())) {
+            if ("online".equals(onlineByEmail.get(u.getEmail()))) {
+                onlineById.put(String.valueOf(u.getId()), "online");
+            }
+        }
+        return ResponseEntity.ok(onlineById);
     }
 
     @GetMapping("/verified")

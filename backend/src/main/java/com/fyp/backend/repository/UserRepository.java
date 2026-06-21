@@ -1,5 +1,6 @@
 package com.fyp.backend.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,6 +36,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return An Optional containing the User, if found.
      */
     Optional<User> findByEmail(String email);
+
+    List<User> findByEmailIn(Collection<String> emails);
 
     List<User> findByIsVerifiedUserTrue();
 
