@@ -39,7 +39,11 @@ public class SpringSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/videos/**", "/api/announcements/**",
                                 "/api/others/**")
                         .permitAll()
-                        // /oss + /s3 stay open because registration uploads an avatar pre-auth
+                        // OSS management must be authenticated: listing every stored object
+                        // and deleting by name are abuse vectors and only ever run post-login.
+                        .requestMatchers(HttpMethod.DELETE, "/oss/delete").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/oss/list-pictures").authenticated()
+                        // Remaining /oss + /s3 stay open because registration uploads an avatar pre-auth
                         .requestMatchers("/ws/**", "/auth/**", "/s3/**", "/oss/**")
                         .permitAll()
                         // Push-token registration happens at signup, before the user has a JWT;

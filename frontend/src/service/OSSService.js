@@ -1,6 +1,7 @@
 import axios from "axios";
 import { Image } from "react-native";
 import * as ImageManipulator from "expo-image-manipulator";
+import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
 
 /**
@@ -249,10 +250,12 @@ export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
 
 export const fetchPictures = async (fileType) => {
   try {
+    const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/list-pictures`),
       {
         params: { fileType },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
     return response.data;
@@ -264,8 +267,10 @@ export const fetchPictures = async (fileType) => {
 
 export const deletePicture = async (fileName, fileType) => {
   try {
+    const token = await getAuthToken();
     await axios.delete(apiUrl(`/oss/delete`), {
       params: { fileName, fileType },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
   } catch (error) {
     console.error("Error deleting picture:", error);
