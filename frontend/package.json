@@ -38,6 +38,7 @@
     "expo-media-library": "~18.2.1",
     "expo-notifications": "~0.32.17",
     "expo-status-bar": "~3.0.9",
+    "expo-system-ui": "~6.0.9",
     "i18n-js": "^4.5.1",
     "metro": "^0.83.1",
     "react": "19.1.0",
