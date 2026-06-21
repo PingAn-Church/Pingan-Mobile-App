@@ -151,6 +151,11 @@ export function AddAnnouncementPage() {
   const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  // Assume https:// when the user omits the scheme (e.g. "www.pingan.org.sg"),
+  // but leave an explicit scheme untouched so non-web ones still get rejected.
+  const normalizeLink = (value) =>
+    value && !value.includes("://") ? `https://${value}` : value;
+
   const isValidHttpUrl = (value) => {
     try {
       const parsed = new URL(value);
@@ -175,7 +180,7 @@ export function AddAnnouncementPage() {
 
   const handleUpload = async () => {
     const trimmedTitle = title.trim();
-    const trimmedLink = announcementLink.trim();
+    const normalizedLink = normalizeLink(announcementLink.trim());
 
     if (!trimmedTitle || !image) {
       showAlert(i18n.t("error"), i18n.t("fillTitleAndImage"), [
@@ -191,7 +196,7 @@ export function AddAnnouncementPage() {
       return;
     }
 
-    if (trimmedLink && !isValidHttpUrl(trimmedLink)) {
+    if (normalizedLink && !isValidHttpUrl(normalizedLink)) {
       showAlert(i18n.t("error"), i18n.t("invalidAnnouncementLink"), [
         { text: i18n.t("ok") },
       ]);
@@ -212,7 +217,7 @@ export function AddAnnouncementPage() {
       const uploadedImageUrl = await uploadFileToOSS(image, presignedUrl);
 
       // Save Announcement in DB
-      await createAnnouncement(trimmedTitle, uploadedImageUrl, trimmedLink);
+      await createAnnouncement(trimmedTitle, uploadedImageUrl, normalizedLink);
 
       showAlert(i18n.t("success"), i18n.t("addAnnouncementSuccess"), [
         { text: i18n.t("ok") },
