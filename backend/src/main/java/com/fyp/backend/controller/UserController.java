@@ -1,11 +1,16 @@
 package com.fyp.backend.controller;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
+import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
@@ -107,6 +113,45 @@ public class UserController {
     }
 
     // New endpoint to get all users (excluding the currently logged-in user)
+    /**
+     * Directory search for chat pickers: any authenticated user, paginated, and
+     * limited to minimal fields (no email). Empty query returns the first page of
+     * active users so pickers can show an initial list.
+     */
+    @GetMapping("/search")
+    public ResponseEntity<Map<String, Object>> searchUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        int safePage = Math.max(page, 0);
+        Pageable pageable = PageRequest.of(safePage, safeSize,
+                Sort.by("firstName").ascending().and(Sort.by("id").ascending()));
+
+        String term = q == null ? "" : q.trim();
+        Page<User> result = term.isEmpty()
+                ? userRepository.findByActiveTrue(pageable)
+                : userRepository.searchActiveByName(term, pageable);
+
+        List<UserSummaryDto> data = result.getContent().stream()
+                .map(UserSummaryDto::from)
+                .collect(Collectors.toList());
+
+        Map<String, Object> pagination = new LinkedHashMap<>();
+        pagination.put("page", safePage);
+        pagination.put("size", safeSize);
+        pagination.put("totalCount", result.getTotalElements());
+        pagination.put("hasMore", result.hasNext());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("data", data);
+        body.put("pagination", pagination);
+        return ResponseEntity.ok(body);
+    }
+
+    // Full directory with emails is admin-only; normal users use /search (no PII).
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<List<UserProfileDto>> getAllUsers(
             @RequestHeader("Authorization") String authorizationHeader) {
