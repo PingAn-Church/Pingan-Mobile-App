@@ -418,4 +418,40 @@ public class OSSService {
             ossClient.shutdown();
         }
     }
+
+    /** Object-key prefixes this app owns; used to avoid deleting externally-hosted URLs. */
+    private static final List<String> MANAGED_PREFIXES = List.of(
+            "userProfilePictures/", "groupProfilePictures/", "documents/",
+            "eventPictures/", "announcementPictures/", "coursePictures/",
+            "otherPictures/", "conversations/");
+
+    /**
+     * Best-effort delete of an OSS object given its stored public URL. No-op for blank
+     * input or URLs that don't point at one of our managed folders, and never throws —
+     * callers use this for cleanup that must not fail the surrounding operation.
+     */
+    public void deleteObjectByUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        String objectKey;
+        try {
+            objectKey = new java.net.URL(url).getPath();
+        } catch (Exception e) {
+            objectKey = url; // Maybe already a raw object key.
+        }
+        if (objectKey.startsWith("/")) {
+            objectKey = objectKey.substring(1);
+        }
+        final String key = objectKey;
+        if (MANAGED_PREFIXES.stream().noneMatch(key::startsWith)) {
+            logger.info("Skipping delete for unmanaged/external URL: " + url);
+            return;
+        }
+        try {
+            deleteObject(key);
+        } catch (Exception e) {
+            logger.warning("Failed to delete OSS object for URL " + url + ": " + e.getMessage());
+        }
+    }
 }

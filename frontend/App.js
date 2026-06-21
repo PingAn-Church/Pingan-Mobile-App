@@ -89,6 +89,13 @@ import { useWindowDimensions, View, Animated, StyleSheet } from "react-native";
 import Sidebar from "./src/components/Sidebar";
 import EntryScreen from "./src/components/EntryScreen";
 
+// App is light-only (iOS/Android forced light). Pin the web document to a light
+// color-scheme so the browser's dark mode doesn't auto-style native controls,
+// scrollbars, or any unstyled element against our hardcoded light backgrounds.
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  document.documentElement.style.colorScheme = "light";
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,

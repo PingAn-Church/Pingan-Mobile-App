@@ -28,10 +28,14 @@ const RoundedSquare = ({
   // Function to handle the click and open the URL
   const handlePress = async () => {
     if (webUrl) {
-      const supported = await Linking.canOpenURL(webUrl);
-      if (supported) {
-        Linking.openURL(webUrl);
-      } else {
+      // Open directly rather than gating on Linking.canOpenURL(): on Android 11+
+      // canOpenURL returns false for any scheme (tel:, mailto:, ...) not declared
+      // in the manifest <queries>, producing false negatives. openURL rejects only
+      // when nothing on the device can actually handle the URL.
+      try {
+        await Linking.openURL(webUrl);
+      } catch (error) {
+        console.error("Failed to open URL:", webUrl, error);
         showAlert("Error", "Sorry, this URL cannot be opened.");
       }
     } else if (navigationScreen) {

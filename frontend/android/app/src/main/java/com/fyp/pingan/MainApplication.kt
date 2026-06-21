@@ -3,6 +3,8 @@ package org.pingan.app
 import android.app.Application
 import android.content.res.Configuration
 
+import androidx.appcompat.app.AppCompatDelegate
+
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
@@ -40,6 +42,10 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // App is light-only (matches iOS UIUserInterfaceStyle=Light). Force day mode so
+    // system dark / battery-saver does not flip native text colors to white against
+    // our hardcoded light backgrounds, and so useColorScheme() reports "light".
+    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {

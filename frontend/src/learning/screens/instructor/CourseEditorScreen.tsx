@@ -16,7 +16,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getCourseDetail } from "@/services/courseService";
-import { getPresignedUploadUrl, uploadFileToOSS } from "../../../service/OSSService";
+import { getPresignedUploadUrl, uploadFileToOSS, deletePicture } from "../../../service/OSSService";
 import * as authoring from "@/services/authoringService";
 import { confirmDestructive, notify } from "@/utils/alerts";
 import {
@@ -207,10 +207,19 @@ export default function CourseEditorScreen() {
     });
     if (result.canceled || result.assets.length === 0) return;
     setUploadingCover(true);
+    const previousThumb = thumbnailUrl;
     try {
       const presignedUrl = await getPresignedUploadUrl(`course_cover_${Date.now()}.jpeg`, "course");
       const uploadedUrl = await uploadFileToOSS(result.assets[0].uri, presignedUrl);
       setThumbnailUrl(uploadedUrl);
+      // Remove the replaced cover from OSS (best-effort; only our uploaded covers).
+      if (previousThumb && previousThumb !== uploadedUrl && previousThumb.includes("coursePictures/")) {
+        try {
+          await deletePicture(previousThumb.split("/").pop()!.split("?")[0], "course");
+        } catch (err) {
+          console.warn("Failed to delete old course cover:", err);
+        }
+      }
     } catch (e: any) {
       notify("Error", e?.message || "Failed to upload the cover image.");
     } finally {

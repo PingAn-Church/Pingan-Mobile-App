@@ -168,12 +168,18 @@ const EditProfile = () => {
       if (profileImage && profileImage !== originalProfileImage) {
         console.log("changed pic!");
 
-        if (originalProfileImage) {
-          const fileName = originalProfileImage.split("/").pop().split("?")[0];
-          // delete original if there is
-          await deletePicture(fileName, "profile");
-        }
+        // Upload the new avatar FIRST; only delete the old one once the new upload
+        // succeeds, so a failed upload can't leave the user with no picture.
         profileImageUrl = await uploadImageUsingPresignedUrl("profile", email); // Pass the file type as 'profile'
+
+        if (profileImageUrl && originalProfileImage) {
+          try {
+            const fileName = originalProfileImage.split("/").pop().split("?")[0];
+            await deletePicture(fileName, "profile");
+          } catch (err) {
+            console.warn("Failed to delete old profile picture:", err);
+          }
+        }
       }
 
       const userData = {

@@ -72,15 +72,34 @@ public class OSSController {
     public ResponseEntity<?> getPresignedUploadUrl(@RequestParam String fileName, @RequestParam String fileType) {
         try {
             String normalizedFileName = normalizeFileName(fileName);
-//            String objectKey = fileType + "/" + fileName;
+            if (!isAllowedImageName(normalizedFileName)) {
+                return ResponseEntity.badRequest().body("Only image uploads are allowed.");
+            }
+            // getFolderPath validates the destination prefix and throws on unknown types.
+            // The signed URL is image/jpeg only; a hard byte-size cap would require switching
+            // to OSS POST-policy uploads (not the presigned-PUT flow used here).
             String objectKey = ossService.getFolderPath(fileType) + normalizedFileName;
             URL presignedUrl = ossService.generatePresignedUploadUrl(objectKey, 60);
             logger.info("Generated Presigned URL: " + presignedUrl);
             return ResponseEntity.ok(presignedUrl.toString());
+        } catch (IllegalArgumentException e) {
+            logger.warning("Rejected OSS upload presign request: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Unsupported file type: " + fileType);
         } catch (Exception e) {
             logger.severe("Error generating OSS presigned upload URL: " + e.getMessage());
             return ResponseEntity.status(500).body("Error generating presigned URL");
         }
+    }
+
+    private static final java.util.Set<String> ALLOWED_IMAGE_EXTENSIONS =
+            java.util.Set.of("jpg", "jpeg", "png", "webp", "heic", "gif");
+
+    private boolean isAllowedImageName(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0 || dot == fileName.length() - 1) {
+            return false;
+        }
+        return ALLOWED_IMAGE_EXTENSIONS.contains(fileName.substring(dot + 1).toLowerCase());
     }
 
     @GetMapping("/presigned-download-url")

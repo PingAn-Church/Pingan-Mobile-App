@@ -1,6 +1,10 @@
 <resources>
-  <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+  <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+    <!-- App is light-only (matches iOS UIUserInterfaceStyle=Light). Lock to light
+         and opt out of Android force-dark so text/backgrounds stay consistent in
+         system dark / battery-saver mode. -->
+    <item name="android:forceDarkAllowed">false</item>
   </style>
   <style name="Theme.App.SplashScreen" parent="AppTheme">
     <item name="android:windowBackground">@drawable/splashscreen_logo</item>

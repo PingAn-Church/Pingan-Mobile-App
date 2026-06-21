@@ -789,6 +789,11 @@ public class ConversationService {
     }
 
     private void performConversationCleanup(Conversation conversation) {
+        // Remove the group icon from OSS so deleting a group doesn't leave it orphaned.
+        if (conversation instanceof GroupConversation group) {
+            ossService.deleteObjectByUrl(group.getGroupIcon());
+        }
+
         List<Message> messages = messageRepository.findByConversationId(conversation.getId());
 
         for (Message message : messages) {

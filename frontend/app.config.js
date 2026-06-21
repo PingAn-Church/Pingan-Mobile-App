@@ -44,6 +44,9 @@ export default {
       newArchEnabled: true,
       plugins: [
         "expo-font",
+        // Enforces userInterfaceStyle: "light" on Android during prebuild, so the
+        // light-only theme survives `expo prebuild --clean` (see styles.xml).
+        "expo-system-ui",
       ],
       extra: {
         BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_BASE_URL,
