@@ -1,5 +1,39 @@
 import axios from "axios";
+import { Image } from "react-native";
+import * as ImageManipulator from "expo-image-manipulator";
 import { apiUrl } from "./apiConfig";
+
+/**
+ * Resize (longest edge) and re-encode an image to JPEG before upload, to cut OSS
+ * storage and bandwidth. Only downscales (never upscales) and always re-compresses,
+ * so even full-quality phone photos shrink dramatically. Returns a new local uri;
+ * falls back to the original uri on any failure. Non-image uploads must skip this.
+ */
+export const compressImage = async (uri, { maxDimension = 1280, quality = 0.7 } = {}) => {
+  try {
+    const size = await new Promise((resolve) => {
+      Image.getSize(uri, (w, h) => resolve({ w, h }), () => resolve(null));
+    });
+
+    const actions = [];
+    if (size && Math.max(size.w, size.h) > maxDimension) {
+      actions.push(
+        size.w >= size.h
+          ? { resize: { width: maxDimension } }
+          : { resize: { height: maxDimension } }
+      );
+    }
+
+    const result = await ImageManipulator.manipulateAsync(uri, actions, {
+      compress: quality,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
+    return result.uri;
+  } catch (error) {
+    console.warn("Image compression failed, using original:", error?.message);
+    return uri;
+  }
+};
 
 const normalizeFileName = (fileName) => {
   const raw = String(fileName || "");
@@ -132,8 +166,15 @@ export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride
       inferContentTypeFromSignedUrl(normalizedPresignedUrl) ||
       inferContentTypeFromFileUri(fileUri);
 
+    // Compress images before upload (skips audio/other types). The presigned URL is
+    // signed for image/jpeg, so JPEG output keeps the signature valid.
+    const sourceUri =
+      typeof contentType === "string" && contentType.startsWith("image/")
+        ? await compressImage(fileUri)
+        : fileUri;
+
     // Fetch the file as a blob
-    const fileResponse = await fetch(fileUri);
+    const fileResponse = await fetch(sourceUri);
     const blob = await fileResponse.blob();
     // Some runtimes derive Content-Type from Blob.type. Keep it aligned with presigned signature.
     const uploadBlob =
