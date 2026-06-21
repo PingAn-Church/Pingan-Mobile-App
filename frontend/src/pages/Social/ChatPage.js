@@ -350,31 +350,37 @@ export default function ChatPage({ route }) {
   }, [language, navigation]);
 
   useEffect(() => {
-    const fetchUsersDirectory = async () => {
+    const buildUsersDirectory = async () => {
       try {
-        const users = await getAllUsers();
-        const nextDirectory = {};
+        // Build the avatar directory from conversation participants rather than the
+        // global roster — no email exposure, bounded to people you actually chat with.
+        const profilesById = {};
+        (conversations || []).forEach((conv) =>
+          (conv?.participantProfiles || []).forEach((p) => {
+            if (p?.id !== null && p?.id !== undefined) profilesById[String(p.id)] = p;
+          })
+        );
 
         const resolvedUsers = await Promise.all(
-          (users || []).map(async (item) => ({
+          Object.values(profilesById).map(async (item) => ({
             ...item,
             profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
           }))
         );
 
+        const nextDirectory = {};
         resolvedUsers.forEach((item) => {
-          if (item?.id === null || item?.id === undefined) return;
           nextDirectory[String(item.id)] = item;
         });
 
         setUserDirectory(nextDirectory);
       } catch (error) {
-        console.error("Failed to fetch users for chat icons:", error);
+        console.error("Failed to build users directory for chat icons:", error);
       }
     };
 
-    fetchUsersDirectory();
-  }, []);
+    buildUsersDirectory();
+  }, [conversations]);
 
   useEffect(() => {
     setTranslations({});

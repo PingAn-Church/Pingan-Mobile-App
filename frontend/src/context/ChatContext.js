@@ -157,9 +157,10 @@ export const ChatProvider = ({ children }) => {
   };
 
   const handleUserStatusUpdate = (msg) => {
-    const key = msg.userEmail || msg.userId;
+    // Presence is now keyed by user id (backend stopped broadcasting emails).
+    const key = msg.userId || msg.userEmail;
     if (!key || key === "undefined") return;
-    setUserStatus((prev) => ({ ...prev, [key]: msg.status }));
+    setUserStatus((prev) => ({ ...prev, [String(key)]: msg.status }));
   };
 
   const handleDeliveryStatusUpdate = (msg) => {
