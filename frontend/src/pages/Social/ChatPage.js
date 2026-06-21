@@ -45,7 +45,8 @@ import {
   uploadFileToOSS,
 } from "../../service/OSSService";
 import { getStompClient } from "../../service/WebSocketService";
-import { getAllUsers, getUserById, startGroupChat, startPrivateChat } from "../../service/UserService";
+import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../../service/UserService";
+import useDebouncedValue from "../../hooks/useDebouncedValue";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import VoicePlayer from "../../components/Chat/VoicePlayer";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
@@ -1274,12 +1275,13 @@ export default function ChatPage({ route }) {
     });
   }, [newGroupSearchQuery, newChatUsers]);
 
-  const loadWebNewChatUsers = useCallback(async () => {
+  const loadWebNewChatUsers = useCallback(async (term = "") => {
     try {
       setLoadingNewChatUsers(true);
-      const allUsers = await getAllUsers();
+      // Server-side directory search (no email, capped page) instead of the whole roster.
+      const res = await searchUsers(term, 0, 50);
       const resolvedUsers = await Promise.all(
-        (allUsers || []).map(async (item) => ({
+        (res?.data || []).map(async (item) => ({
           ...item,
           profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
         }))
@@ -1293,6 +1295,20 @@ export default function ChatPage({ route }) {
       setLoadingNewChatUsers(false);
     }
   }, [currentUser?.id]);
+
+  // Re-run the directory search server-side when the user pauses typing (700ms),
+  // for whichever web panel is open. Initial load happens in the open handlers.
+  const debouncedNewChatQuery = useDebouncedValue(newChatSearchQuery, 700);
+  useEffect(() => {
+    if (showWebNewChatPanel) loadWebNewChatUsers(debouncedNewChatQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedNewChatQuery]);
+
+  const debouncedNewGroupQuery = useDebouncedValue(newGroupSearchQuery, 700);
+  useEffect(() => {
+    if (showWebCreateGroupPanel) loadWebNewChatUsers(debouncedNewGroupQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedNewGroupQuery]);
 
   const handleOpenWebNewChatPanel = async () => {
     if (!isWebDesktop) {

@@ -97,6 +97,20 @@ export const getAllUsers = async () => {
   }
 };
 
+// Paginated directory search for chat pickers. Returns the backend envelope
+// { success, data: [{id, firstName, lastName, profileImage, ...}], pagination }.
+// Minimal fields only (no email); empty query returns the first page of users.
+export const searchUsers = async (q = "", page = 0, size = 20) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  const response = await axios.get(apiUrl(`/api/users/search`), {
+    params: { q, page, size },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
 export const startPrivateChat = async (participantIds) => {
   try {
     const token = await getAuthToken();

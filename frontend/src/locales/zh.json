@@ -243,6 +243,7 @@
   "logoutSuccess": "已退出登录",
 
   "cantFetchUsers": "无法获取用户",
+  "noUsersFound": "未找到用户",
   "cantLoadChat": "无法加载更新后的对话",
   "noMsg": "没有对话",
   "searchConversations": "搜索对话",

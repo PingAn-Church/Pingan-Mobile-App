@@ -243,6 +243,7 @@
   "logoutSuccess": "You have been logged out.",
 
   "cantFetchUsers": "Unable to fetch users",
+  "noUsersFound": "No users found",
   "cantLoadChat": "Couldn't load updated chats",
   "noMsg": "No messages",
   "searchConversations": "Search Conversations",
