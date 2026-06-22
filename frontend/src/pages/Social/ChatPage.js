@@ -279,6 +279,10 @@ export default function ChatPage({ route }) {
   const [translatingId, setTranslatingId] = useState(null);
   const flatListRef = useRef(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [showJumpToEnd, setShowJumpToEnd] = useState(false);
+  // Tracks the conversation we've already positioned at its oldest unread, so the
+  // one-time "open at oldest unread" jump runs once per conversation open.
+  const anchorHandledRef = useRef(null);
   const textInputRef = useRef(null);
   const pendingAckTimersRef = useRef(new Map());
   const sendingTextLockRef = useRef(false);
@@ -628,6 +632,66 @@ export default function ChatPage({ route }) {
       setLoadingOlder(false);
     }
   }, [loadingOlder, conversation, loadOlderMessages]);
+
+  // Inverted list: contentOffset.y grows as you scroll UP (away from newest at the
+  // bottom). Show the "jump to latest" button once the user is meaningfully scrolled up.
+  const handleListScroll = useCallback((e) => {
+    setShowJumpToEnd(e.nativeEvent.contentOffset.y > 200);
+  }, []);
+
+  const jumpToEnd = useCallback(() => {
+    setShowJumpToEnd(false);
+    // Inverted list: offset 0 is the newest message (bottom).
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
+  // scrollToIndex can fail if the target isn't rendered yet (long/variable-height
+  // list); retry shortly after, by which point more rows have mounted.
+  const handleScrollToIndexFailed = useCallback((info) => {
+    setTimeout(() => {
+      try {
+        flatListRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: false });
+      } catch (_) {
+        // give up silently — the user stays at the bottom (default)
+      }
+    }, 250);
+  }, []);
+
+  // Open a conversation positioned at its OLDEST UNREAD message instead of the bottom.
+  // Runs once per conversation open, before the read-marking effect clears unread state.
+  // Respects the sliding window: it targets the oldest unread that is currently loaded
+  // (for very large unread counts the older ones page in as the user scrolls up).
+  useEffect(() => {
+    if (!conversation || anchorHandledRef.current === conversationId) return;
+    const history = conversation.chatHistory || [];
+    if (!history.length) return; // wait until the first page of messages is present
+    anchorHandledRef.current = conversationId; // handle once per open
+
+    if (!(conversation.unreadCount > 0)) return; // nothing unread -> default to bottom
+
+    const oldestUnread = [...history].sort(sortByTimeAscending).find(
+      (m) =>
+        String(m.senderId) !== String(currentUser?.id) &&
+        String(m.deliveryStatus?.[currentUser?.id] || "").toUpperCase() !== "READ" &&
+        !isLocalOnlyMessage(m)
+    );
+    if (!oldestUnread) return;
+
+    const idx = messages.findIndex(
+      (it) => it.type !== "date" && String(it.messageId) === String(oldestUnread.messageId)
+    );
+    if (idx < 0) return;
+
+    // Defer until after mount; onScrollToIndexFailed retries if the row isn't ready.
+    requestAnimationFrame(() => {
+      try {
+        flatListRef.current?.scrollToIndex({ index: idx, viewPosition: 0.5, animated: false });
+        setShowJumpToEnd(true);
+      } catch (_) {
+        // handled by onScrollToIndexFailed
+      }
+    });
+  }, [conversation?.chatHistory, conversation?.unreadCount, conversationId, currentUser?.id, messages]);
 
   const updateConversationHistory = (updater) => {
     setConversations((prev) =>
@@ -1515,6 +1579,9 @@ export default function ChatPage({ route }) {
         onScrollBeginDrag={() => {
           closeContextMenu();
         }}
+        onScroll={handleListScroll}
+        scrollEventThrottle={16}
+        onScrollToIndexFailed={handleScrollToIndexFailed}
         onEndReached={handleLoadOlder}
         onEndReachedThreshold={0.2}
         ListFooterComponent={
@@ -1796,6 +1863,17 @@ export default function ChatPage({ route }) {
             <Text style={{ color: "red", fontSize: webFontSize(12) }}>Cancel</Text>
           </TouchableOpacity>
         </View>
+      )}
+
+      {showJumpToEnd && (
+        <TouchableOpacity
+          style={styles.jumpToEndButton}
+          onPress={jumpToEnd}
+          activeOpacity={0.85}
+          accessibilityLabel="Jump to latest messages"
+        >
+          <Ionicons name="chevron-down" size={24} color="#1F1F22" />
+        </TouchableOpacity>
       )}
 
       <View style={styles.inputContainer}>
@@ -2674,6 +2752,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F2F7",
     borderTopWidth: 1,
     borderColor: "#E1E1E6",
+  },
+  // Floating "jump to latest" button, sits just above the input bar, bottom-right.
+  jumpToEndButton: {
+    position: "absolute",
+    right: 16,
+    bottom: 78,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E1E1E6",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+    zIndex: 10,
   },
   attachButton: {
     width: 40,
