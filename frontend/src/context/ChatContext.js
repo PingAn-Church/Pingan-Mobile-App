@@ -71,8 +71,14 @@ export const ChatProvider = ({ children }) => {
       const fetched = await getConversations(user.id);
       const enriched = await Promise.all(
         fetched.map(async (conv) => {
-          const chatHistory = await getChatHistory(conv.conversationId, conv.conversationType);
-          return { ...conv, chatHistory };
+          // Load only the newest page; older messages stream in on scroll-back.
+          const page = await getChatHistory(conv.conversationId, conv.conversationType, null, 30);
+          return {
+            ...conv,
+            chatHistory: page?.messages || [],
+            oldestCursor: page?.nextCursor ?? null,
+            hasMoreHistory: Boolean(page?.hasMore),
+          };
         })
       );
       setConversations(enriched);
@@ -85,6 +91,36 @@ export const ChatProvider = ({ children }) => {
 
   const fetchInitialData = async () => {
     await fetchConversations();
+  };
+
+  // Tracks in-flight scroll-back loads so concurrent onEndReached calls coalesce.
+  const loadingOlderRef = useRef(new Set());
+
+  // Prepend the next older page of a conversation's history (cursor pagination).
+  const loadOlderMessages = async (conversationId, conversationType, before) => {
+    if (before == null) return;
+    if (loadingOlderRef.current.has(conversationId)) return;
+    loadingOlderRef.current.add(conversationId);
+    try {
+      const page = await getChatHistory(conversationId, conversationType, before, 30);
+      const older = page?.messages || [];
+      setConversations((prev) =>
+        prev.map((c) =>
+          String(c.conversationId) === String(conversationId)
+            ? {
+                ...c,
+                chatHistory: dedupeMessagesById([...older, ...(c.chatHistory || [])]),
+                oldestCursor: page?.nextCursor ?? c.oldestCursor,
+                hasMoreHistory: Boolean(page?.hasMore),
+              }
+            : c
+        )
+      );
+    } catch (err) {
+      console.error("❌ Failed to load older messages:", err);
+    } finally {
+      loadingOlderRef.current.delete(conversationId);
+    }
   };
 
   const handleWebSocketMessage = (message) => {
@@ -121,6 +157,14 @@ export const ChatProvider = ({ children }) => {
 
         chatHistory = dedupeMessagesById(chatHistory);
 
+        // A genuinely new message from someone else bumps the unread badge live;
+        // it resets to 0 when the conversation is viewed (see ChatPage read effect).
+        const isNewIncoming =
+          message.senderId !== user?.id &&
+          !message.deleted &&
+          exists === -1 &&
+          optimisticIndex === -1;
+
         // 📡 Send delivery status if needed
         if (message.senderId !== user?.id && !message.deleted) {
           sendDeliveryStatusUpdate({
@@ -132,7 +176,11 @@ export const ChatProvider = ({ children }) => {
           });
         }
 
-        return { ...conv, chatHistory };
+        return {
+          ...conv,
+          chatHistory,
+          unreadCount: (conv.unreadCount || 0) + (isNewIncoming ? 1 : 0),
+        };
       });
 
       return updated;
@@ -221,8 +269,10 @@ export const ChatProvider = ({ children }) => {
 
     if (!enriched.chatHistory) {
       try {
-        const history = await getChatHistory(enriched.conversationId, enriched.conversationType);
-        enriched.chatHistory = history || [];
+        const page = await getChatHistory(enriched.conversationId, enriched.conversationType, null, 30);
+        enriched.chatHistory = page?.messages || [];
+        enriched.oldestCursor = page?.nextCursor ?? null;
+        enriched.hasMoreHistory = Boolean(page?.hasMore);
       } catch (err) {
         console.error("❌ Failed to enrich chat history:", err);
         enriched.chatHistory = [];
@@ -338,6 +388,7 @@ export const ChatProvider = ({ children }) => {
         resetChat,
         setConversations,
         fetchInitialData,
+        loadOlderMessages,
         handleWebSocketMessage,
         handleUserStatusUpdate,
         handleDeliveryStatusUpdate,

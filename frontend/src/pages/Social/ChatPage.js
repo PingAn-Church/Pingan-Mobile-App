@@ -236,7 +236,7 @@ export default function ChatPage({ route }) {
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
   const { user: currentUser } = useContext(UserContext);
-  const { conversations, setConversations } = useContext(ChatContext);
+  const { conversations, setConversations, loadOlderMessages } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
 
@@ -278,6 +278,7 @@ export default function ChatPage({ route }) {
   const [translations, setTranslations] = useState({});
   const [translatingId, setTranslatingId] = useState(null);
   const flatListRef = useRef(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const textInputRef = useRef(null);
   const pendingAckTimersRef = useRef(new Map());
   const sendingTextLockRef = useRef(false);
@@ -607,6 +608,27 @@ export default function ChatPage({ route }) {
     return grouped.reverse();
   }, [conversation]);
 
+  // Inverted list: onEndReached fires at the top (oldest), so auto-load older history.
+  const handleLoadOlder = useCallback(async () => {
+    if (
+      loadingOlder ||
+      !conversation?.hasMoreHistory ||
+      conversation?.oldestCursor == null
+    ) {
+      return;
+    }
+    setLoadingOlder(true);
+    try {
+      await loadOlderMessages(
+        conversation.conversationId,
+        conversation.conversationType,
+        conversation.oldestCursor
+      );
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [loadingOlder, conversation, loadOlderMessages]);
+
   const updateConversationHistory = (updater) => {
     setConversations((prev) =>
       prev.map((conv) => {
@@ -670,6 +692,17 @@ export default function ChatPage({ route }) {
         console.error("Failed to publish READ receipt:", error);
       }
     });
+
+    // Viewing the conversation clears its unread badge (incremented live on receipt).
+    if (conversation?.unreadCount) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          Number(c.conversationId) === Number(conversationId)
+            ? { ...c, unreadCount: 0 }
+            : c
+        )
+      );
+    }
   }, [
     conversation?.chatHistory,
     conversationId,
@@ -1482,6 +1515,13 @@ export default function ChatPage({ route }) {
         onScrollBeginDrag={() => {
           closeContextMenu();
         }}
+        onEndReached={handleLoadOlder}
+        onEndReachedThreshold={0.2}
+        ListFooterComponent={
+          loadingOlder ? (
+            <ActivityIndicator style={{ marginVertical: 12 }} color="#888" />
+          ) : null
+        }
         keyExtractor={(item, index) =>
           item.type === "date"
             ? item.id

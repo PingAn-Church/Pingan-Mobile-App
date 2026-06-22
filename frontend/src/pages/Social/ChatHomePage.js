@@ -301,13 +301,9 @@ const ChatHomePage = () => {
     });
   };
 
-  const getUnreadMessageCount = (conversation, userId) => {
-    return conversation.chatHistory
-      ? conversation.chatHistory.filter(
-          (msg) =>
-            msg.senderId !== userId && msg.deliveryStatus?.[userId] !== "READ"
-        ).length
-      : 0;
+  const getUnreadMessageCount = (conversation) => {
+    // Server-computed badge; the client no longer loads every message to count.
+    return conversation.unreadCount || 0;
   };
 
   const getOnlineUserCount = (conversation) => {

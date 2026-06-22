@@ -55,7 +55,9 @@ export const getConversationById = async (conversationId) => {
   }
 };
 
-export const getChatHistory = async (conversationId, conversationType) => {
+// Cursor-paginated history. `before` is the smallest message id already loaded
+// (null for the newest page). Returns { messages, nextCursor, hasMore }.
+export const getChatHistory = async (conversationId, conversationType, before = null, size = 30) => {
   const token = await getAuthToken();
 
   if (!token) {
@@ -64,12 +66,17 @@ export const getChatHistory = async (conversationId, conversationType) => {
 
   try {
     const response = await axios.get(apiUrl(`/chat/history`), {
-      params: { conversationId, conversationType },
+      params: {
+        conversationId,
+        conversationType,
+        size,
+        ...(before != null ? { before } : {}),
+      },
       headers: {
         Authorization: `Bearer ${token}`, // Send token in Authorization header
       },
     });
-    return response.data; // Return the list of messages for the conversation
+    return response.data; // { messages, nextCursor, hasMore }
   } catch (error) {
     console.error("Error fetching chat history:", error);
     throw error;
