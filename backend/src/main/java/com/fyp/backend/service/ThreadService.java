@@ -7,10 +7,16 @@ import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,6 +33,29 @@ public class ThreadService {
                 .stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
+    }
+
+    /** Paginated, newest-first forum threads with a stable id tiebreaker. */
+    public Map<String, Object> getThreads(int page, int size) {
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        int safePage = Math.max(page, 0);
+        Pageable pageable = PageRequest.of(safePage, safeSize,
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
+
+        Page<Thread> result = threadRepository.findAll(pageable);
+        List<ThreadDto> data = result.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
+
+        Map<String, Object> pagination = new LinkedHashMap<>();
+        pagination.put("page", safePage);
+        pagination.put("size", safeSize);
+        pagination.put("totalCount", result.getTotalElements());
+        pagination.put("hasMore", result.hasNext());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", true);
+        response.put("data", data);
+        response.put("pagination", pagination);
+        return response;
     }
 
     public ThreadDto createThread(ThreadDto dto, String token) {
