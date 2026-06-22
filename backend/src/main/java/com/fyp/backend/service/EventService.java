@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 
 import com.fyp.backend.dto.EventDto;
+import com.fyp.backend.dto.EventSummaryDto;
 import com.fyp.backend.model.Event;
 import com.fyp.backend.repository.EventRepository;
 
@@ -18,9 +20,11 @@ public class EventService {
     @Autowired
     private EventRepository eventRepository;
 
-    // Fetch all events
-    public List<Event> getAllEvents() {
-        return eventRepository.findAll();
+    // Fetch all events as lightweight summaries (no checkedInUserIds — see EventSummaryDto).
+    public List<EventSummaryDto> getAllEvents() {
+        return eventRepository.findAll().stream()
+                .map(EventSummaryDto::from)
+                .collect(Collectors.toList());
     }
 
     // Fetch a single event by ID
