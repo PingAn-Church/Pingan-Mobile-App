@@ -72,7 +72,7 @@ public class CourseService {
     public List<Map<String, Object>> listAllCourses() {
         List<Course> courses = courseRepository.findAll();
         courses.sort(courseComparator("updated_at").reversed());
-        return courses.stream().map(this::courseSummaryMap).collect(Collectors.toList());
+        return courses.stream().map(c -> courseSummaryMap(c, false)).collect(Collectors.toList());
     }
 
     public Map<String, Object> listPublishedCourses(String category, int limit, int offset,
@@ -97,7 +97,7 @@ public class CourseService {
         }
 
         List<Map<String, Object>> data = result.getContent().stream()
-                .map(this::courseSummaryMap).collect(Collectors.toList());
+                .map(c -> courseSummaryMap(c, false)).collect(Collectors.toList());
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("success", true);
@@ -281,13 +281,23 @@ public class CourseService {
     }
 
     public Map<String, Object> courseSummaryMap(Course course) {
+        return courseSummaryMap(course, true);
+    }
+
+    /**
+     * @param includeDescription list views pass {@code false} to drop the full
+     *        description text (cards don't render it), trimming the payload.
+     */
+    public Map<String, Object> courseSummaryMap(Course course, boolean includeDescription) {
         Category category = course.getCategoryId() == null ? null
                 : categoryRepository.findById(course.getCategoryId()).orElse(null);
 
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", String.valueOf(course.getId()));
         m.put("title", course.getTitle());
-        m.put("description", course.getDescription());
+        if (includeDescription) {
+            m.put("description", course.getDescription());
+        }
         m.put("instructor_name", course.getInstructorName());
         m.put("instructor_id", course.getInstructorId() == null ? null : String.valueOf(course.getInstructorId()));
         m.put("category_id", course.getCategoryId() == null ? null : String.valueOf(course.getCategoryId()));
