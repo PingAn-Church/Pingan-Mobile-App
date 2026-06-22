@@ -2,7 +2,7 @@ import 'react-native-reanimated';
 import React, { useContext, useState, useEffect, useRef } from "react";
 import { Text } from "react-native";
 import { Platform } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, useNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import "text-encoding";
@@ -300,13 +300,50 @@ function EntryGate({ children }) {
   );
 }
 
+// Routes reachable without a session (the auth flow). Everything else requires login.
+const PUBLIC_ROUTES = new Set([
+  "Welcome",
+  "Login",
+  "Register",
+  "VerificationCode",
+  "ForgotPassword",
+]);
+
+// Global auth boundary: once the session is resolved, any time there's no logged-in
+// user and the active route isn't public, send the user back to Welcome. This covers
+// every screen (not just the homepage) — important on web where routes are URL-reachable.
+function AuthGuard({ navigationRef }) {
+  const { user, loading } = useContext(UserContext);
+
+  useEffect(() => {
+    if (loading) return; // wait until the session check settles (handled by EntryGate)
+
+    const enforce = () => {
+      if (!navigationRef.isReady()) return;
+      const route = navigationRef.getCurrentRoute();
+      if (!route) return;
+      if (!user && !PUBLIC_ROUTES.has(route.name)) {
+        navigationRef.reset({ index: 0, routes: [{ name: "Welcome" }] });
+      }
+    };
+
+    enforce(); // run immediately (covers logout/expiry and the current route)
+    const unsubscribe = navigationRef.addListener("state", enforce); // and on every navigation
+    return unsubscribe;
+  }, [user, loading, navigationRef]);
+
+  return null;
+}
+
 // Main App Navigator for stack and bottom tabs
 export default function App() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  const navigationRef = useNavigationContainerRef();
 
   return (
     <NavigationContainer
+      ref={navigationRef}
       linking={Platform.OS === "web" ? linking : undefined}
     >
       <QueryClientProvider client={queryClient}>
@@ -317,6 +354,7 @@ export default function App() {
             <ChatProvider>
               <WebSocketProvider>
                 <EntryGate>
+                <AuthGuard navigationRef={navigationRef} />
                 <Stack.Navigator initialRouteName="Welcome">
                   <Stack.Screen
                     name="Welcome"
