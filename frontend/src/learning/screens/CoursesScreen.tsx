@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getPublishedCourses } from "@/services/courseService";
@@ -59,6 +59,8 @@ export function CourseCard({
   );
 }
 
+const COURSES_PAGE_SIZE = 20;
+
 export default function CoursesScreen() {
   const navigation = useNavigation<any>();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -68,14 +70,21 @@ export default function CoursesScreen() {
     queryFn: getCategories,
   });
 
-  const coursesQuery = useQuery({
+  const coursesQuery = useInfiniteQuery({
     queryKey: ["learning", "courses", activeCategory],
-    queryFn: () =>
-      getPublishedCourses(activeCategory ? { category: activeCategory } : {}),
+    queryFn: ({ pageParam }) =>
+      getPublishedCourses({
+        ...(activeCategory ? { category: activeCategory } : {}),
+        offset: pageParam as number,
+        limit: COURSES_PAGE_SIZE,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.length * COURSES_PAGE_SIZE : undefined,
   });
 
   const categories = categoriesQuery.data ?? [];
-  const courses = coursesQuery.data?.courses ?? [];
+  const courses = coursesQuery.data?.pages.flatMap((p) => p.courses) ?? [];
 
   const chips = useMemo(
     () => [{ id: "all", name: "All" }, ...categories.map((c) => ({ id: c.name, name: c.name }))],
@@ -137,6 +146,17 @@ export default function CoursesScreen() {
               }
             />
           )}
+          onEndReached={() => {
+            if (coursesQuery.hasNextPage && !coursesQuery.isFetchingNextPage) {
+              coursesQuery.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            coursesQuery.isFetchingNextPage ? (
+              <ActivityIndicator style={{ marginVertical: 16 }} color={Colors.secondary} />
+            ) : null
+          }
         />
       )}
     </View>

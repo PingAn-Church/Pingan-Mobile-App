@@ -2,16 +2,17 @@ import axios from "axios";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
 
-export const getAllApplications = async () => {
+export const getAllApplications = async (page = 0, size = 20) => {
   try {
     const token = await getAuthToken();
     const response = await axios.get(apiUrl(`/api/applications`), {
+      params: { page, size },
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data;
+    return response.data; // { success, data, pagination }
   } catch (error) {
     console.error("Error fetching applications:", error);
-    return [];
+    return { data: [], pagination: { hasMore: false } };
   }
 };
 
