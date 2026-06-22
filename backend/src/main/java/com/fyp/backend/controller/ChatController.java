@@ -98,19 +98,20 @@ public class ChatController {
     @GetMapping("/history")
     public ResponseEntity<?> getChatHistory(@RequestParam Long conversationId,
                                             @RequestParam String conversationType,
+                                            @RequestParam(required = false) Long before,
+                                            @RequestParam(defaultValue = "30") int size,
                                             HttpServletRequest request) {
         // Extract userId from JWT Token
         Long loggedInUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
-        System.out.println("LOGGED IN USER" + loggedInUserId);
 
         if (loggedInUserId == null) {
             return ResponseEntity.status(403).body("Unauthorized access");
         }
 
         try {
-            // Call chat history only if the user is part of the conversation
-            List<MessageDto> messages = chatService.getChatHistory(conversationId, conversationType, loggedInUserId);
-            return ResponseEntity.ok(messages);
+            // Cursor-paginated page (newest window first; older pages via `before`).
+            return ResponseEntity.ok(
+                    chatService.getChatHistoryPage(conversationId, conversationType, loggedInUserId, before, size));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(403).body("You are not part of this conversation.");
         }

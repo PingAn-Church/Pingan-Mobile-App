@@ -6,6 +6,8 @@ import com.fyp.backend.mq.MessagePublisher;
 import com.fyp.backend.repository.*;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -15,7 +17,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -123,6 +128,37 @@ public class ChatService {
         return messages.stream()
                 .map(MessageDto::new)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Cursor-paginated chat history, newest-first internally but returned oldest->newest
+     * for natural rendering. `before` is the smallest message id already loaded (null for
+     * the first page). Returns { messages, nextCursor, hasMore }.
+     */
+    public Map<String, Object> getChatHistoryPage(Long conversationId, String conversationType,
+            Long userId, Long before, int size) {
+        Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
+        checkUserIsParticipant(conversation, userId);
+
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        Pageable pageable = PageRequest.of(0, safeSize);
+
+        List<Message> desc = (before == null)
+                ? messageRepository.findByConversationIdOrderByIdDesc(conversationId, pageable)
+                : messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(conversationId, before, pageable);
+
+        boolean hasMore = desc.size() == safeSize;
+        Long nextCursor = desc.isEmpty() ? null : desc.get(desc.size() - 1).getId();
+
+        List<Message> ascending = new ArrayList<>(desc);
+        Collections.reverse(ascending);
+        List<MessageDto> messages = ascending.stream().map(MessageDto::new).collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("messages", messages);
+        result.put("nextCursor", nextCursor);
+        result.put("hasMore", hasMore);
+        return result;
     }
 
 

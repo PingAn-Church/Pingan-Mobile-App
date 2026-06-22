@@ -88,6 +88,8 @@ public class ConversationDto {
     private List<String> adminNames = new ArrayList<>();
     private Long createdAt;
     private Long updatedAt;
+    // Server-computed unread badge so clients don't need every message to count.
+    private long unreadCount = 0;
 
     // Constructor for GroupConversation
     public ConversationDto(GroupConversation groupConversation) {

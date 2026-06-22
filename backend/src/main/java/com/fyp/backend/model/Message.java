@@ -11,7 +11,10 @@ import java.util.List;
 @Entity
 @Data
 @NoArgsConstructor
-@Table(name = "messages")
+@Table(name = "messages", indexes = {
+        // Backs keyset pagination of chat history (newest-first within a conversation).
+        @Index(name = "idx_messages_conversation_id_id", columnList = "conversation_id, id")
+})
 public class Message {
 
     @Id
