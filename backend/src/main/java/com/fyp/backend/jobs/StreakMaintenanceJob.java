@@ -2,11 +2,13 @@ package com.fyp.backend.jobs;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,19 +32,25 @@ public class StreakMaintenanceJob {
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void resetLapsedStreaks() {
-        List<UserPreferences> all = preferencesRepository.findAll();
         int reset = 0;
-        for (UserPreferences p : all) {
-            if (p.getCurrentStreak() == null || p.getCurrentStreak() == 0) continue;
-            LocalDate today = LocalDate.now(zoneOf(p.getTimezone()));
-            LocalDate last = parseDate(p.getLastActivityDate());
-            // Lapsed if no activity today or yesterday.
-            if (last == null || last.isBefore(today.minusDays(1))) {
-                p.setCurrentStreak(0);
-                preferencesRepository.save(p);
-                reset++;
+        int pageNum = 0;
+        Page<UserPreferences> page;
+        // Process in fixed-size pages so the whole preferences table never loads at once.
+        do {
+            page = preferencesRepository.findAll(PageRequest.of(pageNum, 200, Sort.by("id")));
+            for (UserPreferences p : page.getContent()) {
+                if (p.getCurrentStreak() == null || p.getCurrentStreak() == 0) continue;
+                LocalDate today = LocalDate.now(zoneOf(p.getTimezone()));
+                LocalDate last = parseDate(p.getLastActivityDate());
+                // Lapsed if no activity today or yesterday.
+                if (last == null || last.isBefore(today.minusDays(1))) {
+                    p.setCurrentStreak(0);
+                    preferencesRepository.save(p);
+                    reset++;
+                }
             }
-        }
+            pageNum++;
+        } while (page.hasNext());
         if (reset > 0) log.info("Reset {} lapsed learning streak(s)", reset);
     }
 
