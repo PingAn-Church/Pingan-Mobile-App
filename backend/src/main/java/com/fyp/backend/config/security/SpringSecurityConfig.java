@@ -51,6 +51,9 @@ public class SpringSecurityConfig {
                         // requires auth + ownership (checked in the controller).
                         .requestMatchers(HttpMethod.POST, "/api/push-notifications/register")
                         .permitAll()
+                        // Liveness/readiness probe for deploys + CI image smoke test.
+                        .requestMatchers("/actuator/health", "/actuator/health/**")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS));

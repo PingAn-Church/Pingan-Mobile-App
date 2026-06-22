@@ -119,8 +119,43 @@ jobs:
         run: npx expo export --platform web --output-dir dist
 
   backend-image-build:
-    name: Backend Docker build
+    name: Backend Docker build + smoke
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pingan_mobile_app
+          POSTGRES_USER: pingan_mobile_app_user
+          POSTGRES_PASSWORD: PinganMobileApp@2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pingan_mobile_app_user -d pingan_mobile_app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.0
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3-management
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -133,6 +168,43 @@ jobs:
         with:
           context: ./backend
           push: false
+          load: true
           tags: pingan-mobile-app-backend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Boot the freshly-built image against the live services and confirm it
+      # actually starts and serves traffic — the build alone never runs it.
+      - name: Start backend container
+        run: |
+          docker run -d --name pingan-smoke --network host \
+            -e DB_URL=jdbc:postgresql://localhost:5432/pingan_mobile_app \
+            -e DB_USER=pingan_mobile_app_user \
+            -e DB_PASSWORD=PinganMobileApp@2026 \
+            -e IP_ADDR=0.0.0.0 \
+            -e SPRING_DATA_REDIS_HOST=localhost \
+            -e SPRING_DATA_REDIS_PORT=6379 \
+            -e SPRING_RABBITMQ_HOST=localhost \
+            -e SPRING_RABBITMQ_PORT=5672 \
+            -e SPRING_RABBITMQ_USERNAME=guest \
+            -e SPRING_RABBITMQ_PASSWORD=guest \
+            -e ENABLE_LIBRE_TRANSLATE=false \
+            pingan-mobile-app-backend:ci
+
+      - name: Wait for /actuator/health to report UP
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              echo "✓ Backend is healthy"; exit 0
+            fi
+            sleep 3
+          done
+          echo "✗ Backend did not become healthy in time"; exit 1
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs pingan-smoke || true
+
+      - name: Stop backend container
+        if: always()
+        run: docker rm -f pingan-smoke || true
