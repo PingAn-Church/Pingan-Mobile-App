@@ -401,7 +401,7 @@ const ChatHomePage = () => {
         {/* Unread Message Badge */}
         {unreadCount > 0 && (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{unreadCount}</Text>
+            <Text style={styles.unreadText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
           </View>
         )}
       </TouchableOpacity>
