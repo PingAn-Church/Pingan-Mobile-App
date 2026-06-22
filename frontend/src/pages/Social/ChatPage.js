@@ -1541,7 +1541,10 @@ export default function ChatPage({ route }) {
 
   const chatContent = (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      // Android resizes the window itself (manifest adjustResize); letting KAV also
+      // shrink ("height") double-adjusts and pushes the send button off-screen, so
+      // disable KAV there and only use padding-avoidance on iOS.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
     >

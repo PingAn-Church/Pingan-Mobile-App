@@ -108,6 +108,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   View,
 } from "react-native";
 import { addParticipantToGroup } from "../../service/ChatService";
@@ -349,6 +351,11 @@ const AddParticipantsModal = ({
 
   return (
     <Modal visible={visible} animationType="slide">
+      {/* Modals don't get the activity's adjustResize, so avoid the keyboard explicitly. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <SafeAreaView style={styles.modalContainer}>
         {/* Header */}
         <View style={styles.header}>
@@ -411,6 +418,7 @@ const AddParticipantsModal = ({
           keyboardShouldPersistTaps="handled"
         />
       </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
