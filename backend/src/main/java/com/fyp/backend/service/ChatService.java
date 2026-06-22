@@ -4,6 +4,7 @@ import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.MessagePublisher;
 import com.fyp.backend.repository.*;
+import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -140,7 +141,7 @@ public class ChatService {
         Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
         checkUserIsParticipant(conversation, userId);
 
-        int safeSize = Math.min(Math.max(size, 1), 100);
+        int safeSize = Pagination.clampSize(size, 100);
         Pageable pageable = PageRequest.of(0, safeSize);
 
         List<Message> desc = (before == null)

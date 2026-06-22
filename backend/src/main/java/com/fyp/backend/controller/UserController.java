@@ -31,6 +31,7 @@ import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.Pagination;
 
 @RestController
 @RequestMapping("/api/users")
@@ -123,8 +124,8 @@ public class UserController {
             @RequestParam(required = false, defaultValue = "") String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        int safeSize = Math.min(Math.max(size, 1), 50);
-        int safePage = Math.max(page, 0);
+        int safeSize = Pagination.clampSize(size);
+        int safePage = Pagination.clampPage(page);
         Pageable pageable = PageRequest.of(safePage, safeSize,
                 Sort.by("firstName").ascending().and(Sort.by("id").ascending()));
 

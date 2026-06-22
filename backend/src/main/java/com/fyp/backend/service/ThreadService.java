@@ -6,6 +6,7 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.Pagination;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,8 +38,8 @@ public class ThreadService {
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size) {
-        int safeSize = Math.min(Math.max(size, 1), 50);
-        int safePage = Math.max(page, 0);
+        int safeSize = Pagination.clampSize(size);
+        int safePage = Pagination.clampPage(page);
         Pageable pageable = PageRequest.of(safePage, safeSize,
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
 

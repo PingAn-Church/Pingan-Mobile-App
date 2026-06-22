@@ -17,6 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.util.Pagination;
 import com.fyp.backend.model.Category;
 import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseOutcome;
@@ -77,7 +78,7 @@ public class CourseService {
     public Map<String, Object> listPublishedCourses(String category, int limit, int offset,
             String sortBy, String sortOrder) {
         // Push paging + ordering into SQL instead of reading the whole table and slicing.
-        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        int safeLimit = Pagination.clampSize(limit);
         int safeOffset = Math.max(0, offset);
         int page = safeLimit > 0 ? safeOffset / safeLimit : 0;
 

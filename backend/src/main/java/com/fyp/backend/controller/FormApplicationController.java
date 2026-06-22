@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.model.FormApplication;
 import com.fyp.backend.repository.FormApplicationRepository;
+import com.fyp.backend.util.Pagination;
 
 @RestController
 @RequestMapping("/api/applications")
@@ -40,10 +41,11 @@ public class FormApplicationController {
     public ResponseEntity<Map<String, Object>> getAllApplications(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        int safeSize = Math.min(Math.max(size, 1), 50);
-        int safePage = Math.max(page, 0);
+        int safeSize = Pagination.clampSize(size);
+        int safePage = Pagination.clampPage(page);
         Page<FormApplication> result = formApplicationRepository.findAll(
-                PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "submittedAt")));
+                PageRequest.of(safePage, safeSize,
+                        Sort.by(Sort.Direction.DESC, "submittedAt").and(Sort.by(Sort.Direction.DESC, "id"))));
 
         Map<String, Object> pagination = new LinkedHashMap<>();
         pagination.put("page", safePage);
