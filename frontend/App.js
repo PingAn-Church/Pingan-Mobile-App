@@ -88,6 +88,7 @@ import { useWindowDimensions, View, Animated, StyleSheet } from "react-native";
 //import { createDrawerNavigator } from "@react-navigation/drawer";
 import Sidebar from "./src/components/Sidebar";
 import EntryScreen from "./src/components/EntryScreen";
+import HeaderBackButton from "./src/components/HeaderBackButton";
 
 // App is light-only (iOS/Android forced light). Pin the web document to a light
 // color-scheme so the browser's dark mode doesn't auto-style native controls,
@@ -376,17 +377,27 @@ export default function App() {
                     component={CreateThreadPage}
                   />
                   <Stack.Screen name="EditThread" component={EditThreadPage} />
-                  <Stack.Screen name="ChatHome" component={ChatHomeRoute} />
-                  <Stack.Screen name="Chat" component={ChatPage} />
+                  <Stack.Screen
+                    name="ChatHome"
+                    component={ChatHomeRoute}
+                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="HomeTabs" /> }}
+                  />
+                  <Stack.Screen
+                    name="Chat"
+                    component={ChatPage}
+                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="ChatHome" /> }}
+                  />
                   <Stack.Screen name="NewChat" component={NewChatScreen} />
                   <Stack.Screen name="NewGroup" component={NewGroupScreen} />
                   <Stack.Screen
                     name="DetailedPrivateChat"
                     component={DetailedPrivateChatPage}
+                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="ChatHome" /> }}
                   />
                   <Stack.Screen
                     name="DetailedGroupChat"
                     component={DetailedGroupChatPage}
+                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="ChatHome" /> }}
                   />
                   <Stack.Screen name="Register" component={RegisterPage} />
                   <Stack.Screen name="VerificationCode" component={VerificationCodePage} />
