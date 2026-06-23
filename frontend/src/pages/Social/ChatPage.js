@@ -25,6 +25,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import { useNavigation } from "@react-navigation/native";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 import defaultProfileImage from "../../../assets/user.png";
 import i18n from "../../../i18n";
@@ -239,6 +240,10 @@ export default function ChatPage({ route }) {
   const { conversations, setConversations, loadOlderMessages } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
+  // Exact height of the native-stack header above this screen — used as the
+  // KeyboardAvoidingView offset so the input bar lands just above the keyboard
+  // (replaces a hardcoded magic number that broke on different device sizes).
+  const headerHeight = useHeaderHeight();
 
   const [inputText, setInputText] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
@@ -1541,12 +1546,14 @@ export default function ChatPage({ route }) {
 
   const chatContent = (
     <KeyboardAvoidingView
-      // Android resizes the window itself (manifest adjustResize); letting KAV also
-      // shrink ("height") double-adjusts and pushes the send button off-screen, so
-      // disable KAV there and only use padding-avoidance on iOS.
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // Under Expo SDK 54 edge-to-edge the Android window no longer resizes for the
+      // keyboard (adjustResize is neutralised), so a no-op KAV leaves the input bar
+      // hidden behind the keyboard. Use padding-avoidance on both native platforms,
+      // offset by the real header height (the KAV sits below the native-stack header).
+      // Web has no overlapping soft keyboard, so KAV stays inert there.
+      behavior={Platform.OS === "web" ? undefined : "padding"}
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      keyboardVerticalOffset={Platform.OS === "web" ? 0 : headerHeight}
     >
       <View style={styles.headerContainer}>
         <TouchableOpacity
