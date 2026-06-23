@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
+  ActivityIndicator,
   Image, Platform
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -456,6 +457,9 @@ export function ChangePasswordPage({ navigation }) {
 export function ManageApplicationsPage({ navigation }) {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -467,13 +471,29 @@ export function ManageApplicationsPage({ navigation }) {
 
   useEffect(() => {
     const fetchApplications = async () => {
-      const data = await getAllApplications();
-      setApplications(data);
+      const res = await getAllApplications(0, 20);
+      setApplications(res?.data || []);
+      setPage(0);
+      setHasMore(Boolean(res?.pagination?.hasMore));
       setLoading(false);
     };
 
     fetchApplications();
   }, []);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await getAllApplications(next, 20);
+      setApplications((prev) => [...prev, ...(res?.data || [])]);
+      setPage(next);
+      setHasMore(Boolean(res?.pagination?.hasMore));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -483,6 +503,13 @@ export function ManageApplicationsPage({ navigation }) {
         <FlatList
           data={applications}
           keyExtractor={(item) => item.id.toString()}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator style={{ marginVertical: 16 }} color="#888" />
+            ) : null
+          }
           renderItem={({ item }) => (
             <View style={styles.appCard}>
               <Text style={styles.detail}>

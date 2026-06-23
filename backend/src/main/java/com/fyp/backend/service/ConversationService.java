@@ -70,6 +70,12 @@ public class ConversationService {
         privateConversationRepository.findByUserId(userId)
                 .forEach(pc -> conversations.add(new ConversationDto(pc)));
 
+        // Attach a server-computed unread count so the client no longer needs to load
+        // every message just to render unread badges.
+        for (ConversationDto c : conversations) {
+            c.setUnreadCount(messageRepository.countUnread(c.getConversationId(), userId));
+        }
+
         return conversations;
     }
 

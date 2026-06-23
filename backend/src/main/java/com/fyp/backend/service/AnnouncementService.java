@@ -3,6 +3,8 @@ package com.fyp.backend.service;
 import java.net.URI;
 import java.util.List;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.model.Announcement;
@@ -11,6 +13,9 @@ import com.fyp.backend.repository.AnnouncementRepository;
 @Service
 public class AnnouncementService {
 
+    // The client shows a small carousel / capped admin list, so bound the query.
+    private static final int MAX_ANNOUNCEMENTS = 20;
+
     private final AnnouncementRepository announcementRepository;
 
     public AnnouncementService(AnnouncementRepository announcementRepository) {
@@ -18,7 +23,9 @@ public class AnnouncementService {
     }
 
     public List<Announcement> getAllAnnouncements() {
-        return announcementRepository.findAll();
+        return announcementRepository
+                .findAll(PageRequest.of(0, MAX_ANNOUNCEMENTS, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .getContent();
     }
 
     public Announcement createAnnouncement(String title, String imageUrl, String announcementLink) {

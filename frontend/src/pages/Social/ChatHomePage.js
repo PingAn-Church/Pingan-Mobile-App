@@ -26,7 +26,6 @@ import {
 import { UserContext } from "../../context/UserContext";
 import {
   getUserById,
-  getAllUsers,
   startPrivateChat,
   startGroupChat,
 } from "../../service/UserService";
@@ -54,7 +53,6 @@ const ChatHomePage = () => {
     fetchInitialData,
   } = useContext(ChatContext);
 
-  const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   // const [filteredConversations, setFilteredConversations] = useState([]);
@@ -168,26 +166,6 @@ const ChatHomePage = () => {
   }, [language]);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const userList = await getAllUsers();
-        setUsers(
-          userList.filter((u) => String(u.id) !== String(user.id))
-        );
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        showAlert(i18n.t("error"), i18n.t("cantFetchUsers"), [
-          { text: i18n.t("ok") },
-        ]);
-      }
-    };
-
-    if (user) {
-      fetchUsers();
-    }
-  }, [user, conversations]);
-
-  useEffect(() => {
     handleSearch(searchQuery); // Reapply search filter to updated conversations
   }, [conversations]);
 
@@ -201,8 +179,8 @@ const ChatHomePage = () => {
           const otherParticipantId = conversation.participants.find(
             (id) => String(id) !== String(user.id)
           );
-          const otherParticipant = users.find(
-            (u) => String(u.id) === String(otherParticipantId)
+          const otherParticipant = (conversation.participantProfiles || []).find(
+            (p) => String(p.id) === String(otherParticipantId)
           );
           if (otherParticipant?.profileImage) {
             iconUrl = await fetchViewingPresignedUrl(
@@ -227,7 +205,7 @@ const ChatHomePage = () => {
     };
 
     updateChatIcons();
-  }, [conversations, users]);
+  }, [conversations]);
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -323,23 +301,14 @@ const ChatHomePage = () => {
     });
   };
 
-  const getUnreadMessageCount = (conversation, userId) => {
-    return conversation.chatHistory
-      ? conversation.chatHistory.filter(
-          (msg) =>
-            msg.senderId !== userId && msg.deliveryStatus?.[userId] !== "READ"
-        ).length
-      : 0;
+  const getUnreadMessageCount = (conversation) => {
+    // Server-computed badge; the client no longer loads every message to count.
+    return conversation.unreadCount || 0;
   };
 
   const getOnlineUserCount = (conversation) => {
     return conversation.participants.reduce((count, participantId) => {
-      const participantEmail = users.find(
-        (user) => String(user.id) === String(participantId)
-      )?.email;
-      return participantEmail && userStatus[participantEmail] === "online"
-        ? count + 1
-        : count;
+      return userStatus[String(participantId)] === "online" ? count + 1 : count;
     }, 0);
   };
 
@@ -361,8 +330,8 @@ const ChatHomePage = () => {
       );
 
       if (otherParticipant) {
-        const participantData = users.find(
-          (user) => String(user.id) === String(otherParticipant)
+        const participantData = (item.participantProfiles || []).find(
+          (p) => String(p.id) === String(otherParticipant)
         );
         title = participantData
           ? `${participantData.firstName} ${participantData.lastName}`
@@ -380,14 +349,9 @@ const ChatHomePage = () => {
       ? item.participants.find((id) => String(id) !== String(user.id))
       : null;
 
-    // Fetch the participant's email
-    const otherParticipantEmail = users.find(
-      (user) => String(user.id) === String(otherParticipantId)
-    )?.email;
-
-    // Use email-based lookup for online status
+    // Use id-based presence lookup (no emails needed client-side)
     const isOnline =
-      isPrivateChat && userStatus[otherParticipantEmail] === "online";
+      isPrivateChat && userStatus[String(otherParticipantId)] === "online";
 
     return (
       <TouchableOpacity
@@ -437,7 +401,7 @@ const ChatHomePage = () => {
         {/* Unread Message Badge */}
         {unreadCount > 0 && (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{unreadCount}</Text>
+            <Text style={styles.unreadText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
           </View>
         )}
       </TouchableOpacity>

@@ -2,6 +2,7 @@ package com.fyp.backend.util;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Base64;
@@ -10,9 +11,16 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    private final byte[] SECRET_KEY = Base64.getDecoder().decode("KxuYGk9vMEwse2p0NFhvNzlRc3ZTcE1PeXNBMjRTdFE="); // 256-bit key
+    // Signing key. Override via the JWT_SECRET env var (base64-encoded, 256-bit). The
+    // default keeps existing tokens and local dev working when it's unset; set a strong
+    // secret in production. Rotating the secret invalidates all outstanding tokens.
+    private final byte[] SECRET_KEY;
     private final long ACCESS_EXPIRATION_TIME = 1000 * 60 * 15; // 15 minutes
     private final long REFRESH_EXPIRATION_TIME = 1000L * 60 * 60 * 24 * 30; // 30 days
+
+    public JwtUtil(@Value("${JWT_SECRET:KxuYGk9vMEwse2p0NFhvNzlRc3ZTcE1PeXNBMjRTdFE=}") String secret) {
+        this.SECRET_KEY = Base64.getDecoder().decode(secret);
+    }
 
     /**
      * Generate an Access Token (Short-lived)

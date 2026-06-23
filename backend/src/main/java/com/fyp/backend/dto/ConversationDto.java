@@ -81,10 +81,15 @@ public class ConversationDto {
     private String groupIcon;
     private List<Long> participants = new ArrayList<>();  // Ensure initialization
     private List<String> participantNames = new ArrayList<>();
+    // Minimal per-participant info (id, name, avatar — no email) so chat clients
+    // can render conversations without fetching the global user directory.
+    private List<UserSummaryDto> participantProfiles = new ArrayList<>();
     private List<Long> adminIds = new ArrayList<>();
     private List<String> adminNames = new ArrayList<>();
     private Long createdAt;
     private Long updatedAt;
+    // Server-computed unread badge so clients don't need every message to count.
+    private long unreadCount = 0;
 
     // Constructor for GroupConversation
     public ConversationDto(GroupConversation groupConversation) {
@@ -103,6 +108,9 @@ public class ConversationDto {
                 .collect(Collectors.toList());
         this.participantNames = groupConversation.getParticipants().stream()
                 .map(user -> user.getFirstName() + " " + user.getLastName())
+                .collect(Collectors.toList());
+        this.participantProfiles = groupConversation.getParticipants().stream()
+                .map(UserSummaryDto::from)
                 .collect(Collectors.toList());
         this.adminIds = (groupConversation.getAdmins() != null)
                 ? groupConversation.getAdmins().stream().map(User::getId).collect(Collectors.toList())
@@ -129,6 +137,9 @@ public class ConversationDto {
                 .collect(Collectors.toList());
         this.participantNames = privateConversation.getParticipants().stream()
                 .map(user -> user.getFirstName() + " " + user.getLastName())
+                .collect(Collectors.toList());
+        this.participantProfiles = privateConversation.getParticipants().stream()
+                .map(UserSummaryDto::from)
                 .collect(Collectors.toList());
         this.adminIds = new ArrayList<>();
         this.adminNames = new ArrayList<>();

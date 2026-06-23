@@ -4,7 +4,7 @@ export default {
     expo: {
       name: "Ping An",
       slug: "pingan-mobile-app",
-      version: "0.0.1",
+      version: "0.1.2",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",

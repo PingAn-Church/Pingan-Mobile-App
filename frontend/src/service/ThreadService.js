@@ -9,18 +9,19 @@ const baseUrl = () => apiUrl(`/api/threads`);
 /**
  * Fetch all threads (requires auth)
  */
-export const fetchThreads = async () => {
+export const fetchThreads = async (page = 0, size = 20) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No token found.");
 
   try {
     const response = await axios.get(baseUrl(), {
+      params: { page, size },
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
 
-    return response.data;
+    return response.data; // { success, data, pagination }
   } catch (error) {
     console.error("Error fetching threads:", error);
     throw error;

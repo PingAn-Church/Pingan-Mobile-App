@@ -2,6 +2,7 @@ package com.fyp.backend.config.websocket;
 
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.mq.ManualMessageConsumer;
+import com.fyp.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -20,6 +21,8 @@ public class WebSocketEventListener {
     private SimpMessagingTemplate messagingTemplate;
 
     @Autowired private ManualMessageConsumer messageConsumer;
+
+    @Autowired private UserRepository userRepository;
 
 //    /**
 //     * Handle WebSocket connection: mark user as "online" for that specific device,
@@ -96,10 +99,16 @@ public class WebSocketEventListener {
     }
 
     /**
-     * Broadcast user status (online/offline) to frontend.
+     * Broadcast user status (online/offline) to the frontend, keyed by user id so
+     * clients never need emails to track presence. Presence stays email-keyed in
+     * Redis; we resolve the id only at broadcast time.
      */
     private void broadcastUserStatus(String userEmail, String status) {
+        Long userId = userRepository.findByEmail(userEmail).map(u -> u.getId()).orElse(null);
+        if (userId == null) {
+            return;
+        }
         messagingTemplate.convertAndSend("/user/queue/status",
-                "{ \"userEmail\": \"" + userEmail + "\", \"status\": \"" + status + "\" }");
+                "{ \"userId\": \"" + userId + "\", \"status\": \"" + status + "\" }");
     }
 }

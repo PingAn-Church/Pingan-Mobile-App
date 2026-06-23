@@ -19,6 +19,12 @@ public interface GroupConversationRepository extends JpaRepository<GroupConversa
     @Query("SELECT g FROM GroupConversation g JOIN g.participants p WHERE p.id = :userId")
     List<GroupConversation> findByParticipantId(@Param("userId") Long userId);
 
+    // Groups where the user lingers in the admin list (e.g. removed as participant
+    // earlier but never dropped from admins). Used by account deletion to clear the
+    // group_conversation_admins FK so the user row can be removed.
+    @Query("SELECT g FROM GroupConversation g JOIN g.admins a WHERE a.id = :userId")
+    List<GroupConversation> findByAdminId(@Param("userId") Long userId);
+
     @Query("SELECT g FROM GroupConversation g WHERE LOWER(g.groupName) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<GroupConversation> searchByGroupName(@Param("query") String query);
 

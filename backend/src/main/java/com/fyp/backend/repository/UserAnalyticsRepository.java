@@ -14,4 +14,6 @@ public interface UserAnalyticsRepository extends JpaRepository<UserAnalytics, Lo
 
     @Query("select coalesce(sum(a.minutesSpent), 0) from UserAnalytics a where a.userId = :userId")
     long sumMinutesByUserId(@Param("userId") Long userId);
+
+    void deleteByUserId(Long userId);
 }

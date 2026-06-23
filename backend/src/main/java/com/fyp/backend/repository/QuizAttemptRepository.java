@@ -26,4 +26,7 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     /** Number of distinct quizzes the user has passed at least once. */
     @Query("select count(distinct a.quizId) from QuizAttempt a where a.userId = :userId and a.isPassed = true")
     long countDistinctPassedQuizzes(@Param("userId") Long userId);
+
+    /** Account-deletion cleanup: drop every attempt by a user. */
+    void deleteByUserId(Long userId);
 }

@@ -9,6 +9,8 @@ import {
   Switch,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -715,7 +717,7 @@ export default function CourseEditorScreen() {
 
       {/* Manage categories modal */}
       <Modal visible={manageVisible} transparent animationType="fade" onRequestClose={() => setManageVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.modalCard, { maxHeight: "85%" }]}>
             <View style={styles.moduleHeader}>
               <Text style={styles.modalTitle} numberOfLines={1}>Manage categories</Text>
@@ -760,12 +762,12 @@ export default function CourseEditorScreen() {
               <Text style={styles.saveBtnText}>Add category</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Category create/edit modal */}
       <Modal visible={categoryModal.visible} transparent animationType="fade" onRequestClose={() => setCategoryModal((m) => ({ ...m, visible: false }))}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{categoryModal.id ? "Edit category" : "New category"}</Text>
             <TextInput style={styles.input} value={categoryModal.name} onChangeText={(v) => setCategoryModal((m) => ({ ...m, name: v }))} placeholder="Category name" placeholderTextColor={Colors.textMuted} />
@@ -788,12 +790,12 @@ export default function CourseEditorScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Section modal */}
       <Modal visible={sectionModal.visible} transparent animationType="fade" onRequestClose={() => setSectionModal((s) => ({ ...s, visible: false }))}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{sectionModal.id ? "Edit module" : "New module"}</Text>
             <TextInput style={styles.input} value={sectionModal.title} onChangeText={(v) => setSectionModal((s) => ({ ...s, title: v }))} placeholder="Module title" placeholderTextColor={Colors.textMuted} />
@@ -807,12 +809,12 @@ export default function CourseEditorScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Lesson modal */}
       <Modal visible={lessonModal.visible} transparent animationType="fade" onRequestClose={() => setLessonModal((m) => ({ ...m, visible: false }))}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{lessonModal.kind === "video" ? "New video" : "New document"}</Text>
             <TextInput style={styles.input} value={lessonModal.title} onChangeText={(v) => setLessonModal((m) => ({ ...m, title: v }))} placeholder="Lesson title" placeholderTextColor={Colors.textMuted} />
@@ -833,12 +835,12 @@ export default function CourseEditorScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Quiz modal (create quiz) */}
       <Modal visible={quizModal.visible} transparent animationType="fade" onRequestClose={() => setQuizModal((m) => ({ ...m, visible: false }))}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>New quiz</Text>
             <TextInput style={styles.input} value={quizModal.title} onChangeText={(v) => setQuizModal((m) => ({ ...m, title: v }))} placeholder="Quiz title" placeholderTextColor={Colors.textMuted} />
@@ -853,12 +855,12 @@ export default function CourseEditorScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Question editor (list + add/delete questions in a quiz) */}
       <Modal visible={questionEditor.visible} transparent animationType="slide" onRequestClose={() => setQuestionEditor((s) => ({ ...s, visible: false }))}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.modalCard, { maxHeight: "85%" }]}>
             <View style={styles.moduleHeader}>
               <Text style={styles.modalTitle} numberOfLines={1}>{questionEditor.quiz?.title || "Quiz"}</Text>
@@ -893,12 +895,12 @@ export default function CourseEditorScreen() {
               <Text style={styles.saveBtnText}>Add question</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Question modal (create a question) */}
       <Modal visible={questionModal.visible} transparent animationType="fade" onRequestClose={() => setQuestionModal((m) => ({ ...m, visible: false }))}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.modalCard, { maxHeight: "88%" }]}>
             <Text style={styles.modalTitle}>New question</Text>
             <ScrollView style={{ maxHeight: 460 }}>
@@ -970,7 +972,7 @@ export default function CourseEditorScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );

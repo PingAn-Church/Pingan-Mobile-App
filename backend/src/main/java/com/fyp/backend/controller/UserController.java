@@ -1,13 +1,19 @@
 package com.fyp.backend.controller;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,11 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
+import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
+import com.fyp.backend.service.UserAccountDeletionService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.Pagination;
 
 @RestController
 @RequestMapping("/api/users")
@@ -41,6 +50,9 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private UserAccountDeletionService userAccountDeletionService;
 
     // @GetMapping("/profile")
     // public ResponseEntity<UserProfileDto>
@@ -107,6 +119,45 @@ public class UserController {
     }
 
     // New endpoint to get all users (excluding the currently logged-in user)
+    /**
+     * Directory search for chat pickers: any authenticated user, paginated, and
+     * limited to minimal fields (no email). Empty query returns the first page of
+     * active users so pickers can show an initial list.
+     */
+    @GetMapping("/search")
+    public ResponseEntity<Map<String, Object>> searchUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        int safeSize = Pagination.clampSize(size);
+        int safePage = Pagination.clampPage(page);
+        Pageable pageable = PageRequest.of(safePage, safeSize,
+                Sort.by("firstName").ascending().and(Sort.by("id").ascending()));
+
+        String term = q == null ? "" : q.trim();
+        Page<User> result = term.isEmpty()
+                ? userRepository.findByActiveTrue(pageable)
+                : userRepository.searchActiveByName(term, pageable);
+
+        List<UserSummaryDto> data = result.getContent().stream()
+                .map(UserSummaryDto::from)
+                .collect(Collectors.toList());
+
+        Map<String, Object> pagination = new LinkedHashMap<>();
+        pagination.put("page", safePage);
+        pagination.put("size", safeSize);
+        pagination.put("totalCount", result.getTotalElements());
+        pagination.put("hasMore", result.hasNext());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("data", data);
+        body.put("pagination", pagination);
+        return ResponseEntity.ok(body);
+    }
+
+    // Full directory with emails is admin-only; normal users use /search (no PII).
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public ResponseEntity<List<UserProfileDto>> getAllUsers(
             @RequestHeader("Authorization") String authorizationHeader) {
@@ -133,10 +184,21 @@ public class UserController {
         return ResponseEntity.ok(usersWithoutCurrentUser);
     }
 
+    // Presence is stored by email internally, but exposed keyed by user id so the
+    // client never needs emails to resolve online status (no PII over the wire).
     @GetMapping("/online-users")
     public ResponseEntity<Map<String, String>> getOnlineUsers() {
-        Map<String, String> onlineUsers = redisService.getAllOnlineUsers();
-        return ResponseEntity.ok(onlineUsers);
+        Map<String, String> onlineByEmail = redisService.getAllOnlineUsers();
+        if (onlineByEmail.isEmpty()) {
+            return ResponseEntity.ok(Map.of());
+        }
+        Map<String, String> onlineById = new LinkedHashMap<>();
+        for (User u : userRepository.findByEmailIn(onlineByEmail.keySet())) {
+            if ("online".equals(onlineByEmail.get(u.getEmail()))) {
+                onlineById.put(String.valueOf(u.getId()), "online");
+            }
+        }
+        return ResponseEntity.ok(onlineById);
     }
 
     @GetMapping("/verified")
@@ -196,6 +258,20 @@ public class UserController {
         try {
             userService.updateUserActiveStatus(id, active);
             return ResponseEntity.ok("User active status updated!");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
+
+    // Permanently delete a deactivated user and ALL their associated data (chat,
+    // quiz attempts, progress, OSS media, etc.). Irreversible; admin-only. The
+    // service guards that the target is inactive and not an admin.
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteUser(@PathVariable Long id) {
+        try {
+            userAccountDeletionService.deleteUserCompletely(id);
+            return ResponseEntity.ok("User and associated data permanently deleted.");
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
         }

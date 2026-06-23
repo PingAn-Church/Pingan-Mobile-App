@@ -45,7 +45,8 @@ import {
   uploadFileToOSS,
 } from "../../service/OSSService";
 import { getStompClient } from "../../service/WebSocketService";
-import { getAllUsers, getUserById, startGroupChat, startPrivateChat } from "../../service/UserService";
+import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../../service/UserService";
+import useDebouncedValue from "../../hooks/useDebouncedValue";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import VoicePlayer from "../../components/Chat/VoicePlayer";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
@@ -235,7 +236,7 @@ export default function ChatPage({ route }) {
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
   const { user: currentUser } = useContext(UserContext);
-  const { conversations, setConversations } = useContext(ChatContext);
+  const { conversations, setConversations, loadOlderMessages } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
 
@@ -277,6 +278,11 @@ export default function ChatPage({ route }) {
   const [translations, setTranslations] = useState({});
   const [translatingId, setTranslatingId] = useState(null);
   const flatListRef = useRef(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [showJumpToEnd, setShowJumpToEnd] = useState(false);
+  // Tracks the conversation we've already positioned at its oldest unread, so the
+  // one-time "open at oldest unread" jump runs once per conversation open.
+  const anchorHandledRef = useRef(null);
   const textInputRef = useRef(null);
   const pendingAckTimersRef = useRef(new Map());
   const sendingTextLockRef = useRef(false);
@@ -350,31 +356,37 @@ export default function ChatPage({ route }) {
   }, [language, navigation]);
 
   useEffect(() => {
-    const fetchUsersDirectory = async () => {
+    const buildUsersDirectory = async () => {
       try {
-        const users = await getAllUsers();
-        const nextDirectory = {};
+        // Build the avatar directory from conversation participants rather than the
+        // global roster — no email exposure, bounded to people you actually chat with.
+        const profilesById = {};
+        (conversations || []).forEach((conv) =>
+          (conv?.participantProfiles || []).forEach((p) => {
+            if (p?.id !== null && p?.id !== undefined) profilesById[String(p.id)] = p;
+          })
+        );
 
         const resolvedUsers = await Promise.all(
-          (users || []).map(async (item) => ({
+          Object.values(profilesById).map(async (item) => ({
             ...item,
             profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
           }))
         );
 
+        const nextDirectory = {};
         resolvedUsers.forEach((item) => {
-          if (item?.id === null || item?.id === undefined) return;
           nextDirectory[String(item.id)] = item;
         });
 
         setUserDirectory(nextDirectory);
       } catch (error) {
-        console.error("Failed to fetch users for chat icons:", error);
+        console.error("Failed to build users directory for chat icons:", error);
       }
     };
 
-    fetchUsersDirectory();
-  }, []);
+    buildUsersDirectory();
+  }, [conversations]);
 
   useEffect(() => {
     setTranslations({});
@@ -600,6 +612,87 @@ export default function ChatPage({ route }) {
     return grouped.reverse();
   }, [conversation]);
 
+  // Inverted list: onEndReached fires at the top (oldest), so auto-load older history.
+  const handleLoadOlder = useCallback(async () => {
+    if (
+      loadingOlder ||
+      !conversation?.hasMoreHistory ||
+      conversation?.oldestCursor == null
+    ) {
+      return;
+    }
+    setLoadingOlder(true);
+    try {
+      await loadOlderMessages(
+        conversation.conversationId,
+        conversation.conversationType,
+        conversation.oldestCursor
+      );
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [loadingOlder, conversation, loadOlderMessages]);
+
+  // Inverted list: contentOffset.y grows as you scroll UP (away from newest at the
+  // bottom). Show the "jump to latest" button once the user is meaningfully scrolled up.
+  const handleListScroll = useCallback((e) => {
+    setShowJumpToEnd(e.nativeEvent.contentOffset.y > 200);
+  }, []);
+
+  const jumpToEnd = useCallback(() => {
+    setShowJumpToEnd(false);
+    // Inverted list: offset 0 is the newest message (bottom).
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
+  // scrollToIndex can fail if the target isn't rendered yet (long/variable-height
+  // list); retry shortly after, by which point more rows have mounted.
+  const handleScrollToIndexFailed = useCallback((info) => {
+    setTimeout(() => {
+      try {
+        flatListRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: false });
+      } catch (_) {
+        // give up silently — the user stays at the bottom (default)
+      }
+    }, 250);
+  }, []);
+
+  // Open a conversation positioned at its OLDEST UNREAD message instead of the bottom.
+  // Runs once per conversation open, before the read-marking effect clears unread state.
+  // Respects the sliding window: it targets the oldest unread that is currently loaded
+  // (for very large unread counts the older ones page in as the user scrolls up).
+  useEffect(() => {
+    if (!conversation || anchorHandledRef.current === conversationId) return;
+    const history = conversation.chatHistory || [];
+    if (!history.length) return; // wait until the first page of messages is present
+    anchorHandledRef.current = conversationId; // handle once per open
+
+    if (!(conversation.unreadCount > 0)) return; // nothing unread -> default to bottom
+
+    const oldestUnread = [...history].sort(sortByTimeAscending).find(
+      (m) =>
+        String(m.senderId) !== String(currentUser?.id) &&
+        String(m.deliveryStatus?.[currentUser?.id] || "").toUpperCase() !== "READ" &&
+        !isLocalOnlyMessage(m)
+    );
+    if (!oldestUnread) return;
+
+    const idx = messages.findIndex(
+      (it) => it.type !== "date" && String(it.messageId) === String(oldestUnread.messageId)
+    );
+    if (idx < 0) return;
+
+    // Defer until after mount; onScrollToIndexFailed retries if the row isn't ready.
+    requestAnimationFrame(() => {
+      try {
+        flatListRef.current?.scrollToIndex({ index: idx, viewPosition: 0.5, animated: false });
+        setShowJumpToEnd(true);
+      } catch (_) {
+        // handled by onScrollToIndexFailed
+      }
+    });
+  }, [conversation?.chatHistory, conversation?.unreadCount, conversationId, currentUser?.id, messages]);
+
   const updateConversationHistory = (updater) => {
     setConversations((prev) =>
       prev.map((conv) => {
@@ -663,6 +756,17 @@ export default function ChatPage({ route }) {
         console.error("Failed to publish READ receipt:", error);
       }
     });
+
+    // Viewing the conversation clears its unread badge (incremented live on receipt).
+    if (conversation?.unreadCount) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          Number(c.conversationId) === Number(conversationId)
+            ? { ...c, unreadCount: 0 }
+            : c
+        )
+      );
+    }
   }, [
     conversation?.chatHistory,
     conversationId,
@@ -1268,12 +1372,13 @@ export default function ChatPage({ route }) {
     });
   }, [newGroupSearchQuery, newChatUsers]);
 
-  const loadWebNewChatUsers = useCallback(async () => {
+  const loadWebNewChatUsers = useCallback(async (term = "") => {
     try {
       setLoadingNewChatUsers(true);
-      const allUsers = await getAllUsers();
+      // Server-side directory search (no email, capped page) instead of the whole roster.
+      const res = await searchUsers(term, 0, 50);
       const resolvedUsers = await Promise.all(
-        (allUsers || []).map(async (item) => ({
+        (res?.data || []).map(async (item) => ({
           ...item,
           profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
         }))
@@ -1287,6 +1392,20 @@ export default function ChatPage({ route }) {
       setLoadingNewChatUsers(false);
     }
   }, [currentUser?.id]);
+
+  // Re-run the directory search server-side when the user pauses typing (700ms),
+  // for whichever web panel is open. Initial load happens in the open handlers.
+  const debouncedNewChatQuery = useDebouncedValue(newChatSearchQuery, 700);
+  useEffect(() => {
+    if (showWebNewChatPanel) loadWebNewChatUsers(debouncedNewChatQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedNewChatQuery]);
+
+  const debouncedNewGroupQuery = useDebouncedValue(newGroupSearchQuery, 700);
+  useEffect(() => {
+    if (showWebCreateGroupPanel) loadWebNewChatUsers(debouncedNewGroupQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedNewGroupQuery]);
 
   const handleOpenWebNewChatPanel = async () => {
     if (!isWebDesktop) {
@@ -1422,7 +1541,10 @@ export default function ChatPage({ route }) {
 
   const chatContent = (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      // Android resizes the window itself (manifest adjustResize); letting KAV also
+      // shrink ("height") double-adjusts and pushes the send button off-screen, so
+      // disable KAV there and only use padding-avoidance on iOS.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
     >
@@ -1460,6 +1582,16 @@ export default function ChatPage({ route }) {
         onScrollBeginDrag={() => {
           closeContextMenu();
         }}
+        onScroll={handleListScroll}
+        scrollEventThrottle={16}
+        onScrollToIndexFailed={handleScrollToIndexFailed}
+        onEndReached={handleLoadOlder}
+        onEndReachedThreshold={0.2}
+        ListFooterComponent={
+          loadingOlder ? (
+            <ActivityIndicator style={{ marginVertical: 12 }} color="#888" />
+          ) : null
+        }
         keyExtractor={(item, index) =>
           item.type === "date"
             ? item.id
@@ -1734,6 +1866,17 @@ export default function ChatPage({ route }) {
             <Text style={{ color: "red", fontSize: webFontSize(12) }}>Cancel</Text>
           </TouchableOpacity>
         </View>
+      )}
+
+      {showJumpToEnd && (
+        <TouchableOpacity
+          style={styles.jumpToEndButton}
+          onPress={jumpToEnd}
+          activeOpacity={0.85}
+          accessibilityLabel="Jump to latest messages"
+        >
+          <Ionicons name="chevron-down" size={24} color="#1F1F22" />
+        </TouchableOpacity>
       )}
 
       <View style={styles.inputContainer}>
@@ -2612,6 +2755,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F2F7",
     borderTopWidth: 1,
     borderColor: "#E1E1E6",
+  },
+  // Floating "jump to latest" button, sits just above the input bar, bottom-right.
+  jumpToEndButton: {
+    position: "absolute",
+    right: 16,
+    bottom: 78,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E1E1E6",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+    zIndex: 10,
   },
   attachButton: {
     width: 40,

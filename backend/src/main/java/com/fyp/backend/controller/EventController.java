@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.EventDto;
+import com.fyp.backend.dto.EventSummaryDto;
 import com.fyp.backend.model.Event;
 import com.fyp.backend.service.EventService;
 
@@ -26,9 +27,9 @@ public class EventController {
     @Autowired
     private EventService eventService;
 
-    // Fetch all events
+    // Fetch all events (summaries without the per-event check-in id list)
     @GetMapping
-    public List<Event> getAllEvents() {
+    public List<EventSummaryDto> getAllEvents() {
         return eventService.getAllEvents();
     }
 

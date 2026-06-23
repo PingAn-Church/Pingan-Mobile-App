@@ -219,6 +219,9 @@
   "reactivateFailed": "恢复用户失败。",
   "inactiveUsers": "已停用用户",
   "noInactiveUsers": "暂无已停用用户。",
+  "deleteUserTitle": "永久删除该用户？",
+  "deleteUserMessage": "此操作将永久删除该账户及其全部数据——聊天、消息、测验记录以及上传的图片/语音。该操作不可撤销。",
+  "deleteUserFailed": "删除用户失败。",
 
   "profile": "个人资料",
   "name": "姓名",
@@ -243,6 +246,7 @@
   "logoutSuccess": "已退出登录",
 
   "cantFetchUsers": "无法获取用户",
+  "noUsersFound": "未找到用户",
   "cantLoadChat": "无法加载更新后的对话",
   "noMsg": "没有对话",
   "searchConversations": "搜索对话",

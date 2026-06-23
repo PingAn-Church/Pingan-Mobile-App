@@ -15,39 +15,33 @@ import {
   Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { getAllUsers, startGroupChat } from "../../service/UserService";
+import { startGroupChat } from "../../service/UserService";
 import {
   getPresignedUploadUrl,
   uploadFileToOSS,
 } from "../../service/OSSService";
 import { UserContext } from "../../context/UserContext";
 import { useNavigation } from "@react-navigation/native";
+import useUserSearch from "../../hooks/useUserSearch";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const NewGroupScreen = () => {
   const [groupName, setGroupName] = useState("");
-  const [users, setUsers] = useState([]);
   const [selectedParticipants, setSelectedParticipants] = useState([]);
   const [groupImage, setGroupImage] = useState(null);
   const [uploadingGroupImage, setUploadingGroupImage] = useState(false);
   const { user } = useContext(UserContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
+  const { query, setQuery, results, loading, loadingMore, hasMore, loadMore } =
+    useUserSearch({ excludeId: user?.id });
 
   useEffect(() => {
     navigation.setOptions({
       title: i18n.t("newGroup"),
     });
   }, [language]);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const allUsers = await getAllUsers();
-      setUsers(allUsers.filter((u) => u.id !== user.id));
-    };
-    fetchUsers();
-  }, []);
 
   const pickGroupImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -169,7 +163,7 @@ const NewGroupScreen = () => {
   //   };
 
   const renderUser = ({ item }) => {
-    const isSelected = selectedParticipants.includes(item);
+    const isSelected = selectedParticipants.some((u) => u.id === item.id);
     return (
       <TouchableOpacity
         onPress={() => {
@@ -234,12 +228,37 @@ const NewGroupScreen = () => {
           <Text style={styles.imageButtonText}>{i18n.t("pickGroupImage")}</Text>
         </TouchableOpacity>
 
+        <View style={styles.searchBar}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder={i18n.t("searchUsers")}
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            clearButtonMode="while-editing"
+          />
+        </View>
+
         <FlatList
-          data={users}
+          data={results}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderUser}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListFooterComponent={<View style={styles.separator} />}
+          ListEmptyComponent={
+            loading ? null : (
+              <Text style={styles.emptyText}>{i18n.t("noUsersFound")}</Text>
+            )
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color="#007aff" style={{ marginVertical: 16 }} />
+            ) : (
+              <View style={styles.separator} />
+            )
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          keyboardShouldPersistTaps="handled"
         />
 
         <View style={styles.buttonRow}>
@@ -303,6 +322,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginVertical: 12,
     alignSelf: "center", // ✅ centers the image horizontally
+  },
+  searchBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#9ca3af",
+    marginTop: 24,
+    fontSize: 15,
   },
   userRow: {
     flexDirection: "row",

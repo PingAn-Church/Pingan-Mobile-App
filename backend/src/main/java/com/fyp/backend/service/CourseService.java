@@ -10,9 +10,14 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.util.Pagination;
 import com.fyp.backend.model.Category;
 import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseOutcome;
@@ -67,43 +72,59 @@ public class CourseService {
     public List<Map<String, Object>> listAllCourses() {
         List<Course> courses = courseRepository.findAll();
         courses.sort(courseComparator("updated_at").reversed());
-        return courses.stream().map(this::courseSummaryMap).collect(Collectors.toList());
+        return courses.stream().map(c -> courseSummaryMap(c, false)).collect(Collectors.toList());
     }
 
     public Map<String, Object> listPublishedCourses(String category, int limit, int offset,
             String sortBy, String sortOrder) {
-        List<Course> courses;
+        // Push paging + ordering into SQL instead of reading the whole table and slicing.
+        int safeLimit = Pagination.clampSize(limit);
+        int safeOffset = Math.max(0, offset);
+        int page = safeLimit > 0 ? safeOffset / safeLimit : 0;
+
+        Sort.Direction dir = "asc".equalsIgnoreCase(sortOrder) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        // Stable ordering with an id tiebreaker so pages don't drift/duplicate.
+        Sort sort = Sort.by(dir, sortPropertyFor(sortBy)).and(Sort.by(Sort.Direction.DESC, "id"));
+        Pageable pageable = PageRequest.of(page, safeLimit, sort);
+
+        Page<Course> result;
         if (category != null && !category.isBlank()) {
             Optional<Category> cat = categoryRepository.findByNameIgnoreCase(category.trim());
-            courses = cat.map(c -> courseRepository.findByIsPublishedTrueAndCategoryId(c.getId()))
-                    .orElseGet(ArrayList::new);
+            result = cat.map(c -> courseRepository.findByIsPublishedTrueAndCategoryId(c.getId(), pageable))
+                    .orElseGet(() -> Page.empty(pageable));
         } else {
-            courses = courseRepository.findByIsPublishedTrue();
+            result = courseRepository.findByIsPublishedTrue(pageable);
         }
 
-        Comparator<Course> comparator = courseComparator(sortBy);
-        if (!"asc".equalsIgnoreCase(sortOrder)) {
-            comparator = comparator.reversed();
-        }
-        courses.sort(comparator);
-
-        int total = courses.size();
-        int from = Math.max(0, offset);
-        int to = Math.min(total, from + Math.max(0, limit));
-        List<Course> page = from >= total ? List.of() : courses.subList(from, to);
-
-        List<Map<String, Object>> data = page.stream().map(this::courseSummaryMap).collect(Collectors.toList());
+        List<Map<String, Object>> data = result.getContent().stream()
+                .map(c -> courseSummaryMap(c, false)).collect(Collectors.toList());
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("success", true);
         response.put("data", data);
         Map<String, Object> pagination = new LinkedHashMap<>();
-        pagination.put("limit", limit);
-        pagination.put("offset", offset);
-        pagination.put("totalCount", total);
-        pagination.put("hasMore", to < total);
+        pagination.put("limit", safeLimit);
+        pagination.put("offset", safeOffset);
+        pagination.put("totalCount", result.getTotalElements());
+        pagination.put("hasMore", result.hasNext());
         response.put("pagination", pagination);
         return response;
+    }
+
+    /** Maps the public sortBy key to a Course entity property for DB-side sorting. */
+    private String sortPropertyFor(String sortBy) {
+        String key = sortBy == null ? "updated_at" : sortBy;
+        switch (key) {
+            case "rating":
+                return "rating";
+            case "student_count":
+                return "studentCount";
+            case "created_at":
+                return "createdAt";
+            case "updated_at":
+            default:
+                return "updatedAt";
+        }
     }
 
     public Map<String, Object> getModuleDetail(Long courseId, Long userId) {
@@ -260,13 +281,23 @@ public class CourseService {
     }
 
     public Map<String, Object> courseSummaryMap(Course course) {
+        return courseSummaryMap(course, true);
+    }
+
+    /**
+     * @param includeDescription list views pass {@code false} to drop the full
+     *        description text (cards don't render it), trimming the payload.
+     */
+    public Map<String, Object> courseSummaryMap(Course course, boolean includeDescription) {
         Category category = course.getCategoryId() == null ? null
                 : categoryRepository.findById(course.getCategoryId()).orElse(null);
 
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", String.valueOf(course.getId()));
         m.put("title", course.getTitle());
-        m.put("description", course.getDescription());
+        if (includeDescription) {
+            m.put("description", course.getDescription());
+        }
         m.put("instructor_name", course.getInstructorName());
         m.put("instructor_id", course.getInstructorId() == null ? null : String.valueOf(course.getInstructorId()));
         m.put("category_id", course.getCategoryId() == null ? null : String.valueOf(course.getCategoryId()));

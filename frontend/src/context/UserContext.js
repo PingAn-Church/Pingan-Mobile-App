@@ -46,10 +46,10 @@ export const UserProvider = ({ children }) => {
   
 
   const fetchOnlineUsers = async () => {
-    if (!user?.email) return;
+    if (!user?.id) return;
     try {
-      const onlineMap = await getOnlineUsers();
-      setUserStatus({ ...onlineMap, [user.email]: "online" }); // Mark self online
+      const onlineMap = await getOnlineUsers(); // id-keyed map from the backend
+      setUserStatus({ ...onlineMap, [String(user.id)]: "online" }); // Mark self online
     } catch (err) {
       console.error("❌ Failed to fetch online users:", err);
     }

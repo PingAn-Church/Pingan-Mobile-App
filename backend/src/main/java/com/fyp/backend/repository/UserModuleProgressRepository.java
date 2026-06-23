@@ -17,4 +17,6 @@ public interface UserModuleProgressRepository extends JpaRepository<UserModulePr
     long countByUserIdAndCourseIdAndIsCompletedTrue(Long userId, Long courseId);
 
     void deleteByCourseId(Long courseId);
+
+    void deleteByUserId(Long userId);
 }

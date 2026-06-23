@@ -98,7 +98,7 @@
 //   userText: { fontSize: 16 },
 // });
 
-import React, { useEffect, useState, useContext } from "react";
+import React, { useState, useContext } from "react";
 import {
   Modal,
   SafeAreaView,
@@ -107,12 +107,15 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   View,
 } from "react-native";
-import { getAllUsers } from "../../service/UserService";
 import { addParticipantToGroup } from "../../service/ChatService";
 import { getStompClient } from "../../service/WebSocketService";
 import { getUserById } from "../../service/UserService";
+import useUserSearch from "../../hooks/useUserSearch";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 
@@ -123,28 +126,14 @@ const AddParticipantsModal = ({
   existingParticipants,
   setParticipantDetails,
 }) => {
-  const [allUsers, setAllUsers] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const { language } = useContext(LanguageContext);
+  const { query, setQuery, results, loading, loadingMore, hasMore, loadMore } =
+    useUserSearch();
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const users = await getAllUsers();
-        setAllUsers(users);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      }
-    };
-    fetchUsers();
-  }, []);
-
-  const filteredUsers = allUsers.filter(
-    (user) =>
-      !existingParticipants.some((p) => p.id === user.id) &&
-      (user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.lastName.toLowerCase().includes(searchQuery.toLowerCase()))
+  // Server-side search returns active users; hide anyone already in the group.
+  const availableUsers = results.filter(
+    (u) => !existingParticipants.some((p) => String(p.id) === String(u.id))
   );
 
   //   const handleAddParticipants = async () => {
@@ -362,6 +351,11 @@ const AddParticipantsModal = ({
 
   return (
     <Modal visible={visible} animationType="slide">
+      {/* Modals don't get the activity's adjustResize, so avoid the keyboard explicitly. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
       <SafeAreaView style={styles.modalContainer}>
         {/* Header */}
         <View style={styles.header}>
@@ -381,35 +375,50 @@ const AddParticipantsModal = ({
           style={styles.searchBar}
           placeholder={i18n.t("searchUsers")}
           placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
         />
 
         {/* User List */}
         <FlatList
-          data={filteredUsers}
+          data={availableUsers}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.userItem,
-                selectedUsers.includes(item) && styles.selectedUser,
-              ]}
-              onPress={() =>
-                setSelectedUsers((prev) =>
-                  prev.includes(item)
-                    ? prev.filter((u) => u !== item)
-                    : [...prev, item]
-                )
-              }
-            >
-              <Text style={styles.userText}>
-                {item.firstName} {item.lastName}
-              </Text>
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const isSelected = selectedUsers.some((u) => u.id === item.id);
+            return (
+              <TouchableOpacity
+                style={[styles.userItem, isSelected && styles.selectedUser]}
+                onPress={() =>
+                  setSelectedUsers((prev) =>
+                    isSelected
+                      ? prev.filter((u) => u.id !== item.id)
+                      : [...prev, item]
+                  )
+                }
+              >
+                <Text style={styles.userText}>
+                  {item.firstName} {item.lastName}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            loading ? null : (
+              <Text style={styles.emptyText}>{i18n.t("noUsersFound")}</Text>
+            )
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color="#007aff" style={{ marginVertical: 16 }} />
+            ) : null
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          keyboardShouldPersistTaps="handled"
         />
       </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -462,5 +471,11 @@ const styles = StyleSheet.create({
   },
   userText: {
     fontSize: 16,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#9ca3af",
+    marginTop: 24,
+    fontSize: 15,
   },
 });

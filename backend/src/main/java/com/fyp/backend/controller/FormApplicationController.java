@@ -1,8 +1,12 @@
 package com.fyp.backend.controller;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,10 +14,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.model.FormApplication;
 import com.fyp.backend.repository.FormApplicationRepository;
+import com.fyp.backend.util.Pagination;
 
 @RestController
 @RequestMapping("/api/applications")
@@ -29,11 +35,29 @@ public class FormApplicationController {
         return ResponseEntity.ok(formApplicationRepository.save(application));
     }
 
-    // Get all applications — applications contain personal data; admins only
+    // Get applications — personal data, admins only; paginated, newest-first.
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
-    public ResponseEntity<List<FormApplication>> getAllApplications() {
-        return ResponseEntity.ok(formApplicationRepository.findAll());
+    public ResponseEntity<Map<String, Object>> getAllApplications(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        int safeSize = Pagination.clampSize(size);
+        int safePage = Pagination.clampPage(page);
+        Page<FormApplication> result = formApplicationRepository.findAll(
+                PageRequest.of(safePage, safeSize,
+                        Sort.by(Sort.Direction.DESC, "submittedAt").and(Sort.by(Sort.Direction.DESC, "id"))));
+
+        Map<String, Object> pagination = new LinkedHashMap<>();
+        pagination.put("page", safePage);
+        pagination.put("size", safeSize);
+        pagination.put("totalCount", result.getTotalElements());
+        pagination.put("hasMore", result.hasNext());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("data", result.getContent());
+        body.put("pagination", pagination);
+        return ResponseEntity.ok(body);
     }
 
     // Get a specific application by ID — admins only

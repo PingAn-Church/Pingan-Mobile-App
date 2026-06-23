@@ -136,6 +136,9 @@ const ThreadHomePage = () => {
   // const [loading, setLoading] = useState(true);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const { language } = useContext(LanguageContext);
 
   // useEffect(() => {
@@ -198,8 +201,10 @@ const ThreadHomePage = () => {
     }
 
     try {
-      const data = await fetchThreads();
-      setThreads(data);
+      const res = await fetchThreads(0, 20);
+      setThreads(res?.data || []);
+      setPage(0);
+      setHasMore(Boolean(res?.pagination?.hasMore));
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("loadThreadFailed"), [
         { text: i18n.t("ok") },
@@ -210,6 +215,22 @@ const ThreadHomePage = () => {
       } else {
         setLoadingInitial(false);
       }
+    }
+  };
+
+  const loadMoreThreads = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await fetchThreads(next, 20);
+      setThreads((prev) => [...prev, ...(res?.data || [])]);
+      setPage(next);
+      setHasMore(Boolean(res?.pagination?.hasMore));
+    } catch (error) {
+      // Keep what we have; the next scroll can retry.
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -271,6 +292,13 @@ const ThreadHomePage = () => {
           keyExtractor={(item) => item.id.toString()}
           refreshing={refreshing}
           onRefresh={() => loadThreads(true)}
+          onEndReached={loadMoreThreads}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color="blue" style={{ marginVertical: 16 }} />
+            ) : null
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.threadItem}

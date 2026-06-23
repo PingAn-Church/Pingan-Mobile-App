@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/threads")
@@ -17,10 +18,12 @@ public class ThreadController {
     private final ThreadService threadService;
     private final ThreadReplyService replyService;
 
-    // Get all threads
+    // Paginated, newest-first threads: { success, data, pagination }.
     @GetMapping
-    public List<ThreadDto> getAllThreads() {
-        return threadService.getAllThreads();
+    public Map<String, Object> getThreads(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return threadService.getThreads(page, size);
     }
 
     // Get a single thread by ID
