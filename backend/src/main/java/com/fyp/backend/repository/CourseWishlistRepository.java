@@ -19,4 +19,6 @@ public interface CourseWishlistRepository extends JpaRepository<CourseWishlist, 
     void deleteByUserIdAndCourseId(Long userId, Long courseId);
 
     void deleteByCourseId(Long courseId);
+
+    void deleteByUserId(Long userId);
 }

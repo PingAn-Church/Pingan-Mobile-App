@@ -3,6 +3,7 @@ package com.fyp.backend.repository;
 import com.fyp.backend.model.Message;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -25,4 +26,10 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     long countUnread(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
     void deleteById(Long messageId);
+
+    // Account-deletion sweep: drop this user's read-receipt join rows across every
+    // message (the join table has no entity, so it can't be cascaded otherwise).
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
+    void deleteReadReceiptsByUserId(@Param("userId") Long userId);
 }

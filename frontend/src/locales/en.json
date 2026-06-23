@@ -219,6 +219,9 @@
   "reactivateFailed": "Failed to reactivate user.",
   "inactiveUsers": "Inactive Users",
   "noInactiveUsers": "No inactive users.",
+  "deleteUserTitle": "Delete user permanently?",
+  "deleteUserMessage": "This permanently removes the account and all their data — chats, messages, quiz attempts, and uploaded images/voice. This cannot be undone.",
+  "deleteUserFailed": "Failed to delete user.",
 
   "profile": "Profile",
   "name": "Name",

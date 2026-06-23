@@ -17,4 +17,5 @@ public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
     List<PushToken> findByUserId(Long userId);
     void deleteByUserIdAndToken(Long userId, String token);
     void deleteByUserIdAndTokenAndDeviceId(Long userId, String token, String deviceId);
+    void deleteByUserId(Long userId);
 }

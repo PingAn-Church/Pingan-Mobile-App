@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
+import com.fyp.backend.service.UserAccountDeletionService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.Pagination;
@@ -48,6 +50,9 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private UserAccountDeletionService userAccountDeletionService;
 
     // @GetMapping("/profile")
     // public ResponseEntity<UserProfileDto>
@@ -253,6 +258,20 @@ public class UserController {
         try {
             userService.updateUserActiveStatus(id, active);
             return ResponseEntity.ok("User active status updated!");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
+
+    // Permanently delete a deactivated user and ALL their associated data (chat,
+    // quiz attempts, progress, OSS media, etc.). Irreversible; admin-only. The
+    // service guards that the target is inactive and not an admin.
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteUser(@PathVariable Long id) {
+        try {
+            userAccountDeletionService.deleteUserCompletely(id);
+            return ResponseEntity.ok("User and associated data permanently deleted.");
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
         }

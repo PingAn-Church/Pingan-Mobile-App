@@ -321,6 +321,23 @@ export const getInactiveUsers = async () => {
   }
 };
 
+// Hard delete: permanently remove a deactivated user and ALL their associated
+// data (chat, quiz attempts, OSS media, etc.). Irreversible; admin-only.
+export const deleteUser = async (userId) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  try {
+    const response = await axios.delete(apiUrl(`/api/users/${userId}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    throw error;
+  }
+};
+
 export const updateUserProfile = async (userData) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");

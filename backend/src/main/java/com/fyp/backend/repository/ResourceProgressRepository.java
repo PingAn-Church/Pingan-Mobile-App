@@ -17,4 +17,6 @@ public interface ResourceProgressRepository extends JpaRepository<ResourceProgre
     long countByUserIdAndResourceIdInAndIsCompletedTrue(Long userId, List<Long> resourceIds);
 
     void deleteByResourceIdIn(List<Long> resourceIds);
+
+    void deleteByUserId(Long userId);
 }

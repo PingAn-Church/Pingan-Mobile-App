@@ -19,6 +19,7 @@ import {
   getAllUsers,
   updateUserActiveStatus,
   getInactiveUsers,
+  deleteUser,
 } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
 import i18n from "../../../i18n";
@@ -233,6 +234,28 @@ export function ManageUsersPage() {
     }
   };
 
+  // Permanent, irreversible removal of a deactivated user + all their data.
+  const confirmDeleteUser = (target) => {
+    showAlert(
+      i18n.t("deleteUserTitle"),
+      `${target.firstName} ${target.lastName} — ${i18n.t("deleteUserMessage")}`,
+      [
+        { text: i18n.t("cancel"), style: "cancel" },
+        { text: i18n.t("delete"), style: "destructive", onPress: () => doDeleteUser(target.id) },
+      ]
+    );
+  };
+
+  const doDeleteUser = async (userId) => {
+    try {
+      await deleteUser(userId);
+      loadUsers();
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      showAlert(i18n.t("error"), i18n.t("deleteUserFailed"), [{ text: i18n.t("ok") }]);
+    }
+  };
+
   // Remove from verified (moves to not verified)
   const handleRemoveVerified = async (userId) => {
     try {
@@ -333,9 +356,18 @@ export function ManageUsersPage() {
       {shownInactive.length > 0 ? (
         shownInactive.map((item) => (
           <View key={item.id} style={styles.userItem}>
-            <Text style={styles.userName}>
-              {item.firstName} {item.lastName}
-            </Text>
+            <View style={styles.userLeft}>
+              <TouchableOpacity
+                onPress={() => confirmDeleteUser(item)}
+                style={styles.iconButton}
+                accessibilityLabel={i18n.t("deleteUserTitle")}
+              >
+                <Ionicons name="trash" size={24} color="red" />
+              </TouchableOpacity>
+              <Text style={styles.userName}>
+                {item.firstName} {item.lastName}
+              </Text>
+            </View>
             <TouchableOpacity
               onPress={() => handleReactivate(item.id)}
               style={styles.iconButton}
