@@ -30,6 +30,7 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.service.RedisService;
+import com.fyp.backend.service.UserAccountDeletionService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 
@@ -51,6 +52,7 @@ class WebSecurityRulesTest {
     @MockBean private RedisService redisService;
     @MockBean private UserService userService;
     @MockBean private OSSService ossService;
+    @MockBean private UserAccountDeletionService userAccountDeletionService;
 
     private User userWithEmail(long id, String email) {
         User u = new User();
@@ -86,6 +88,28 @@ class WebSecurityRulesTest {
         when(userRepository.findAll()).thenReturn(List.of(userWithEmail(2, "other@example.com")));
 
         mockMvc.perform(get("/api/users").header("Authorization", "Bearer t"))
+                .andExpect(status().isOk());
+    }
+
+    // ---- hard-delete of a user is ADMIN-only ------------------------------
+
+    @Test
+    void deleteUserIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(delete("/api/users/5").header("Authorization", "Bearer t"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void deleteUserIsForbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(delete("/api/users/5").header("Authorization", "Bearer t"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void deleteUserIsAllowedForAdmin() throws Exception {
+        mockMvc.perform(delete("/api/users/5").header("Authorization", "Bearer t"))
                 .andExpect(status().isOk());
     }
 
