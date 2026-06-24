@@ -27,6 +27,7 @@ import { getAllApplications } from "../../service/ApplicationService";
 import { useNavigation } from "@react-navigation/native";
 import { logoutUser } from "../../service/AuthService";
 import { getPresignedDownloadUrl } from "../../service/OSSService";
+import { clearAll as clearMediaCache } from "../../service/MediaCacheService";
 import { changePassword } from "../../service/AuthService";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
@@ -204,6 +205,8 @@ export default function ProfilePage() {
   const handlePressLogout = async () => {
   try {
     await handleDeactivatePushToken();
+    // Clear cached chat media so it doesn't linger on a shared device after logout.
+    await clearMediaCache();
     await logout();
 
     // Navigate first
@@ -358,6 +361,13 @@ export default function ProfilePage() {
           onPress={() => navigation.navigate("EditProfile")}
         >
           <Text style={styles.buttonText}>{i18n.t("editProfile")}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => navigation.navigate("StorageSettings")}
+        >
+          <Text style={styles.buttonText}>{i18n.t("storage")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

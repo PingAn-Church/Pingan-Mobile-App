@@ -245,6 +245,15 @@
   "logout": "Logout",
   "logoutSuccess": "You have been logged out.",
 
+  "storage": "Storage",
+  "storageDescription": "Cached photos and voice messages load instantly and don't re-download. When the limit is reached, the least-recently-used items are removed automatically.",
+  "storageUsedLabel": "Used",
+  "cacheLimit": "Cache limit",
+  "clearCache": "Clear cache",
+  "clearCacheConfirm": "Remove all cached photos and voice messages from this device? They will re-download when you open them again.",
+  "cacheCleared": "Cache cleared.",
+  "storageNativeOnly": "Media caching is only available in the mobile app.",
+
   "cantFetchUsers": "Unable to fetch users",
   "noUsersFound": "No users found",
   "cantLoadChat": "Couldn't load updated chats",

@@ -54,6 +54,8 @@ import ManageEventsPage, {
   EventFormPage,
 } from "./src/pages/Others/ManageEventsPage";
 import EditProfilePage from "./src/pages/Others/EditProfilePage";
+import StorageSettingsPage from "./src/pages/Others/StorageSettingsPage";
+import { init as initMediaCache } from "./src/service/MediaCacheService";
 import { LanguageProvider } from "./src/context/LanguageContext";
 import { LanguageContext } from "./src/context/LanguageContext";
 import "./i18n";
@@ -342,6 +344,12 @@ export default function App() {
   const isDesktop = width >= 768;
   const navigationRef = useNavigationContainerRef();
 
+  // Warm the media cache at startup: reconcile the on-disk files and enforce the
+  // user's size budget (LRU eviction) before any chat media is requested.
+  useEffect(() => {
+    initMediaCache();
+  }, []);
+
   return (
     <NavigationContainer
       ref={navigationRef}
@@ -484,6 +492,10 @@ export default function App() {
                   <Stack.Screen
                     name="EditProfile"
                     component={EditProfilePage}
+                  />
+                  <Stack.Screen
+                    name="StorageSettings"
+                    component={StorageSettingsPage}
                   />
                   <Stack.Screen
                     name="HomeTabs"
