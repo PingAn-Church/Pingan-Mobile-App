@@ -22,6 +22,8 @@ export default {
             "We need access to your camera to take profile pictures.",
           NSPhotoLibraryAddUsageDescription:
             "We need permission to save images to your photo library.",
+          NSMicrophoneUsageDescription:
+            "We need access to your microphone to record voice messages.",
         },
         bundleIdentifier: "org.pingan.app",
       },
@@ -34,6 +36,8 @@ export default {
           "CAMERA",
           "READ_EXTERNAL_STORAGE",
           "WRITE_EXTERNAL_STORAGE",
+          "RECORD_AUDIO",
+          "MODIFY_AUDIO_SETTINGS",
         ],
         package: "org.pingan.app",
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",

@@ -53,7 +53,7 @@
     <key>NSCameraUsageDescription</key>
     <string>We need access to your camera to take profile pictures.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <string>We need access to your microphone to record voice messages.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>We need permission to save images to your photo library.</string>
     <key>NSPhotoLibraryUsageDescription</key>
