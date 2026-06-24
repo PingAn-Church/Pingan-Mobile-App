@@ -137,6 +137,7 @@ export function AddPicturePage() {
   };
 
   const handleUpload = async () => {
+    if (uploading) return; // ignore repeat taps while uploading
     if (!selectedImage) {
       showAlert(i18n.t("error"), i18n.t("noPicSelected"), [
         { text: i18n.t("ok") },

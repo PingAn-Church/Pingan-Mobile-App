@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -38,6 +39,7 @@ const EditProfile = () => {
   const [birthday, setBirthday] = useState("");
   const [profileImage, setProfileImage] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [originalProfileImage, setOriginalProfileImage] = useState(null); // to check if image changed
 
   useEffect(() => {
@@ -147,6 +149,7 @@ const EditProfile = () => {
   };
 
   const handleSave = async () => {
+    if (submitting) return; // ignore repeat taps while saving
     if (!firstName || !lastName || !email) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
@@ -162,6 +165,7 @@ const EditProfile = () => {
       return;
     }
 
+    setSubmitting(true);
     try {
       let profileImageUrl = null;
       // ensure picture changed
@@ -205,6 +209,8 @@ const EditProfile = () => {
         { text: i18n.t("ok") },
       ]);
       console.log("error: ", error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -271,8 +277,16 @@ const EditProfile = () => {
       )}
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={handleSave}>
-          <Text style={styles.buttonText}>{i18n.t("save")}</Text>
+        <TouchableOpacity
+          style={[styles.button, submitting && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>{i18n.t("save")}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>

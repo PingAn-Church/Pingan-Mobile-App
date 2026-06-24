@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import PlatformWebView from "../../components/PlatformWebView";
 import { Ionicons } from "@expo/vector-icons";
@@ -123,6 +124,7 @@ export function AddVideoPage() {
   const navigation = useNavigation();
   const [videoUrl, setVideoUrl] = useState("");
   const [title, setTitle] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const extractVideoId = (url) => {
     const youtubeRegex =
@@ -142,6 +144,7 @@ export function AddVideoPage() {
   };
 
   const handleAddVideo = async () => {
+    if (submitting) return; // ignore repeat taps while adding
     if (!videoUrl || !title) {
       showAlert(i18n.t("error"), i18n.t("enterTitleAndURL"), [
         { text: i18n.t("ok") },
@@ -164,6 +167,7 @@ export function AddVideoPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await addVideo(title, videoData.id, videoData.type);
       setVideoUrl("");
@@ -175,6 +179,8 @@ export function AddVideoPage() {
       showAlert(i18n.t("error"), i18n.t("addVideoFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -200,8 +206,16 @@ export function AddVideoPage() {
         onChangeText={setVideoUrl}
       />
 
-      <TouchableOpacity style={styles.addButton2} onPress={handleAddVideo}>
-        <Text style={styles.addButtonText}>{i18n.t("addVideo")}</Text>
+      <TouchableOpacity
+        style={[styles.addButton2, submitting && { opacity: 0.6 }]}
+        onPress={handleAddVideo}
+        disabled={submitting}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.addButtonText}>{i18n.t("addVideo")}</Text>
+        )}
       </TouchableOpacity>
     </View>
   );

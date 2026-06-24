@@ -179,6 +179,7 @@ export function AddAnnouncementPage() {
   };
 
   const handleUpload = async () => {
+    if (uploading) return; // ignore repeat taps while uploading
     const trimmedTitle = title.trim();
     const normalizedLink = normalizeLink(announcementLink.trim());
 

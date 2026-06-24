@@ -21,6 +21,7 @@ const CreateThreadPage = () => {
   const { language } = useContext(LanguageContext);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   // const handleSubmit = () => {
   //   if (!title.trim() || !content.trim()) {
@@ -43,6 +44,7 @@ const CreateThreadPage = () => {
   }, [language]);
 
   const handleSubmit = async () => {
+    if (submitting) return; // ignore repeat taps while posting
     if (!title.trim() || !content.trim()) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
@@ -50,6 +52,7 @@ const CreateThreadPage = () => {
       return;
     }
 
+    setSubmitting(true);
     try {
       await createThread({ title, content });
       showAlert(i18n.t("success"), i18n.t("postThreadSuccess"), [
@@ -60,6 +63,8 @@ const CreateThreadPage = () => {
       showAlert(i18n.t("error"), i18n.t("postThreadFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -85,7 +90,7 @@ const CreateThreadPage = () => {
         multiline
       />
 
-      <Button title={i18n.t("postThread")} onPress={handleSubmit} />
+      <Button title={i18n.t("postThread")} onPress={handleSubmit} disabled={submitting} />
     </KeyboardAvoidingView>
   );
 };

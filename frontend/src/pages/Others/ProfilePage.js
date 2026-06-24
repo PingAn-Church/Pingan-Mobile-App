@@ -385,6 +385,7 @@ export function ChangePasswordPage({ navigation }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -395,6 +396,7 @@ export function ChangePasswordPage({ navigation }) {
   }, [language]);
 
   const handleChangePassword = async () => {
+    if (submitting) return; // ignore repeat taps while a request is in flight
     if (!currentPassword || !newPassword || !confirmPassword) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
@@ -416,6 +418,7 @@ export function ChangePasswordPage({ navigation }) {
       return;
     }
 
+    setSubmitting(true);
     try {
       await changePassword(currentPassword, newPassword);
       showAlert(i18n.t("success"), i18n.t("updatePasswordSuccess"), [
@@ -425,6 +428,8 @@ export function ChangePasswordPage({ navigation }) {
       showAlert(i18n.t("error"), i18n.t("updatePasswordFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -453,12 +458,17 @@ export function ChangePasswordPage({ navigation }) {
       />
 
       <TouchableOpacity
-        style={styles.changePasswordButton}
+        style={[styles.changePasswordButton, submitting && { opacity: 0.6 }]}
         onPress={handleChangePassword}
+        disabled={submitting}
       >
-        <Text style={styles.changePasswordText}>
-          {i18n.t("updatePassword")}
-        </Text>
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.changePasswordText}>
+            {i18n.t("updatePassword")}
+          </Text>
+        )}
       </TouchableOpacity>
     </View>
   );

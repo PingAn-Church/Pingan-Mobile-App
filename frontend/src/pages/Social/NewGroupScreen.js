@@ -31,6 +31,7 @@ const NewGroupScreen = () => {
   const [selectedParticipants, setSelectedParticipants] = useState([]);
   const [groupImage, setGroupImage] = useState(null);
   const [uploadingGroupImage, setUploadingGroupImage] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { user } = useContext(UserContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
@@ -91,6 +92,7 @@ const NewGroupScreen = () => {
   };
 
   const handleCreateGroup = async () => {
+    if (submitting) return; // ignore repeat taps while creating
     if (!groupName || selectedParticipants.length === 0) {
       showAlert(i18n.t("error"), i18n.t("createGroupRequirement"), [
         { text: i18n.t("ok") },
@@ -98,6 +100,7 @@ const NewGroupScreen = () => {
       return;
     }
 
+    setSubmitting(true);
     try {
       let groupImageUrl = null;
 
@@ -138,6 +141,8 @@ const NewGroupScreen = () => {
         error.message || i18n.t("somethingWentWrong"),
         [{ text: i18n.t("ok") }]
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -262,8 +267,16 @@ const NewGroupScreen = () => {
         />
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.button} onPress={handleCreateGroup}>
-            <Text style={styles.buttonText}>{i18n.t("createGroup")}</Text>
+          <TouchableOpacity
+            style={[styles.button, submitting && { opacity: 0.6 }]}
+            onPress={handleCreateGroup}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{i18n.t("createGroup")}</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.button}

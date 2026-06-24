@@ -22,7 +22,7 @@ import {
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
-import { Platform } from "react-native";
+import { Platform, ActivityIndicator } from "react-native";
 import { showAlert } from "../../utils/showAlert";
 
 const formatWebTimeToAMPM = (timeString) => {
@@ -195,6 +195,7 @@ export function EventFormPage() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const dateInputRef = useRef(null);
 
 
@@ -294,6 +295,7 @@ export function EventFormPage() {
   };
 
   const handleSubmit = async () => {
+    if (submitting) return; // ignore repeat taps while saving
     const { title, description, date, startTime, endTime, location } =
       eventData;
 
@@ -346,6 +348,7 @@ export function EventFormPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       if (editingEvent) {
         await updateEvent(editingEvent.id, eventData);
@@ -364,6 +367,8 @@ export function EventFormPage() {
       showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -528,10 +533,18 @@ export function EventFormPage() {
         onChangeText={(text) => handleInputChange("location", text)}
       />
 
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>
-          {editingEvent ? i18n.t("updateEvent") : i18n.t("createEvent")}
-        </Text>
+      <TouchableOpacity
+        style={[styles.submitButton, submitting && { opacity: 0.6 }]}
+        onPress={handleSubmit}
+        disabled={submitting}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>
+            {editingEvent ? i18n.t("updateEvent") : i18n.t("createEvent")}
+          </Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );

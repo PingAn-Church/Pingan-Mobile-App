@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -128,6 +129,7 @@ export function OthersSectionPage() {
   );
   const [content, setContent] = useState("");
   const [editable, setEditable] = useState(initialName === "__new__");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchContent = async () => {
@@ -150,12 +152,15 @@ export function OthersSectionPage() {
   }, [language]);
 
   const handleSave = async () => {
+    if (submitting) return; // ignore repeat taps while saving
     if (!name.trim()) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
       ]);
+      return;
     }
 
+    setSubmitting(true);
     try {
       if (initialName === "__new__") {
         await createOtherSection(name.trim(), content);
@@ -176,6 +181,8 @@ export function OthersSectionPage() {
       showAlert(i18n.t("error"), i18n.t("contentUpdateFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -213,8 +220,16 @@ export function OthersSectionPage() {
               style={styles.textArea}
               placeholder={i18n.t("enterSectionContent")}
             />
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveText}>{i18n.t("save")}</Text>
+            <TouchableOpacity
+              style={[styles.saveButton, submitting && { opacity: 0.6 }]}
+              onPress={handleSave}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveText}>{i18n.t("save")}</Text>
+              )}
             </TouchableOpacity>
           </View>
         ) : (

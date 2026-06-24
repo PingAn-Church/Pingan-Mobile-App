@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Text,
+  ActivityIndicator,
 } from "react-native";
 import { loginUser } from "../../service/AuthService";
 import { useNavigation } from "@react-navigation/native";
@@ -21,6 +22,7 @@ import { showAlert } from "../../utils/showAlert"
 const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const navigation = useNavigation();
   const { fetchUserData } = useContext(UserContext); // Access the context to update user data
   const { language } = useContext(LanguageContext);
@@ -34,6 +36,7 @@ const LoginPage = () => {
   }, [language]);
 
   const handleLogin = async () => {
+    if (submitting) return; // ignore repeat taps while a request is in flight
     if (!email || !password) {
       showAlert(i18n.t("error"), i18n.t("emailPwRequired"), [
         { text: i18n.t("ok") },
@@ -41,6 +44,7 @@ const LoginPage = () => {
       return;
     }
 
+    setSubmitting(true);
     try {
       const response = await loginUser({ email, password });
 
@@ -64,6 +68,8 @@ const LoginPage = () => {
       showAlert(i18n.t("error"), i18n.t("loginFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -93,8 +99,16 @@ const LoginPage = () => {
       </TouchableOpacity>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>{i18n.t("login")}</Text>
+        <TouchableOpacity
+          style={[styles.button, submitting && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>{i18n.t("login")}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -103,6 +117,7 @@ const LoginPage = () => {
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const navigation = useNavigation();
   const { language } = useContext(LanguageContext);
 
@@ -114,6 +129,7 @@ export function ForgotPasswordPage() {
   }, [language]);
 
   const handleForgotPassword = async () => {
+    if (submitting) return; // ignore repeat taps while a request is in flight
     if (!email) {
       showAlert(i18n.t("error"), i18n.t("enterEmail"), [
         { text: i18n.t("ok") },
@@ -129,6 +145,7 @@ export function ForgotPasswordPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await requestPasswordReset(email);
       showAlert(i18n.t("success"), i18n.t("sendNewPasswordToEmail"), [
@@ -141,6 +158,8 @@ export function ForgotPasswordPage() {
       showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -154,8 +173,16 @@ export function ForgotPasswordPage() {
         style={styles.input}
       />
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={handleForgotPassword}>
-          <Text style={styles.buttonText}>{i18n.t("resetPassword")}</Text>
+        <TouchableOpacity
+          style={[styles.button, submitting && styles.buttonDisabled]}
+          onPress={handleForgotPassword}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>{i18n.t("resetPassword")}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -183,6 +210,9 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginVertical: 10,
     alignItems: "center",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: "#fff",

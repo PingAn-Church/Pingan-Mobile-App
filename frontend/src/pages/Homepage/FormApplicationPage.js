@@ -12,6 +12,7 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
+  ActivityIndicator,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useNavigation } from "@react-navigation/native";
@@ -26,6 +27,7 @@ export default function FormApplicationPage() {
   const [contact, setContact] = useState("");
   const [applicationType, setApplicationType] = useState("Venue Use");
   const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function FormApplicationPage() {
   }, [language]);
 
   const handleSubmit = async () => {
+    if (submitting) return; // ignore repeat taps while submitting
     if (!contact || !applicationType || !remarks) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
@@ -65,17 +68,26 @@ export default function FormApplicationPage() {
       remarks,
     };
 
-    const response = await createApplication(newApplication);
+    setSubmitting(true);
+    try {
+      const response = await createApplication(newApplication);
 
-    if (response) {
-      showAlert(i18n.t("success"), i18n.t("applicationSuccess"), [
-        { text: i18n.t("ok") },
-      ]);
-      navigation.goBack();
-    } else {
+      if (response) {
+        showAlert(i18n.t("success"), i18n.t("applicationSuccess"), [
+          { text: i18n.t("ok") },
+        ]);
+        navigation.goBack();
+      } else {
+        showAlert(i18n.t("error"), i18n.t("applicationFailed"), [
+          { text: i18n.t("ok") },
+        ]);
+      }
+    } catch (error) {
       showAlert(i18n.t("error"), i18n.t("applicationFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -151,8 +163,16 @@ export default function FormApplicationPage() {
           />
           <Text style={styles.label}>{remarks.length}/255</Text>
 
-          <TouchableOpacity onPress={handleSubmit} style={styles.button}>
-            <Text style={styles.buttonText}>{i18n.t("submitApplication")}</Text>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            style={[styles.button, submitting && { opacity: 0.6 }]}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{i18n.t("submitApplication")}</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
     </KeyboardAvoidingView>

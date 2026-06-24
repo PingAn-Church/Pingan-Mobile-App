@@ -24,6 +24,7 @@ const EditThreadPage = ({ route }) => {
   const { language } = useContext(LanguageContext);
   const [title, setTitle] = useState(thread.title);
   const [content, setContent] = useState(thread.content);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     navigation.setOptions({
@@ -33,6 +34,7 @@ const EditThreadPage = ({ route }) => {
   }, [language]);
 
   const handleUpdate = async () => {
+    if (submitting) return; // ignore repeat taps while saving
     if (!title.trim() || !content.trim()) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
@@ -40,6 +42,7 @@ const EditThreadPage = ({ route }) => {
       return;
     }
 
+    setSubmitting(true);
     try {
       const updatedThread = await updateThread(thread.id, { title, content });
       showAlert(i18n.t("success"), i18n.t("updateThreadSuccess"), [
@@ -50,6 +53,8 @@ const EditThreadPage = ({ route }) => {
       showAlert(i18n.t("error"), i18n.t("updateThreadFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -75,7 +80,7 @@ const EditThreadPage = ({ route }) => {
         multiline
       />
 
-      <Button title={i18n.t("save")} onPress={handleUpdate} />
+      <Button title={i18n.t("save")} onPress={handleUpdate} disabled={submitting} />
     </KeyboardAvoidingView>
   );
 };

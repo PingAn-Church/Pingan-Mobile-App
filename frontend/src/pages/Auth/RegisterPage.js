@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Text,
+  ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,6 +32,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [profileImage, setProfileImage] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const navigation = useNavigation(); // React Navigation
   const { language } = useContext(LanguageContext);
@@ -108,6 +110,7 @@ export default function RegisterPage() {
   };
 
   const handleRegister = async () => {
+    if (submitting) return; // ignore repeat taps while registering
     if (!firstName || !lastName || !email || !password) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
         { text: i18n.t("ok") },
@@ -130,6 +133,7 @@ export default function RegisterPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const profileImageUrl = await uploadImageUsingPresignedUrl(
         "profile",
@@ -164,6 +168,8 @@ export default function RegisterPage() {
         message = i18n.t("registerFailed");
       }
       showAlert(i18n.t("error"), message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -216,13 +222,17 @@ export default function RegisterPage() {
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, (submitting || uploading) && styles.buttonDisabled]}
           onPress={handleRegister}
-          disabled={uploading}
+          disabled={submitting || uploading}
         >
-          <Text style={styles.buttonText}>
-            {uploading ? i18n.t("uploading") : i18n.t("register")}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>
+              {uploading ? i18n.t("uploading") : i18n.t("register")}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -256,6 +266,9 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginVertical: 10,
     alignItems: "center",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: "#fff",
