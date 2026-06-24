@@ -233,6 +233,59 @@ const getConversationPreview = (conversation, currentUserId) => {
 
 const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
 
+// Defined at module scope (NOT inside ChatPage) on purpose: a component declared
+// inside another component is a brand-new type on every parent render, so React
+// unmounts and remounts it each time — which makes every chat <Image> reload from
+// the network (the "flashing" in conversation history). At module scope the type is
+// stable, so loaded images survive the chat's frequent re-renders. React.memo skips
+// re-rendering rows whose props are unchanged.
+const ChatImage = React.memo(function ChatImage({ message, isMe, cachedUri, resolveUri, onPress }) {
+  // Prefer the local file when present (the sender's own freshly-sent image): it shows
+  // instantly and survives the optimistic -> persisted swap without a reload. Otherwise
+  // start from any cached presigned URL so a remount never flashes through a spinner.
+  const [uri, setUri] = useState(message.localPreviewUri || cachedUri || null);
+
+  useEffect(() => {
+    let active = true;
+    if (message.localPreviewUri) {
+      setUri(message.localPreviewUri);
+      return () => {
+        active = false;
+      };
+    }
+    if (cachedUri) {
+      setUri(cachedUri);
+      return () => {
+        active = false;
+      };
+    }
+    resolveUri(message.content).then((resolved) => {
+      if (active) setUri(resolved);
+    });
+    return () => {
+      active = false;
+    };
+  }, [message.content, message.localPreviewUri, cachedUri, resolveUri]);
+
+  if (!uri) {
+    return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
+  }
+
+  return (
+    <TouchableOpacity activeOpacity={0.92} onPress={(event) => onPress(message, event)}>
+      <Image
+        source={{ uri }}
+        style={[styles.chatImage, isMe ? styles.chatImageSent : styles.chatImageReceived]}
+      />
+      {message.pending ? (
+        <View style={styles.imageUploadOverlay}>
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        </View>
+      ) : null}
+    </TouchableOpacity>
+  );
+});
+
 export default function ChatPage({ route }) {
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
@@ -265,6 +318,13 @@ export default function ChatPage({ route }) {
   const [showDetailsPanel, setShowDetailsPanel] = useState(false);
   const [isDetailsPanelMounted, setIsDetailsPanelMounted] = useState(false);
   const [imagePresignedUrls, setImagePresignedUrls] = useState({});
+  // Mirror of the presigned-URL cache so the resolver below can read the latest cache
+  // while keeping a stable identity (deps: [conversationId]) — otherwise its identity
+  // would change every time the cache fills and re-render every image row.
+  const imagePresignedUrlsRef = useRef(imagePresignedUrls);
+  useEffect(() => {
+    imagePresignedUrlsRef.current = imagePresignedUrls;
+  }, [imagePresignedUrls]);
   const [conversation, setConversation] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [conversationType, setConversationType] = useState("");
@@ -563,17 +623,20 @@ export default function ChatPage({ route }) {
     setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   };
 
-  const openContextMenu = (message, event) => {
-    const pageX = event?.nativeEvent?.pageX;
-    const pageY = event?.nativeEvent?.pageY;
+  const openContextMenu = useCallback(
+    (message, event) => {
+      const pageX = event?.nativeEvent?.pageX;
+      const pageY = event?.nativeEvent?.pageY;
 
-    setContextMenu({
-      visible: true,
-      x: typeof pageX === "number" ? pageX : windowWidth / 2,
-      y: typeof pageY === "number" ? pageY : windowHeight / 2,
-      message,
-    });
-  };
+      setContextMenu({
+        visible: true,
+        x: typeof pageX === "number" ? pageX : windowWidth / 2,
+        y: typeof pageY === "number" ? pageY : windowHeight / 2,
+        message,
+      });
+    },
+    [windowWidth, windowHeight]
+  );
 
   const contextMenuPosition = useMemo(() => {
     const horizontalMargin = 8;
@@ -1003,19 +1066,23 @@ export default function ChatPage({ route }) {
     textInputRef.current?.focus();
   };
 
-  const resolveImageUrl = async (objectKey) => {
-    if (!objectKey) return null;
-    if (imagePresignedUrls[objectKey]) return imagePresignedUrls[objectKey];
+  const resolveImageUrl = useCallback(
+    async (objectKey) => {
+      if (!objectKey) return null;
+      const cached = imagePresignedUrlsRef.current[objectKey];
+      if (cached) return cached;
 
-    try {
-      const fileName = objectKey.split("/").pop();
-      const presignedUrl = await getConversationDownloadUrl(fileName, conversationId);
-      setImagePresignedUrls((prev) => ({ ...prev, [objectKey]: presignedUrl }));
-      return presignedUrl;
-    } catch (error) {
-      return null;
-    }
-  };
+      try {
+        const fileName = objectKey.split("/").pop();
+        const presignedUrl = await getConversationDownloadUrl(fileName, conversationId);
+        setImagePresignedUrls((prev) => ({ ...prev, [objectKey]: presignedUrl }));
+        return presignedUrl;
+      } catch (error) {
+        return null;
+      }
+    },
+    [conversationId]
+  );
 
   const resolveImageMessageUri = async (message) => {
     if (!message) return null;
@@ -1099,38 +1166,7 @@ export default function ChatPage({ route }) {
     await MediaLibrary.saveToLibraryAsync(downloadedFile.uri);
   };
 
-  const ImageWrapper = ({ message, isMe }) => {
-    const [uri, setUri] = useState(message.localPreviewUri || null);
-
-    useEffect(() => {
-      let active = true;
-
-      if (message.localPreviewUri && message.pending) {
-        setUri(message.localPreviewUri);
-        return () => {
-          active = false;
-        };
-      }
-
-      resolveImageUrl(message.content).then((resolved) => {
-        if (active) setUri(resolved);
-      });
-
-      return () => {
-        active = false;
-      };
-    }, [message.content, message.localPreviewUri, message.pending]);
-
-    if (!uri) return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
-    return (
-      <TouchableOpacity activeOpacity={0.92} onPress={(event) => openContextMenu(message, event)}>
-        <Image
-          source={{ uri }}
-          style={[styles.chatImage, isMe ? styles.chatImageSent : styles.chatImageReceived]}
-        />
-      </TouchableOpacity>
-    );
-  };
+  // (chat image rendering lives in the module-level <ChatImage> component above)
 
   const pickAndSendImage = async () => {
     if (!currentUser?.id || !conversationId || !conversationType) return;
@@ -1657,7 +1693,13 @@ export default function ChatPage({ route }) {
               ]}
             >
               {isImage ? (
-                <ImageWrapper message={item} isMe={isMe} />
+                <ChatImage
+                  message={item}
+                  isMe={isMe}
+                  cachedUri={item.content ? imagePresignedUrls[item.content] : null}
+                  resolveUri={resolveImageUrl}
+                  onPress={openContextMenu}
+                />
               ) : isVoice ? (
                 (() => {
                   const { audioUrl, duration } = parseVoiceContent(item.content);
@@ -2723,6 +2765,14 @@ const styles = StyleSheet.create({
   chatImageReceived: {
     borderWidth: 1,
     borderColor: "#D7D7DB",
+  },
+  // Dim + spinner shown over a photo while it is still uploading.
+  imageUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderRadius: 18,
   },
   failedMessage: {
     borderWidth: 1,
