@@ -1546,14 +1546,15 @@ export default function ChatPage({ route }) {
 
   const chatContent = (
     <KeyboardAvoidingView
-      // Under Expo SDK 54 edge-to-edge the Android window no longer resizes for the
-      // keyboard (adjustResize is neutralised), so a no-op KAV leaves the input bar
-      // hidden behind the keyboard. Use padding-avoidance on both native platforms,
-      // offset by the real header height (the KAV sits below the native-stack header).
-      // Web has no overlapping soft keyboard, so KAV stays inert there.
+      // Padding-avoidance lifts the input bar above the keyboard on native; web has no
+      // overlapping soft keyboard so KAV stays inert. The offset differs by platform:
+      // on iOS the KAV's measured frame excludes the native-stack header, so we offset
+      // by its height; on Android the frame already includes the header, so the offset
+      // MUST be 0 — otherwise the header height is double-counted, over-lifting while
+      // typing and leaving residual blank space below the input once the keyboard hides.
       behavior={Platform.OS === "web" ? undefined : "padding"}
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "web" ? 0 : headerHeight}
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
       <View style={styles.headerContainer}>
         <TouchableOpacity
