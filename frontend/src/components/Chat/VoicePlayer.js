@@ -3,6 +3,7 @@ import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "rea
 import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { getConversationDownloadUrl } from "../../service/OSSService";
+import { getLocalUri as getCachedMedia } from "../../service/MediaCacheService";
 
 const VoicePlayer = ({ audioUrl, duration, conversationId, isMe = false }) => {
   const [sound, setSound] = useState(null);
@@ -19,11 +20,13 @@ const VoicePlayer = ({ audioUrl, duration, conversationId, isMe = false }) => {
       if (!audioUrl) return;
       
       try {
-        // If it's an S3 object key, resolve it to a presigned URL
+        // If it's an S3 object key, serve from the on-device cache (downloads once
+        // on a miss) and fall back to a presigned URL only if it couldn't be cached.
         if (audioUrl.includes("voice_") && conversationId) {
           const fileName = audioUrl.split("/").pop();
-          const presignedUrl = await getConversationDownloadUrl(fileName, conversationId);
-          setResolvedAudioUrl(presignedUrl);
+          const resolveRemote = () => getConversationDownloadUrl(fileName, conversationId);
+          const local = await getCachedMedia(audioUrl, resolveRemote);
+          setResolvedAudioUrl(local || (await resolveRemote()));
         } else {
           // If it's already a full URL, use it directly
           setResolvedAudioUrl(audioUrl);

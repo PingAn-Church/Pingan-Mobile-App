@@ -39,6 +39,10 @@ import {
   editMessageInDatabase,
 } from "../../service/ChatService";
 import {
+  getLocalUri as getCachedMedia,
+  peekLocalUri as peekCachedMedia,
+} from "../../service/MediaCacheService";
+import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
   getPresignedUploadUrl,
@@ -239,11 +243,14 @@ const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSi
 // the network (the "flashing" in conversation history). At module scope the type is
 // stable, so loaded images survive the chat's frequent re-renders. React.memo skips
 // re-rendering rows whose props are unchanged.
-const ChatImage = React.memo(function ChatImage({ message, isMe, cachedUri, resolveUri, onPress }) {
-  // Prefer the local file when present (the sender's own freshly-sent image): it shows
-  // instantly and survives the optimistic -> persisted swap without a reload. Otherwise
-  // start from any cached presigned URL so a remount never flashes through a spinner.
-  const [uri, setUri] = useState(message.localPreviewUri || cachedUri || null);
+const ChatImage = React.memo(function ChatImage({ message, isMe, resolveUri, onPress }) {
+  // Source priority: the local file (sender's own freshly-sent image — instant and
+  // survives the optimistic -> persisted swap), then the on-device media cache, then
+  // the remote presigned URL. peekCachedMedia seeds the first render synchronously so
+  // an already-cached image never flashes through a spinner.
+  const [uri, setUri] = useState(
+    () => message.localPreviewUri || peekCachedMedia(message.content) || null
+  );
 
   useEffect(() => {
     let active = true;
@@ -253,19 +260,16 @@ const ChatImage = React.memo(function ChatImage({ message, isMe, cachedUri, reso
         active = false;
       };
     }
-    if (cachedUri) {
-      setUri(cachedUri);
-      return () => {
-        active = false;
-      };
-    }
-    resolveUri(message.content).then((resolved) => {
-      if (active) setUri(resolved);
+    // Serve from the local cache (downloads once on a miss); fall back to the remote
+    // presigned URL only if it couldn't be cached.
+    getCachedMedia(message.content, resolveUri).then(async (local) => {
+      if (!active) return;
+      setUri(local || (await resolveUri(message.content)));
     });
     return () => {
       active = false;
     };
-  }, [message.content, message.localPreviewUri, cachedUri, resolveUri]);
+  }, [message.content, message.localPreviewUri, resolveUri]);
 
   if (!uri) {
     return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
@@ -1696,7 +1700,6 @@ export default function ChatPage({ route }) {
                 <ChatImage
                   message={item}
                   isMe={isMe}
-                  cachedUri={item.content ? imagePresignedUrls[item.content] : null}
                   resolveUri={resolveImageUrl}
                   onPress={openContextMenu}
                 />
