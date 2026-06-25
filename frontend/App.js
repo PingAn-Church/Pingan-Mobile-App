@@ -56,6 +56,7 @@ import ManageEventsPage, {
 import EditProfilePage from "./src/pages/Others/EditProfilePage";
 import StorageSettingsPage from "./src/pages/Others/StorageSettingsPage";
 import { init as initMediaCache } from "./src/service/MediaCacheService";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { LanguageProvider } from "./src/context/LanguageContext";
 import { LanguageContext } from "./src/context/LanguageContext";
 import "./i18n";
@@ -351,6 +352,7 @@ export default function App() {
   }, []);
 
   return (
+    <KeyboardProvider>
     <NavigationContainer
       ref={navigationRef}
       linking={Platform.OS === "web" ? linking : undefined}
@@ -597,5 +599,6 @@ export default function App() {
       </UserProvider>
       </QueryClientProvider>
     </NavigationContainer>
+    </KeyboardProvider>
   );
 }

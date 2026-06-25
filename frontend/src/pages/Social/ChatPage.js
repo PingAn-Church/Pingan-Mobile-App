@@ -13,7 +13,6 @@ import {
   Alert,
   Modal,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   Keyboard,
   useWindowDimensions,
@@ -42,6 +41,9 @@ import {
   getLocalUri as getCachedMedia,
   peekLocalUri as peekCachedMedia,
 } from "../../service/MediaCacheService";
+// Edge-to-edge-aware keyboard avoidance: unlike RN's KeyboardAvoidingView, this one
+// accounts for Android's bottom (navigation-bar) inset so the input row clears the keyboard.
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
@@ -1586,12 +1588,12 @@ export default function ChatPage({ route }) {
 
   const chatContent = (
     <KeyboardAvoidingView
-      // Padding-avoidance lifts the input bar above the keyboard on native; web has no
-      // overlapping soft keyboard so KAV stays inert. The offset differs by platform:
-      // on iOS the KAV's measured frame excludes the native-stack header, so we offset
-      // by its height; on Android the frame already includes the header, so the offset
-      // MUST be 0 — otherwise the header height is double-counted, over-lifting while
-      // typing and leaving residual blank space below the input once the keyboard hides.
+      // react-native-keyboard-controller's KeyboardAvoidingView handles Android
+      // edge-to-edge insets (incl. the navigation bar) that RN's version misses, so the
+      // input row sits flush above the keyboard. Offset is per-platform: on iOS the
+      // measured frame excludes the native-stack header, so offset by its height; on
+      // Android the frame already includes the header, so the offset MUST be 0 — passing
+      // the header height there double-counts it and over-lifts the input. Web is inert.
       behavior={Platform.OS === "web" ? undefined : "padding"}
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
