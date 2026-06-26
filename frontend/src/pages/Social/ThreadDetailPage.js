@@ -454,12 +454,13 @@ import {
   TextInput,
   Button,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   Alert,
   RefreshControl,
   TouchableOpacity,
 } from "react-native";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
 import {
   fetchReplies,
   postReply,
@@ -493,6 +494,7 @@ const ThreadDetailPage = ({ route }) => {
   const { language } = useContext(LanguageContext);
   const { user } = useContext(UserContext);
   const navigation = useNavigation();
+  const headerHeight = useHeaderHeight();
 
   useEffect(() => {
     navigation.setOptions({
@@ -572,10 +574,23 @@ const ThreadDetailPage = ({ route }) => {
     }
   };
 
+  const replyComposer = (
+    <View style={styles.replyBox}>
+      <TextInput
+        placeholder={i18n.t("writeReply")}
+        value={newReply}
+        onChangeText={setNewReply}
+        style={styles.input}
+      />
+      <Button title={i18n.t("reply")} onPress={handleReply} />
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.select({ ios: "padding", android: undefined })}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
       <FlatList
         ref={flatListRef}
@@ -713,15 +728,11 @@ const ThreadDetailPage = ({ route }) => {
         )}
       />
 
-      <View style={styles.replyBox}>
-        <TextInput
-          placeholder={i18n.t("writeReply")}
-          value={newReply}
-          onChangeText={setNewReply}
-          style={styles.input}
-        />
-        <Button title={i18n.t("reply")} onPress={handleReply} />
-      </View>
+      {Platform.OS === "android" ? (
+        <KeyboardStickyView>{replyComposer}</KeyboardStickyView>
+      ) : (
+        replyComposer
+      )}
     </KeyboardAvoidingView>
   );
 };

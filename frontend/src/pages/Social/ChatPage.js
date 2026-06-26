@@ -41,9 +41,8 @@ import {
   getLocalUri as getCachedMedia,
   peekLocalUri as peekCachedMedia,
 } from "../../service/MediaCacheService";
-// Edge-to-edge-aware keyboard avoidance: unlike RN's KeyboardAvoidingView, this one
-// accounts for Android's bottom (navigation-bar) inset so the input row clears the keyboard.
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+// Keyboard controller gives Android a true keyboard-sticky composer under edge-to-edge.
+import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
 import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
@@ -331,9 +330,6 @@ export default function ChatPage({ route }) {
   const { conversations, setConversations, loadOlderMessages } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
-  // Exact height of the native-stack header above this screen — used as the
-  // KeyboardAvoidingView offset so the input bar lands just above the keyboard
-  // (replaces a hardcoded magic number that broke on different device sizes).
   const headerHeight = useHeaderHeight();
 
   const [inputText, setInputText] = useState("");
@@ -1639,16 +1635,72 @@ export default function ChatPage({ route }) {
     }
   };
 
+  const composerContent = (
+    <View style={styles.composerWrap}>
+      {showJumpToEnd && (
+        <TouchableOpacity
+          style={styles.jumpToEndButton}
+          onPress={jumpToEnd}
+          activeOpacity={0.85}
+          accessibilityLabel="Jump to latest messages"
+        >
+          <Ionicons name="chevron-down" size={24} color="#1F1F22" />
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.inputContainer}>
+        <TouchableOpacity onPress={pickAndSendImage} style={styles.attachButton} activeOpacity={0.82}>
+          <Ionicons name="image" size={23} color="#111111" />
+        </TouchableOpacity>
+
+        <View style={styles.inputPill}>
+          <TextInput
+            ref={textInputRef}
+            value={inputText}
+            onChangeText={setInputText}
+            placeholder={i18n.t("typeMessage")}
+            placeholderTextColor="#98989D"
+            style={styles.inputField}
+            multiline
+          />
+
+          <View style={styles.voiceRecorderWrap}>
+            <VoiceRecorder
+              onRecordingComplete={handleVoiceRecordingComplete}
+              iconSize={24}
+              iconColor="#1F1F22"
+              buttonSize={38}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleSendOrUpdate}
+          disabled={isSendDisabled}
+          style={[
+            styles.sendButton,
+            isSendDisabled ? styles.sendButtonDisabled : styles.sendButtonActive,
+          ]}
+          activeOpacity={0.86}
+        >
+          {isSendingText ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.sendButtonText}>{editingMessage ? "Update" : "Send"}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   const chatContent = (
     <KeyboardAvoidingView
-      // react-native-keyboard-controller's KeyboardAvoidingView handles Android
-      // edge-to-edge insets (incl. the navigation bar) that RN's version misses, so the
-      // input row sits flush above the keyboard. The measured chat content frame sits
-      // below the native-stack header on both iOS and Android, while the controller's
-      // screen height is full-screen, so native platforms need the header height offset.
-      behavior={Platform.OS === "web" ? undefined : "padding"}
+      // iOS still needs padding avoidance with the native header offset. Android uses
+      // KeyboardStickyView for the composer instead; page-level padding leaves large
+      // stale gaps when Gboard or edge-to-edge insets report transient IME states.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "web" ? 0 : headerHeight}
+      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
       <FlatList
         ref={flatListRef}
@@ -1950,59 +2002,11 @@ export default function ChatPage({ route }) {
         </View>
       )}
 
-      {showJumpToEnd && (
-        <TouchableOpacity
-          style={styles.jumpToEndButton}
-          onPress={jumpToEnd}
-          activeOpacity={0.85}
-          accessibilityLabel="Jump to latest messages"
-        >
-          <Ionicons name="chevron-down" size={24} color="#1F1F22" />
-        </TouchableOpacity>
+      {Platform.OS === "android" ? (
+        <KeyboardStickyView>{composerContent}</KeyboardStickyView>
+      ) : (
+        composerContent
       )}
-
-      <View style={styles.inputContainer}>
-        <TouchableOpacity onPress={pickAndSendImage} style={styles.attachButton} activeOpacity={0.82}>
-          <Ionicons name="image" size={23} color="#111111" />
-        </TouchableOpacity>
-
-        <View style={styles.inputPill}>
-          <TextInput
-            ref={textInputRef}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder={i18n.t("typeMessage")}
-            placeholderTextColor="#98989D"
-            style={styles.inputField}
-            multiline
-          />
-
-          <View style={styles.voiceRecorderWrap}>
-            <VoiceRecorder
-              onRecordingComplete={handleVoiceRecordingComplete}
-              iconSize={24}
-              iconColor="#1F1F22"
-              buttonSize={38}
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity
-          onPress={handleSendOrUpdate}
-          disabled={isSendDisabled}
-          style={[
-            styles.sendButton,
-            isSendDisabled ? styles.sendButtonDisabled : styles.sendButtonActive,
-          ]}
-          activeOpacity={0.86}
-        >
-          {isSendingText ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.sendButtonText}>{editingMessage ? "Update" : "Send"}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
     </KeyboardAvoidingView>
   );
 
@@ -2370,7 +2374,11 @@ export default function ChatPage({ route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F2F2F7", paddingBottom: 15 },
+  container: {
+    flex: 1,
+    backgroundColor: "#F2F2F7",
+    paddingBottom: Platform.OS === "android" ? 0 : 15,
+  },
   webLayoutContainer: {
     flex: 1,
     flexDirection: "row",
@@ -2839,6 +2847,10 @@ const styles = StyleSheet.create({
   imageTimestamp: {
     color: "rgba(60,60,67,0.62)",
     marginTop: 6,
+  },
+  composerWrap: {
+    position: "relative",
+    overflow: "visible",
   },
   inputContainer: {
     flexDirection: "row",
