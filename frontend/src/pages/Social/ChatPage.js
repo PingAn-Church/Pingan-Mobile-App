@@ -292,6 +292,38 @@ const ChatImage = React.memo(function ChatImage({ message, isMe, resolveUri, onP
   );
 });
 
+const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
+  iconUri,
+  title,
+  canOpen,
+  onPress,
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.nativeHeaderTitle}
+      activeOpacity={canOpen ? 0.72 : 1}
+      onPress={onPress}
+      disabled={!canOpen}
+    >
+      <Image
+        source={iconUri ? { uri: iconUri } : defaultProfileImage}
+        style={styles.nativeHeaderAvatar}
+      />
+      <Text style={styles.nativeHeaderText} numberOfLines={1}>
+        {title || i18n.t("chat")}
+      </Text>
+      {canOpen ? (
+        <Ionicons
+          name="chevron-forward"
+          size={15}
+          color="#8E8E93"
+          style={styles.nativeHeaderChevron}
+        />
+      ) : null}
+    </TouchableOpacity>
+  );
+});
+
 export default function ChatPage({ route }) {
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
@@ -417,14 +449,6 @@ export default function ChatPage({ route }) {
       setTranslatingId(null);
     }
   };
-
-  useEffect(() => {
-    navigation.setOptions({
-      title: i18n.t("chat"),
-      headerBackButtonDisplayMode: "minimal",
-      headerBackTitle: "",
-    });
-  }, [language, navigation]);
 
   useEffect(() => {
     const buildUsersDirectory = async () => {
@@ -595,7 +619,7 @@ export default function ChatPage({ route }) {
     });
   }, [detailsSidebarAnim]);
 
-  const handleOpenChatDetails = () => {
+  const handleOpenChatDetails = useCallback(() => {
     if (isWebDesktop) {
       openDetailsPanel();
       return;
@@ -612,7 +636,14 @@ export default function ChatPage({ route }) {
     if (conversationType === "private" && privateChatParticipantId !== null) {
       navigation.navigate("DetailedPrivateChat", { otherParticipantId: privateChatParticipantId });
     }
-  };
+  }, [
+    conversationId,
+    conversationType,
+    isWebDesktop,
+    navigation,
+    openDetailsPanel,
+    privateChatParticipantId,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -1352,6 +1383,28 @@ export default function ChatPage({ route }) {
   const activeConversationIcon =
     conversationIconUrls[String(conversationId)] || "";
 
+  useEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => (
+        <ChatNativeHeaderTitle
+          iconUri={activeConversationIcon}
+          title={chatDisplayName}
+          canOpen={canOpenChatDetails}
+          onPress={handleOpenChatDetails}
+        />
+      ),
+      headerBackButtonDisplayMode: "minimal",
+      headerBackTitle: "",
+    });
+  }, [
+    activeConversationIcon,
+    canOpenChatDetails,
+    chatDisplayName,
+    handleOpenChatDetails,
+    language,
+    navigation,
+  ]);
+
   const chatSidebarConversations = useMemo(() => {
     return [...conversations]
       .sort((a, b) => getConversationSortTime(b) - getConversationSortTime(a))
@@ -1590,39 +1643,13 @@ export default function ChatPage({ route }) {
     <KeyboardAvoidingView
       // react-native-keyboard-controller's KeyboardAvoidingView handles Android
       // edge-to-edge insets (incl. the navigation bar) that RN's version misses, so the
-      // input row sits flush above the keyboard. Offset is per-platform: on iOS the
-      // measured frame excludes the native-stack header, so offset by its height; on
-      // Android the frame already includes the header, so the offset MUST be 0 — passing
-      // the header height there double-counts it and over-lifts the input. Web is inert.
+      // input row sits flush above the keyboard. The measured chat content frame sits
+      // below the native-stack header on both iOS and Android, while the controller's
+      // screen height is full-screen, so native platforms need the header height offset.
       behavior={Platform.OS === "web" ? undefined : "padding"}
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
+      keyboardVerticalOffset={Platform.OS === "web" ? 0 : headerHeight}
     >
-      <View style={styles.headerContainer}>
-        <TouchableOpacity
-          style={styles.headerTapArea}
-          activeOpacity={canOpenChatDetails ? 0.72 : 1}
-          onPress={handleOpenChatDetails}
-          disabled={!canOpenChatDetails}
-        >
-          <Image
-            source={activeConversationIcon ? { uri: activeConversationIcon } : defaultProfileImage}
-            style={styles.profileImage}
-          />
-          <Text style={styles.chatHeader} numberOfLines={1}>
-            {chatDisplayName}
-          </Text>
-          {canOpenChatDetails && (
-            <Ionicons
-              name="chevron-forward"
-              size={15}
-              color="#8E8E93"
-              style={styles.chatHeaderChevron}
-            />
-          )}
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -2702,22 +2729,26 @@ const styles = StyleSheet.create({
     color: "#111827",
     flex: 1,
   },
-  headerContainer: {
+  nativeHeaderTitle: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    backgroundColor: "#FFF",
-    borderBottomWidth: 1,
-    borderColor: "#EEE",
+    justifyContent: "center",
+    minWidth: 0,
+    maxWidth: Platform.OS === "web" ? 420 : 240,
   },
-  headerTapArea: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
+  nativeHeaderAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginRight: 8,
   },
-  profileImage: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
-  chatHeader: { fontSize: webFontSize(16), fontWeight: "600", flexShrink: 1 },
-  chatHeaderChevron: {
+  nativeHeaderText: {
+    fontSize: webFontSize(16),
+    fontWeight: "600",
+    color: "#111111",
+    flexShrink: 1,
+  },
+  nativeHeaderChevron: {
     marginLeft: 4,
   },
   message: {
