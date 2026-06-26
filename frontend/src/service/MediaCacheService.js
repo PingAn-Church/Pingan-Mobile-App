@@ -65,6 +65,11 @@ function fileNameFor(key) {
 function nameOf(file) {
   return String(file?.uri || "").split("/").pop();
 }
+function isCacheableRemoteUrl(url) {
+  const value = String(url || "").trim();
+  if (!/^https?:\/\//i.test(value)) return false;
+  return !/\/\/via\.placeholder\.com\//i.test(value);
+}
 
 function schedulePersist() {
   if (persistTimer) return;
@@ -212,7 +217,7 @@ export async function getLocalUri(content, resolveRemoteUrl) {
   const promise = (async () => {
     try {
       const url = await resolveRemoteUrl(content);
-      if (!url) return null;
+      if (!isCacheableRemoteUrl(url)) return null;
       const name = fileNameFor(key);
       const target = new File(dir, name);
       try {

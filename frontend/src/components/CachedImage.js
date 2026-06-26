@@ -38,25 +38,26 @@ const isManaged = (url) =>
  */
 export default function CachedImage({ uri, type, fallbackSource = null, style, ...rest }) {
   const managed = isManaged(uri);
-  const [resolved, setResolved] = useState(() =>
-    uri ? (managed ? peekCachedMedia(uri) : uri) : null
-  );
+  const [resolved, setResolved] = useState(() => ({
+    key: uri || null,
+    uri: uri ? (managed ? peekCachedMedia(uri) : uri) : null,
+  }));
 
   useEffect(() => {
     let active = true;
 
     if (!uri) {
-      setResolved(null);
+      setResolved({ key: null, uri: null });
       return;
     }
     if (!managed) {
-      setResolved(uri); // external URL — render directly
+      setResolved({ key: uri, uri }); // external URL — render directly
       return;
     }
 
     const cached = peekCachedMedia(uri);
     if (cached) {
-      setResolved(cached);
+      setResolved({ key: uri, uri: cached });
       return () => {
         active = false;
       };
@@ -64,16 +65,25 @@ export default function CachedImage({ uri, type, fallbackSource = null, style, .
 
     // Cache miss: download once (keyed by object path), fall back to the remote
     // presigned URL only if it couldn't be cached.
-    getCachedMedia(uri, (u) => resolvePresignedAssetUrl(u, type)).then(async (local) => {
+    setResolved({ key: uri, uri: null });
+    (async () => {
+      const local = await getCachedMedia(uri, (u) => resolvePresignedAssetUrl(u, type));
       if (!active) return;
-      setResolved(local || (await resolvePresignedAssetUrl(uri, type)));
-    });
+      if (local) {
+        setResolved({ key: uri, uri: local });
+        return;
+      }
+      const remote = await resolvePresignedAssetUrl(uri, type);
+      if (active) setResolved({ key: uri, uri: remote || null });
+    })();
 
     return () => {
       active = false;
     };
   }, [uri, type, managed]);
 
-  const source = resolved ? { uri: resolved } : fallbackSource;
+  const currentKey = uri || null;
+  const resolvedUri = resolved.key === currentKey ? resolved.uri : null;
+  const source = resolvedUri ? { uri: resolvedUri } : fallbackSource;
   return <Image source={source} style={style} {...rest} />;
 }

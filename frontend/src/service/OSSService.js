@@ -229,7 +229,7 @@ export const getPresignedDownloadUrl = async (fileName, fileType) => {
     return response.data; // Returns the temporary URL
   } catch (error) {
     console.error("Error fetching presigned download URL:", error);
-    return "https://via.placeholder.com/150"; // Fallback image
+    return null;
   }
 };
 
@@ -315,6 +315,6 @@ export const getConversationDownloadUrl = async (fileName, conversationId) => {
     return response.data;
   } catch (error) {
     console.error("Error fetching conversation download URL:", error);
-    return "https://via.placeholder.com/150"; // fallback
+    return null;
   }
 };

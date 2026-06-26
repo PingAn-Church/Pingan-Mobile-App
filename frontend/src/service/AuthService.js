@@ -3,6 +3,23 @@ import axios from "axios";
 import { disconnectWebSocket } from "./WebSocketService";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
+import { clearAll as clearMediaCache } from "./MediaCacheService";
+
+const clearLocalSession = async () => {
+  try {
+    await clearMediaCache();
+  } catch (error) {
+    console.warn("Failed to clear media cache during logout:", error);
+  }
+
+  try {
+    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+  } catch (error) {
+    console.warn("Failed to clear auth storage during logout:", error);
+  }
+
+  disconnectWebSocket();
+};
 
 export const registerUser = async (userDetails) => {
   try {
@@ -86,7 +103,7 @@ export const logoutUser = async () => {
   const refreshToken = await AsyncStorage.getItem("refreshToken"); // Get the stored refresh token
 
   if (!refreshToken) {
-    // console.error("No refresh token available for logout");
+    await clearLocalSession();
     return;
   }
 
@@ -94,6 +111,7 @@ export const logoutUser = async () => {
   const deviceId = await AsyncStorage.getItem("deviceId");
   if (!deviceId) {
     console.error("No deviceId available for logout");
+    await clearLocalSession();
     return;
   }
 
@@ -110,16 +128,11 @@ export const logoutUser = async () => {
 
     console.log("Logout successful:", response.data);
 
-    // Optionally, clear any AsyncStorage and perform other actions
-    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
-    disconnectWebSocket();  // Disconnect WebSocket
-
   } catch (error) {
     console.error("Error during logout:", error.response?.data || error);
     console.warn("⚠️ Logout API call failed, but clearing storage...");
-    // Optionally clear storage here if the API call fails
-    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
-    disconnectWebSocket();  // Disconnect WebSocket
+  } finally {
+    await clearLocalSession();
   }
 };
 
