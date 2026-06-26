@@ -40,6 +40,7 @@ import {
 } from "../../service/OSSService";
 import { getStompClient } from "../../service/WebSocketService";
 import defaultProfileImage from "../../../assets/user.png";
+import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 
@@ -56,7 +57,6 @@ const ChatHomePage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   // const [filteredConversations, setFilteredConversations] = useState([]);
-  const [chatIconUrls, setChatIconUrls] = useState({});
   const [refreshing, setRefreshing] = useState(false);
 
   const showInitialLoader =
@@ -169,43 +169,10 @@ const ChatHomePage = () => {
     handleSearch(searchQuery); // Reapply search filter to updated conversations
   }, [conversations]);
 
-  useEffect(() => {
-    const updateChatIcons = async () => {
-      const newChatIconUrls = {};
-      for (const conversation of conversations) {
-        let iconUrl = null;
-
-        if (conversation.conversationType === "private") {
-          const otherParticipantId = conversation.participants.find(
-            (id) => String(id) !== String(user.id)
-          );
-          const otherParticipant = (conversation.participantProfiles || []).find(
-            (p) => String(p.id) === String(otherParticipantId)
-          );
-          if (otherParticipant?.profileImage) {
-            iconUrl = await fetchViewingPresignedUrl(
-              otherParticipant.profileImage,
-              "profile"
-            );
-            console.log("PRIVATE ICON URL", iconUrl);
-          }
-        } else if (
-          conversation.conversationType === "group" &&
-          conversation.groupIcon
-        ) {
-          iconUrl = await fetchViewingPresignedUrl(
-            conversation.groupIcon,
-            "group"
-          );
-        }
-
-        newChatIconUrls[conversation.conversationId] = iconUrl ?? "default";
-      }
-      setChatIconUrls(newChatIconUrls);
-    };
-
-    updateChatIcons();
-  }, [conversations]);
+  // Conversation icons now resolve + cache per-row via <CachedImage> (keyed by the
+  // object path), instead of re-signing a presigned URL for every conversation on each
+  // `conversations` change — that churn re-downloaded avatars constantly and bloated
+  // the OS image cache.
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -316,13 +283,21 @@ const ChatHomePage = () => {
     const lastMessage = getLastMessage(item);
 
     let title = i18n.t("privateChat");
-    // let chatIconUrl = chatIconUrls[item.conversationId] || "https://via.placeholder.com/50";
-    const chatIconUrl = chatIconUrls[item.conversationId];
-    // const chatIconSource = chatIconUrl ? { uri: chatIconUrl } : defaultProfileImage;
-    const chatIconSource =
-      chatIconUrl && chatIconUrl !== "default"
-        ? { uri: chatIconUrl }
-        : defaultProfileImage;
+    // Raw stored object path for the icon (private avatar or group icon); CachedImage
+    // resolves + caches it on-device.
+    const isGroupIcon = item.conversationType === "group";
+    let rawIconUri = null;
+    if (isGroupIcon) {
+      rawIconUri = item.groupIcon || null;
+    } else {
+      const otherId = item.participants.find(
+        (id) => String(id) !== String(user.id)
+      );
+      const otherProfile = (item.participantProfiles || []).find(
+        (p) => String(p.id) === String(otherId)
+      );
+      rawIconUri = otherProfile?.profileImage || null;
+    }
 
     if (item.conversationType === "private") {
       const otherParticipant = item.participants.find(
@@ -360,8 +335,12 @@ const ChatHomePage = () => {
       >
         {/* Profile Image & Online Indicator */}
         <View style={styles.profileContainer}>
-          {/* <Image source={{ uri: chatIconUrl }} style={styles.profileImage} /> */}
-          <Image source={chatIconSource} style={styles.profileImage} />
+          <CachedImage
+            uri={rawIconUri}
+            type={isGroupIcon ? "group" : "profile"}
+            fallbackSource={defaultProfileImage}
+            style={styles.profileImage}
+          />
 
           {/* Online Indicator for Private Chat */}
           {isPrivateChat && isOnline && <View style={styles.onlineIndicator} />}
