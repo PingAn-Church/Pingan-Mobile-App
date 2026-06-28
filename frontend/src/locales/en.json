@@ -166,6 +166,7 @@
   "selectEndTime": "Select End Time",
   "descriptionLessThan255": "Description must be 255 characters or fewer.",
   "endTimeCheck": "End time must be after start time.",
+  "endTimeBeforeStart": "End time can't be before the start time. It's been set to 15 minutes after the start time.",
   "createEventSuccess": "Event created successfully.",
   "updateEventSuccess": "Event updated succesfully.",
 

@@ -23,6 +23,7 @@ import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { Platform, ActivityIndicator } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { showAlert } from "../../utils/showAlert";
 
 const formatWebTimeToAMPM = (timeString) => {
@@ -233,10 +234,14 @@ export function EventFormPage() {
       hour12: true,
     });
 
-    setEventData((prevData) => ({
-      ...prevData,
-      [field]: formattedTime,
-    }));
+    if (field === "endTime") {
+      setValidatedEndTime(formattedTime);
+    } else {
+      setEventData((prevData) => ({
+        ...prevData,
+        [field]: formattedTime,
+      }));
+    }
 
     setTimeout(() => {
       field === "startTime"
@@ -292,6 +297,27 @@ export function EventFormPage() {
     eventDateTime.setHours(hours, minutes, 0, 0);
 
     return eventDateTime;
+  };
+
+  // End time must be after start time. If a user picks an earlier (or equal) end
+  // time, warn them and snap the end time to start + 15 minutes.
+  const setValidatedEndTime = (formattedEndTime) => {
+    const base = eventData.date || new Date().toISOString().split("T")[0];
+    const startDt = convertToDateTime(base, eventData.startTime);
+    const endDt = convertToDateTime(base, formattedEndTime);
+
+    if (startDt && endDt && endDt <= startDt) {
+      const corrected = new Date(startDt.getTime() + 15 * 60 * 1000);
+      const correctedStr = corrected.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+      showAlert(i18n.t("error"), i18n.t("endTimeBeforeStart"), [{ text: i18n.t("ok") }]);
+      setEventData((prev) => ({ ...prev, endTime: correctedStr }));
+      return;
+    }
+    setEventData((prev) => ({ ...prev, endTime: formattedEndTime }));
   };
 
   const handleSubmit = async () => {
@@ -373,7 +399,11 @@ export function EventFormPage() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.container}
+      bottomOffset={20}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.header}>
         {editingEvent ? i18n.t("editEvent") : i18n.t("createEvent")}
       </Text>
@@ -494,12 +524,7 @@ export function EventFormPage() {
             marginBottom: 10,
             fontSize: 16
           }}
-          onChange={(e) =>
-            setEventData({
-              ...eventData,
-              endTime: formatWebTimeToAMPM(e.target.value)
-            })
-          }
+          onChange={(e) => setValidatedEndTime(formatWebTimeToAMPM(e.target.value))}
         />
       ) : (
         <>
@@ -546,7 +571,7 @@ export function EventFormPage() {
           </Text>
         )}
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   Text,
   ActivityIndicator,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -174,7 +175,11 @@ export default function RegisterPage() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.container}
+      bottomOffset={20}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.profileContainer}>
         {profileImage ? (
           <Image source={{ uri: profileImage }} style={styles.image} />
@@ -235,7 +240,7 @@ export default function RegisterPage() {
           )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

@@ -166,6 +166,7 @@
   "selectEndTime": "选择结束时间",
   "descriptionLessThan255": "描述必须不超过 255 个字符",
   "endTimeCheck": "结束时间必须晚于开始时间。",
+  "endTimeBeforeStart": "结束时间不能早于开始时间，已自动设为开始时间后 15 分钟。",
   "createEventSuccess": "活动创建成功",
   "updateEventSuccess": "活动更新成功",
 

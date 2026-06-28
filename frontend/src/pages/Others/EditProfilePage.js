@@ -12,6 +12,7 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as ImagePicker from "expo-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation } from "@react-navigation/native";
@@ -230,7 +231,11 @@ const EditProfile = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.container}
+      bottomOffset={20}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.profileContainer}>
         {profileImage ? (
           <Image source={{ uri: profileImage }} style={styles.image} />
@@ -289,7 +294,7 @@ const EditProfile = () => {
           )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 };
 
