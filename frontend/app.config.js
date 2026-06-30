@@ -15,6 +15,7 @@ export default {
       },
       ios: {
         supportsTablet: true,
+        buildNumber: "105",
         infoPlist: {
           NSPhotoLibraryUsageDescription:
             "We need access to your photo library to upload profile images.",
@@ -40,6 +41,7 @@ export default {
           "MODIFY_AUDIO_SETTINGS",
         ],
         package: "org.pingan.app",
+        versionCode: 105,
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       },
       web: {
@@ -56,6 +58,8 @@ export default {
         BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_BASE_URL,
         IP_ADDR: process.env.IP_ADDR,
         ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
+        DISTRIBUTION_CHANNEL: process.env.DISTRIBUTION_CHANNEL || "direct",
+        ANDROID_VERSION_CODE: 105,
         eas: {
           projectId: "39be103c-2ac5-446e-abc7-506f4c087c45",
         },

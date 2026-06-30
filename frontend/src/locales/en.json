@@ -372,5 +372,21 @@
   "translating": "Translating...",
   "translationFailed": "Failed to translate message.",
   "voiceSent": "Voice message sent!",
-  "voiceUploadFailed": "Failed to send voice message. Please try again."
+  "voiceUploadFailed": "Failed to send voice message. Please try again.",
+  "appUpdateAvailableTitle": "Update available",
+  "appUpdateAvailableMessage": "A newer Android version is available. You can update now or continue using this version.",
+  "appUpdateRequiredTitle": "Update required",
+  "appUpdateRequiredMessage": "This app version is no longer supported. Please update before continuing.",
+  "currentVersion": "Current version",
+  "latestVersion": "Latest version",
+  "downloadSize": "Download size",
+  "releaseNotes": "What's new",
+  "ignoreThisUpdate": "Ignore this update",
+  "updateNow": "Update Now",
+  "checkingForUpdates": "Checking for updates",
+  "appIsLatest": "App is up to date",
+  "appIsLatestMessage": "You are already using the latest Android version.",
+  "appUpdateUnknown": "Update status unknown",
+  "appUpdateCheckFailed": "Could not check for updates. Please try again later.",
+  "appUpdateOpenFailed": "Could not open the update link."
 }

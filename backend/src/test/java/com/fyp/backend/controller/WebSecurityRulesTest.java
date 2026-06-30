@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.net.URL;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,8 +27,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fyp.backend.config.security.JwtAuthenticationFilter;
 import com.fyp.backend.config.security.SpringSecurityConfig;
+import com.fyp.backend.dto.AppReleaseDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.AppReleaseService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserAccountDeletionService;
@@ -39,7 +42,7 @@ import com.fyp.backend.util.JwtUtil;
  * established. Pure web-layer slice: the real security config + JWT filter are
  * loaded, every collaborator is mocked, and no DB/Redis/OSS/SMTP is touched.
  */
-@WebMvcTest(controllers = { UserController.class, OSSController.class })
+@WebMvcTest(controllers = { UserController.class, OSSController.class, AppReleaseController.class })
 @Import({ SpringSecurityConfig.class, JwtAuthenticationFilter.class })
 // Satisfy placeholders read while building the slice (e.g. server.address=${IP_ADDR}).
 @TestPropertySource(properties = { "IP_ADDR=127.0.0.1" })
@@ -52,6 +55,7 @@ class WebSecurityRulesTest {
     @MockBean private RedisService redisService;
     @MockBean private UserService userService;
     @MockBean private OSSService ossService;
+    @MockBean private AppReleaseService appReleaseService;
     @MockBean private UserAccountDeletionService userAccountDeletionService;
 
     private User userWithEmail(long id, String email) {
@@ -164,5 +168,18 @@ class WebSecurityRulesTest {
 
         mockMvc.perform(get("/oss/presigned-upload-url").param("fileName", "a.jpg").param("fileType", "profile"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void appReleaseLatestIsPublicBeforeLogin() throws Exception {
+        when(appReleaseService.getLatest("android", "direct"))
+                .thenReturn(new AppReleaseDto("android", "direct", "0.1.5", 105, 105,
+                        false, "https://rn-app.pingan.org.sg/android", null, null, "", null, Map.of()));
+
+        mockMvc.perform(get("/api/app-releases/latest")
+                        .param("platform", "android")
+                        .param("channel", "direct"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.latestVersionCode").value(105));
     }
 }

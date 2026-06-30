@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.1.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -9,7 +9,8 @@
       "distribution": "internal",
       "env": {
         "BACKEND_BASE_URL": "https://api.rn-app.pingan.org.sg",
-        "ENABLE_LIBRE_TRANSLATE": "false"
+        "ENABLE_LIBRE_TRANSLATE": "false",
+        "DISTRIBUTION_CHANNEL": "direct"
       }
     },
     "preview": {
@@ -19,14 +20,15 @@
       },
       "env": {
         "BACKEND_BASE_URL": "https://api.rn-app.pingan.org.sg",
-        "ENABLE_LIBRE_TRANSLATE": "false"
+        "ENABLE_LIBRE_TRANSLATE": "false",
+        "DISTRIBUTION_CHANNEL": "direct"
       }
     },
     "production": {
-      "autoIncrement": true,
       "env": {
         "BACKEND_BASE_URL": "https://api.rn-app.pingan.org.sg",
-        "ENABLE_LIBRE_TRANSLATE": "false"
+        "ENABLE_LIBRE_TRANSLATE": "false",
+        "DISTRIBUTION_CHANNEL": "play"
       }
     }
   },

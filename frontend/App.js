@@ -62,6 +62,7 @@ import { LanguageContext } from "./src/context/LanguageContext";
 import "./i18n";
 import i18n from "./i18n";
 import { NotificationProvider } from "./src/context/NotificationContext";
+import { AppUpdateProvider } from "./src/context/AppUpdateContext";
 import * as Notifications from "expo-notifications";
 
 // E-learning module
@@ -362,6 +363,7 @@ export default function App() {
         <AuthProvider>
         <NotificationProvider>
           <LanguageProvider>
+            <AppUpdateProvider>
             <ChatProvider>
               <WebSocketProvider>
                 <EntryGate>
@@ -593,6 +595,7 @@ export default function App() {
                 </EntryGate>
               </WebSocketProvider>
             </ChatProvider>
+            </AppUpdateProvider>
           </LanguageProvider>
         </NotificationProvider>
         </AuthProvider>

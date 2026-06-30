@@ -51,6 +51,9 @@ public class SpringSecurityConfig {
                         // requires auth + ownership (checked in the controller).
                         .requestMatchers(HttpMethod.POST, "/api/push-notifications/register")
                         .permitAll()
+                        // App update checks must work before login so unsupported builds can be blocked.
+                        .requestMatchers(HttpMethod.GET, "/api/app-releases/**")
+                        .permitAll()
                         // Liveness/readiness probe for deploys + CI image smoke test.
                         .requestMatchers("/actuator/health", "/actuator/health/**")
                         .permitAll()

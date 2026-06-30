@@ -33,6 +33,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { showAlert } from "../../utils/showAlert";
+import AppUpdateStatusIcon from "../../components/AppUpdateStatusIcon";
 
 export default function ProfilePage() {
   const { user, setUser, logout } = useContext(UserContext);
@@ -41,6 +42,12 @@ export default function ProfilePage() {
   const [profileImage, setProfileImage] = useState(null);
   const { language, toggleLanguage } = useContext(LanguageContext);
   const { handleDeactivatePushToken } = useNotification();
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => <AppUpdateStatusIcon />,
+    });
+  }, [navigation, language]);
 
   // useEffect(() => {
   //   if (!user) return;
