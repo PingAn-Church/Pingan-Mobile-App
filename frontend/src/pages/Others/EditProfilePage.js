@@ -216,18 +216,22 @@ const EditProfile = () => {
   };
 
   const handleDateChange = (event, selectedDate) => {
-    if (event?.type === "dismissed" || !selectedDate) {
-      setTimeout(() => {
-        setShowDatePicker(false);
-      }, 100);
+    // Android shows a modal dialog that reports a single "set"/"dismissed" event,
+    // so it's correct to close the picker as soon as we hear back.
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (event?.type === "set" && selectedDate) {
+        setBirthday(selectedDate.toISOString().split("T")[0]);
+      }
       return;
     }
 
-    setBirthday(selectedDate.toISOString().split("T")[0]);
-
-    setTimeout(() => {
-      setShowDatePicker(false);
-    }, 100);
+    // iOS spinner fires onChange continuously while the wheels move. Just track the
+    // value and keep the picker open so the user can adjust day/month/year freely;
+    // they confirm with the Done button below.
+    if (selectedDate) {
+      setBirthday(selectedDate.toISOString().split("T")[0]);
+    }
   };
 
   return (
@@ -271,15 +275,33 @@ const EditProfile = () => {
       <TouchableOpacity onPress={() => setShowDatePicker(true)}>
         <Text style={styles.input}>{birthday || i18n.t("selectDate")}</Text>
       </TouchableOpacity>
-      {showDatePicker && (
-        <DateTimePicker
-          value={birthday ? new Date(birthday) : new Date()}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleDateChange}
-          maximumDate={new Date()}
-        />
-      )}
+      {showDatePicker &&
+        (Platform.OS === "ios" ? (
+          <View style={styles.iosPickerContainer}>
+            <DateTimePicker
+              value={birthday ? new Date(birthday) : new Date()}
+              mode="date"
+              display="spinner"
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+              style={styles.iosPicker}
+            />
+            <TouchableOpacity
+              style={styles.iosPickerDoneButton}
+              onPress={() => setShowDatePicker(false)}
+            >
+              <Text style={styles.iosPickerDoneText}>{i18n.t("done")}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <DateTimePicker
+            value={birthday ? new Date(birthday) : new Date()}
+            mode="date"
+            display="default"
+            onChange={handleDateChange}
+            maximumDate={new Date()}
+          />
+        ))}
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -353,5 +375,30 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     marginVertical: 10,
+  },
+  iosPickerContainer: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 6,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  iosPicker: {
+    alignSelf: "stretch",
+  },
+  iosPickerDoneButton: {
+    alignSelf: "flex-end",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    width: "100%",
+    alignItems: "flex-end",
+  },
+  iosPickerDoneText: {
+    color: "#007bff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

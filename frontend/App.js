@@ -422,7 +422,7 @@ export default function App() {
                   <Stack.Screen
                     name="FormApplication"
                     component={FormApplicationPage}
-                    options={{ headerTitle: "" }}
+                    options={{ headerTitle: "", headerLeft: () => <HeaderBackButton fallbackRoute="HomeTabs" /> }}
                   />
                   <Stack.Screen
                     name="ManageApplications"
@@ -435,12 +435,12 @@ export default function App() {
                   <Stack.Screen
                     name="EventForm"
                     component={EventFormPage}
-                    options={{ headerTitle: "" }}
+                    options={{ headerTitle: "", headerLeft: () => <HeaderBackButton fallbackRoute="ManageEvents" /> }}
                   />
                   <Stack.Screen
                     name="Events Detail"
                     component={ActivityDetailPage}
-                    options={{ headerTitle: "" }}
+                    options={{ headerTitle: "", headerLeft: () => <HeaderBackButton fallbackRoute="HomeTabs" /> }}
                   />
                   <Stack.Screen
                     name="ManageVideos"
