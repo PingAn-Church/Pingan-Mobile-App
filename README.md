@@ -169,8 +169,8 @@ npm run ios
 EAS config lives in `frontend/eas.json`. Current profiles:
 
 - `development`: dev client, internal distribution.
-- `preview`: internal Android APK.
-- `production`: store/release build with auto-increment.
+- `preview`: internal Android APK (arm64-v8a + armeabi-v7a only, with R8 minify + resource shrink to keep the download small).
+- `production`: store/release build; versions come from `npm run update` (`appVersionSource: local`).
 
 The EAS profiles currently point the app at:
 
@@ -201,15 +201,55 @@ Android builds also need `frontend/google-services.json` or `GOOGLE_SERVICES_JSO
 
 ## Versioning
 
-Bump both `frontend/app.config.js` and `frontend/package.json` together:
+`npm run update` bumps the version in every place the repo stores it, in
+lockstep: `app.config.js` (Expo version, Android `versionCode`,
+`ANDROID_VERSION_CODE`, iOS `buildNumber`), `package.json`, `package-lock.json`,
+the native projects (`android/app/build.gradle`, iOS `Info.plist` +
+`project.pbxproj`), and the backend in-app-update metadata in
+`application.properties` (`latest-version-name` / `latest-version-code` for both
+channels).
 
 ```bash
 cd frontend
-npm run update -- patch
-npm run update -- minor
-npm run update -- major
-npm run update -- 1.2.3
+npm run update patch                 # 0.1.2 -> 0.1.3
+npm run update minor                 # 0.1.2 -> 0.2.0
+npm run update major                 # 0.1.2 -> 1.0.0
+npm run update 1.2.3                 # set an explicit version
+npm run update patch forced-update   # also raise min-supported so older installs are force-updated
 ```
+
+The Android version code is `major*10000 + minor*100 + patch` (so `0.1.3` -> `103`).
+
+`forced-update` also has a `--forced-update` flag form, but note that `npm run`
+strips `--`/`-` flags unless you separate them with `--` (e.g.
+`npm run update -- patch --forced-update`) — the bare `forced-update` word above
+avoids that. The script only edits files; it does not commit or tag, and the
+backend must be redeployed for new update metadata to take effect.
+
+## In-App Update Links & Message
+
+Android builds check the backend for a newer version and open a download link.
+Because Google Play/Drive are blocked in China, the app serves a China mirror to
+China-based devices (detected on-device by region/timezone) and the
+international (Google) link to everyone else. `npm run dir-link` sets those two
+links and the "what's new" message shown in the update dialog.
+
+Pass the flags after `--` (npm strips `--`/`-` flags otherwise). All are
+optional; omitted values are left unchanged:
+
+```bash
+cd frontend
+# -g / --google   international link (non-China devices)
+# -c / --china     China-mirror link (China devices)
+# -m / --message   update message (shown for both en and zh)
+npm run dir-link -- -g https://drive.google.com/… -c https://pan.example.cn/app.apk -m "0.1.9: faster chat, bug fixes"
+```
+
+`-g`/`-c` must be `https` URLs. Non-ASCII message text (e.g. Chinese) is stored
+as `\uXXXX` escapes automatically, since Spring reads `.properties` as
+ISO-8859-1. These values live in
+`backend/src/main/resources/application.properties`, so redeploy the backend for
+changes to take effect.
 
 ## Web Deployment
 
