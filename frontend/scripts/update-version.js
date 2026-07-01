@@ -12,15 +12,18 @@
  *   npm run update minor     # 0.1.2 -> 0.2.0
  *   npm run update major     # 0.1.2 -> 1.0.0
  *   npm run update 1.4.0     # set an explicit version
- *   npm run update patch -- --force
- *                            # also make the new Android build the minimum
- *                            # supported version in backend release metadata
- *   npm run update patch --link https://rn-app.pingan.org.sg/android
+ *   npm run update patch https://rn-app.pingan.org.sg/android
  *                            # also set the Android direct-download page URL
- *                            # (the "Update Now" target). Omitting --link
- *                            # leaves the existing download link unchanged.
+ *                            # (the "Update Now" target). Omit the URL to
+ *                            # leave the existing download link unchanged.
+ *   npm run update patch forced-update
+ *                            # also raise the minimum supported version so
+ *                            # older installs are force-updated
  *
- * (If your npm doesn't forward the arg, use: npm run update -- patch)
+ * npm strips --flags from `npm run` unless separated by `--`, so the URL and
+ * the force toggle are accepted as bare words above. The equivalent flag forms
+ * work after a `--` separator:
+ *   npm run update -- patch --forced-update --link https://.../android
  *
  * This only edits local files — it does NOT create a git commit or tag.
  */
@@ -101,38 +104,39 @@ function replaceExpected(raw, regex, replacement, label, expectedCount) {
   return raw.replace(regex, replacement);
 }
 
-// --- parse CLI: <bump> [--force] [--link <url>] -----------------------------
+// --- parse CLI: <bump> [forced-update] [<download-url>] ---------------------
+// npm strips --flags from `npm run <script> ...` unless you use `--`, so the
+// force toggle and download link are ALSO accepted as bare positionals: the
+// literal word `forced-update`, and any http(s) URL. The flag forms
+// (--forced-update, --link <url>) still work when passed after `--`.
 const rawArgs = process.argv.slice(2).filter((a) => a && a !== "--");
 
 let forceMinimumSupported = false;
-let downloadLink = null; // null = flag absent (leave existing link untouched)
+let downloadLink = null; // null = not provided (leave existing link untouched)
 let arg = null;
-const unknownFlags = [];
+const unexpected = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
   const a = rawArgs[i];
-  if (a === "--force") {
+  if (a === "--forced-update" || a === "forced-update") {
     forceMinimumSupported = true;
   } else if (a === "--link") {
-    downloadLink = rawArgs[++i]; // consume the next token as the URL
+    downloadLink = (rawArgs[++i] || "").trim(); // consume next token as the URL
   } else if (a.startsWith("--link=")) {
-    downloadLink = a.slice("--link=".length);
-  } else if (a.startsWith("--")) {
-    unknownFlags.push(a);
-  } else if (arg === null) {
+    downloadLink = a.slice("--link=".length).trim();
+  } else if (/^https?:\/\//i.test(a)) {
+    downloadLink = a.trim(); // bare URL positional (survives npm without `--`)
+  } else if (arg === null && !a.startsWith("--")) {
     arg = a;
   } else {
-    unknownFlags.push(a);
+    unexpected.push(a);
   }
 }
 
-if (unknownFlags.length) fail(`Unknown or unexpected arg(s): ${unknownFlags.join(", ")}`);
-if (!arg) fail("Usage: npm run update <patch|minor|major|x.y.z> [--force] [--link <url>]");
-if (downloadLink !== null) {
-  downloadLink = (downloadLink || "").trim();
-  if (!/^https?:\/\//i.test(downloadLink)) {
-    fail("--link requires an http(s) URL, e.g. --link https://rn-app.pingan.org.sg/android");
-  }
+if (unexpected.length) fail(`Unknown or unexpected arg(s): ${unexpected.join(", ")}`);
+if (!arg) fail("Usage: npm run update <patch|minor|major|x.y.z> [forced-update] [<download-url>]");
+if (downloadLink !== null && !/^https?:\/\//i.test(downloadLink)) {
+  fail("Download link must be an http(s) URL, e.g. https://rn-app.pingan.org.sg/android");
 }
 
 // --- read current version from app.config.js (source of truth) --------------
