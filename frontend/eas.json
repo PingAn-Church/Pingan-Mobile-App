@@ -21,7 +21,8 @@
       "env": {
         "BACKEND_BASE_URL": "https://api.rn-app.pingan.org.sg",
         "ENABLE_LIBRE_TRANSLATE": "false",
-        "DISTRIBUTION_CHANNEL": "direct"
+        "DISTRIBUTION_CHANNEL": "direct",
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a,armeabi-v7a"
       }
     },
     "production": {
