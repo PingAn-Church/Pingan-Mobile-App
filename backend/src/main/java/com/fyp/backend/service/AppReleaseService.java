@@ -40,6 +40,7 @@ public class AppReleaseService {
                 release.getMinSupportedVersionCode(),
                 release.isForceUpdate(),
                 release.getDownloadPageUrl(),
+                release.getDownloadPageUrlCn(),
                 release.getPlayStoreUrl(),
                 release.getBrowserPlayStoreUrl(),
                 release.getApkSha256(),

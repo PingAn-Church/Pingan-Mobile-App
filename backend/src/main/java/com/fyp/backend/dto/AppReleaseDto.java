@@ -17,6 +17,7 @@ public class AppReleaseDto {
     private int minSupportedVersionCode;
     private boolean forceUpdate;
     private String downloadPageUrl;
+    private String downloadPageUrlCn;
     private String playStoreUrl;
     private String browserPlayStoreUrl;
     private String apkSha256;

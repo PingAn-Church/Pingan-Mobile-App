@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Constants from "expo-constants";
 import * as Application from "expo-application";
+import * as Localization from "expo-localization";
 import { Linking, Platform } from "react-native";
 import { apiUrl } from "./apiConfig";
 
@@ -69,6 +70,33 @@ export const clearIgnoredReleaseVersion = async () => {
   await AsyncStorage.removeItem(IGNORED_VERSION_KEY);
 };
 
+// China blocks Google Play/Drive, so China-based devices get a China-reachable
+// mirror while everyone else gets the international (Google) link. We decide on
+// the device from region + timezone — the only geo signal available on-device
+// without an external IP lookup (which is itself unreliable/blocked in China).
+const CHINA_TIMEZONES = new Set([
+  "Asia/Shanghai",
+  "Asia/Urumqi",
+  "Asia/Chongqing",
+  "Asia/Harbin",
+  "Asia/Kashgar",
+  "Asia/Kashi",
+]);
+
+export const isLikelyChinaRegion = () => {
+  try {
+    const locales = Localization.getLocales?.() || [];
+    if (locales.some((l) => String(l.regionCode || "").toUpperCase() === "CN")) {
+      return true;
+    }
+    const calendars = Localization.getCalendars?.() || [];
+    if (calendars.some((c) => CHINA_TIMEZONES.has(c.timeZone))) return true;
+  } catch (e) {
+    // fall through to the international default
+  }
+  return false;
+};
+
 export const openReleaseTarget = async (release, channel = getDistributionChannel()) => {
   const normalizedChannel = String(channel || DEFAULT_CHANNEL).toLowerCase();
 
@@ -86,7 +114,12 @@ export const openReleaseTarget = async (release, channel = getDistributionChanne
     }
   }
 
-  const downloadUrl = release?.downloadPageUrl || release?.browserPlayStoreUrl;
+  // Direct distribution: China mirror for China-based devices, international
+  // (Google) link otherwise; each falls back to the other, then the browser URL.
+  const inChina = isLikelyChinaRegion();
+  const preferred = inChina ? release?.downloadPageUrlCn : release?.downloadPageUrl;
+  const alternate = inChina ? release?.downloadPageUrl : release?.downloadPageUrlCn;
+  const downloadUrl = preferred || alternate || release?.browserPlayStoreUrl;
   if (!downloadUrl) {
     throw new Error("No update URL is configured for this release.");
   }

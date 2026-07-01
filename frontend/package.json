@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -8,7 +8,8 @@
     "android:windows": "node scripts/run-android-windows.js",
     "ios": "expo run:ios",
     "web": "export NODE_OPTIONS=--openssl-legacy-provider && expo start --web -c",
-    "update": "node scripts/update-version.js"
+    "update": "node scripts/update-version.js",
+    "dir-link": "node scripts/set-download-links.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

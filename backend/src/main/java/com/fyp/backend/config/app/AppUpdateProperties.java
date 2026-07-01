@@ -28,6 +28,9 @@ public class AppUpdateProperties {
         private int minSupportedVersionCode = 105;
         private boolean forceUpdate = false;
         private String downloadPageUrl = "https://rn-app.pingan.org.sg/android";
+        // China-reachable mirror (Google Drive/Play are blocked in China). The
+        // frontend serves this to devices that look China-based.
+        private String downloadPageUrlCn = "https://rn-app.pingan.org.sg/android";
         private String playStoreUrl = "market://details?id=org.pingan.app";
         private String browserPlayStoreUrl = "https://play.google.com/store/apps/details?id=org.pingan.app";
         private String apkSha256 = "";
