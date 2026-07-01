@@ -15,6 +15,10 @@
  *   npm run update patch -- --force
  *                            # also make the new Android build the minimum
  *                            # supported version in backend release metadata
+ *   npm run update patch --link https://rn-app.pingan.org.sg/android
+ *                            # also set the Android direct-download page URL
+ *                            # (the "Update Now" target). Omitting --link
+ *                            # leaves the existing download link unchanged.
  *
  * (If your npm doesn't forward the arg, use: npm run update -- patch)
  *
@@ -47,6 +51,7 @@ const XCODE_MARKETING_VERSION = /(MARKETING_VERSION = )\d+\.\d+\.\d+(;)/g;
 const BACKEND_ANDROID_LATEST_NAME = /(app\.update\.android\.(?:direct|play)\.latest-version-name=).*/g;
 const BACKEND_ANDROID_LATEST_CODE = /(app\.update\.android\.(?:direct|play)\.latest-version-code=)\d+/g;
 const BACKEND_ANDROID_MIN_SUPPORTED_CODE = /(app\.update\.android\.(?:direct|play)\.min-supported-version-code=)\d+/g;
+const BACKEND_ANDROID_DOWNLOAD_URL = /(app\.update\.android\.direct\.download-page-url=).*/g;
 
 function fail(msg) {
   console.error(`✗ ${msg}`);
@@ -96,13 +101,39 @@ function replaceExpected(raw, regex, replacement, label, expectedCount) {
   return raw.replace(regex, replacement);
 }
 
-// --- requested bump (first meaningful CLI arg) ------------------------------
+// --- parse CLI: <bump> [--force] [--link <url>] -----------------------------
 const rawArgs = process.argv.slice(2).filter((a) => a && a !== "--");
-const forceMinimumSupported = rawArgs.includes("--force");
-const unknownFlags = rawArgs.filter((a) => a.startsWith("--") && a !== "--force");
-if (unknownFlags.length) fail(`Unknown flag(s): ${unknownFlags.join(", ")}`);
-const arg = rawArgs.find((a) => !a.startsWith("--"));
-if (!arg) fail("Usage: npm run update <patch|minor|major|x.y.z>");
+
+let forceMinimumSupported = false;
+let downloadLink = null; // null = flag absent (leave existing link untouched)
+let arg = null;
+const unknownFlags = [];
+
+for (let i = 0; i < rawArgs.length; i++) {
+  const a = rawArgs[i];
+  if (a === "--force") {
+    forceMinimumSupported = true;
+  } else if (a === "--link") {
+    downloadLink = rawArgs[++i]; // consume the next token as the URL
+  } else if (a.startsWith("--link=")) {
+    downloadLink = a.slice("--link=".length);
+  } else if (a.startsWith("--")) {
+    unknownFlags.push(a);
+  } else if (arg === null) {
+    arg = a;
+  } else {
+    unknownFlags.push(a);
+  }
+}
+
+if (unknownFlags.length) fail(`Unknown or unexpected arg(s): ${unknownFlags.join(", ")}`);
+if (!arg) fail("Usage: npm run update <patch|minor|major|x.y.z> [--force] [--link <url>]");
+if (downloadLink !== null) {
+  downloadLink = (downloadLink || "").trim();
+  if (!/^https?:\/\//i.test(downloadLink)) {
+    fail("--link requires an http(s) URL, e.g. --link https://rn-app.pingan.org.sg/android");
+  }
+}
 
 // --- read current version from app.config.js (source of truth) --------------
 const cfgRaw = fs.readFileSync(cfgPath, "utf8");
@@ -192,6 +223,18 @@ if (fs.existsSync(backendPropertiesPath)) {
     );
   }
 
+  if (downloadLink) {
+    // Escape `$` so URLs aren't misread as replacement patterns ($1, $&, ...).
+    const safeLink = downloadLink.replace(/\$/g, "$$$$");
+    propsRaw = replaceExpected(
+      propsRaw,
+      BACKEND_ANDROID_DOWNLOAD_URL,
+      `$1${safeLink}`,
+      "Android direct download-page-url in backend application.properties",
+      1
+    );
+  }
+
   fs.writeFileSync(backendPropertiesPath, propsRaw);
 }
 
@@ -202,5 +245,6 @@ if (pkgCurrent !== current) {
 }
 console.log(
   `✓ version ${current} → ${next}, build ${nextCode}` +
-    (forceMinimumSupported ? " (minimum supported)" : "")
+    (forceMinimumSupported ? " (minimum supported)" : "") +
+    (downloadLink ? `\n  download link → ${downloadLink}` : "")
 );
