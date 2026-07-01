@@ -4,7 +4,7 @@ export default {
     expo: {
       name: "Ping An",
       slug: "pingan-mobile-app",
-      version: "0.1.6",
+      version: "0.1.8",
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",
@@ -15,7 +15,7 @@ export default {
       },
       ios: {
         supportsTablet: true,
-        buildNumber: "106",
+        buildNumber: "108",
         infoPlist: {
           NSPhotoLibraryUsageDescription:
             "We need access to your photo library to upload profile images.",
@@ -41,7 +41,7 @@ export default {
           "MODIFY_AUDIO_SETTINGS",
         ],
         package: "org.pingan.app",
-        versionCode: 106,
+        versionCode: 108,
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       },
       web: {
@@ -59,7 +59,7 @@ export default {
         IP_ADDR: process.env.IP_ADDR,
         ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
         DISTRIBUTION_CHANNEL: process.env.DISTRIBUTION_CHANNEL || "direct",
-        ANDROID_VERSION_CODE: 106,
+        ANDROID_VERSION_CODE: 108,
         eas: {
           projectId: "39be103c-2ac5-446e-abc7-506f4c087c45",
         },
