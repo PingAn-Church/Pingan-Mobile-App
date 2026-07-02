@@ -3,8 +3,13 @@
  * Run Expo Android from a short Windows path.
  *
  * Windows/Gradle/RN builds can fail when the repo path is too long. This script
- * maps the frontend directory to a short drive with `subst`, runs Expo from that
- * drive, then removes the mapping when the command exits.
+ * maps the repo directory to a short drive with `subst`, runs Expo from the
+ * frontend subdirectory on that drive, then removes the mapping when the command
+ * exits.
+ *
+ * Do not map `frontend` directly to the drive root. Expo Modules autolinking
+ * searches upward for package.json but does not check a Windows drive root, so
+ * running from P:\ makes `useExpoModules()` fail during settings.gradle.
  *
  * Usage:
  *   npm run android:windows
@@ -19,6 +24,7 @@ const { spawn, spawnSync } = require("child_process");
 
 const isWindows = process.platform === "win32";
 const frontendRoot = path.resolve(__dirname, "..");
+const repoRoot = path.resolve(frontendRoot, "..");
 const drive = (process.env.PINGAN_ANDROID_DRIVE || "P:").toUpperCase();
 const forwardedArgs = process.argv.slice(2);
 
@@ -27,8 +33,8 @@ function fail(message) {
   process.exit(1);
 }
 
-function runSubst(command) {
-  return spawnSync("cmd.exe", ["/d", "/s", "/c", command], {
+function runSubst(args = []) {
+  return spawnSync("cmd.exe", ["/d", "/c", "subst", ...args], {
     encoding: "utf8",
     windowsHide: true,
   });
@@ -39,7 +45,7 @@ function normalizePath(value) {
 }
 
 function getExistingMapping() {
-  const result = runSubst("subst");
+  const result = runSubst();
   if (result.status !== 0) {
     fail((result.stderr || result.stdout || "Unable to list subst mappings.").trim());
   }
@@ -63,27 +69,41 @@ if (!/^[A-Z]:$/.test(drive)) {
 
 const existingMapping = getExistingMapping();
 let createdMapping = false;
+const targetRoot = repoRoot;
 
 if (existingMapping) {
-  if (normalizePath(existingMapping) !== normalizePath(frontendRoot)) {
+  const normalizedExisting = normalizePath(existingMapping);
+  if (normalizedExisting === normalizePath(frontendRoot)) {
+    // Legacy mapping from older versions of this script. Remap it so the app
+    // root is P:\frontend instead of P:\.
+    const removeResult = runSubst([drive, "/D"]);
+    if (removeResult.status !== 0) {
+      fail((removeResult.stderr || removeResult.stdout || `Unable to remove legacy ${drive} mapping.`).trim());
+    }
+    const mapResult = runSubst([drive, targetRoot]);
+    if (mapResult.status !== 0) {
+      fail((mapResult.stderr || mapResult.stdout || `Unable to map ${drive} to "${targetRoot}".`).trim());
+    }
+    createdMapping = true;
+  } else if (normalizedExisting !== normalizePath(targetRoot)) {
     fail(`${drive} is already mapped to "${existingMapping}". Set PINGAN_ANDROID_DRIVE to a free drive.`);
   }
 } else {
-  const result = runSubst(`subst ${drive} "${frontendRoot}"`);
+  const result = runSubst([drive, targetRoot]);
   if (result.status !== 0) {
-    fail((result.stderr || result.stdout || `Unable to map ${drive} to "${frontendRoot}".`).trim());
+    fail((result.stderr || result.stdout || `Unable to map ${drive} to "${targetRoot}".`).trim());
   }
   createdMapping = true;
 }
 
-const shortRoot = `${drive}\\`;
+const shortRoot = path.join(`${drive}\\`, path.basename(frontendRoot));
 const expoCommand = path.join(shortRoot, "node_modules", ".bin", "expo.cmd");
 const command = fs.existsSync(expoCommand) ? expoCommand : "npx.cmd";
 const args = fs.existsSync(expoCommand) ? ["run:android", ...forwardedArgs] : ["expo", "run:android", ...forwardedArgs];
 
 function cleanup() {
   if (createdMapping) {
-    runSubst(`subst ${drive} /D`);
+    runSubst([drive, "/D"]);
     createdMapping = false;
   }
 }
@@ -98,19 +118,25 @@ process.on("SIGTERM", () => {
   process.exit(143);
 });
 
-console.log(`Running Android build from ${shortRoot} (mapped to ${frontendRoot})`);
+console.log(`Running Android build from ${shortRoot} (${drive}\\ mapped to ${targetRoot})`);
 
-const child = spawn(command, args, {
-  cwd: shortRoot,
-  env: {
-    ...process.env,
-    INIT_CWD: shortRoot,
-    PWD: shortRoot,
-  },
-  stdio: "inherit",
-  shell: false,
-  windowsHide: false,
-});
+let child;
+try {
+  child = spawn("cmd.exe", ["/d", "/c", command, ...args], {
+    cwd: shortRoot,
+    env: {
+      ...process.env,
+      INIT_CWD: shortRoot,
+      PWD: shortRoot,
+    },
+    stdio: "inherit",
+    shell: false,
+    windowsHide: false,
+  });
+} catch (error) {
+  cleanup();
+  fail(error.message);
+}
 
 child.on("error", (error) => {
   cleanup();
