@@ -12,8 +12,9 @@ import { useNavigation } from "@react-navigation/native";
  * also at the entry — leaving the user stuck. This walks the back stack when it can,
  * and otherwise falls back to a sensible parent route.
  */
-export default function HeaderBackButton({ fallbackRoute = "HomeTabs", tintColor }) {
-  const navigation = useNavigation();
+export default function HeaderBackButton({ navigation: navigationProp, fallbackRoute = "HomeTabs", tintColor }) {
+  const contextNavigation = useNavigation();
+  const navigation = navigationProp || contextNavigation;
 
   const onPress = () => {
     if (navigation.canGoBack()) {

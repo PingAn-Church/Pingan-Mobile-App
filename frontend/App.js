@@ -314,6 +314,74 @@ const PUBLIC_ROUTES = new Set([
   "ForgotPassword",
 ]);
 
+const ROOT_BACK_FALLBACKS = {
+  Login: "Welcome",
+  Register: "Welcome",
+  VerificationCode: "Register",
+  ForgotPassword: "Login",
+  ThreadHomePage: "HomeTabs",
+  ThreadDetail: "ThreadHomePage",
+  CreateThread: "ThreadHomePage",
+  EditThread: "ThreadHomePage",
+  ChatHome: "HomeTabs",
+  Chat: "ChatHome",
+  NewChat: "ChatHome",
+  NewGroup: "ChatHome",
+  DetailedPrivateChat: "ChatHome",
+  DetailedGroupChat: "ChatHome",
+  OthersSection: "HomeTabs",
+  FormApplication: "HomeTabs",
+  ManageApplications: "HomeTabs",
+  ManageEvents: "HomeTabs",
+  EventForm: "ManageEvents",
+  "Events Detail": "HomeTabs",
+  ManageVideos: "HomeTabs",
+  AddVideo: "ManageVideos",
+  VideosPage: "HomeTabs",
+  ManagePictures: "HomeTabs",
+  AddPicture: "ManagePictures",
+  ManageAnnouncements: "HomeTabs",
+  AddAnnouncement: "ManageAnnouncements",
+  ManageAdmins: "HomeTabs",
+  ManageUsers: "HomeTabs",
+  ManageInstructors: "HomeTabs",
+  ChangePassword: "HomeTabs",
+  EditProfile: "HomeTabs",
+  StorageSettings: "HomeTabs",
+  Learning: "HomeTabs",
+  LearningCourseDetail: "Learning",
+  LearningVideo: "Learning",
+  LearningDocument: "Learning",
+  CourseManagement: "HomeTabs",
+  CourseEditor: "CourseManagement",
+  CourseStats: "CourseManagement",
+  QuizGrading: "CourseManagement",
+  MyCourses: "Learning",
+  Wishlist: "Learning",
+  LeaveReview: "Learning",
+  QuizScreen: "Learning",
+  QuizResults: "Learning",
+  Certificates: "Learning",
+  CertificateViewer: "Certificates",
+  Achievements: "Learning",
+  LearningGoal: "Learning",
+};
+
+const rootStackScreenOptions = ({ navigation, route }) => {
+  const fallbackRoute = ROOT_BACK_FALLBACKS[route.name];
+  if (!fallbackRoute) return {};
+
+  return {
+    headerLeft: ({ tintColor }) => (
+      <HeaderBackButton
+        navigation={navigation}
+        fallbackRoute={fallbackRoute}
+        tintColor={tintColor}
+      />
+    ),
+  };
+};
+
 // Global auth boundary: once the session is resolved, any time there's no logged-in
 // user and the active route isn't public, send the user back to Welcome. This covers
 // every screen (not just the homepage) — important on web where routes are URL-reachable.
@@ -368,7 +436,7 @@ export default function App() {
               <WebSocketProvider>
                 <EntryGate>
                 <AuthGuard navigationRef={navigationRef} />
-                <Stack.Navigator initialRouteName="Welcome">
+                <Stack.Navigator initialRouteName="Welcome" screenOptions={rootStackScreenOptions}>
                   <Stack.Screen
                     name="Welcome"
                     component={WelcomePage}
@@ -392,24 +460,20 @@ export default function App() {
                   <Stack.Screen
                     name="ChatHome"
                     component={ChatHomeRoute}
-                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="HomeTabs" /> }}
                   />
                   <Stack.Screen
                     name="Chat"
                     component={ChatPage}
-                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="ChatHome" /> }}
                   />
                   <Stack.Screen name="NewChat" component={NewChatScreen} />
                   <Stack.Screen name="NewGroup" component={NewGroupScreen} />
                   <Stack.Screen
                     name="DetailedPrivateChat"
                     component={DetailedPrivateChatPage}
-                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="ChatHome" /> }}
                   />
                   <Stack.Screen
                     name="DetailedGroupChat"
                     component={DetailedGroupChatPage}
-                    options={{ headerLeft: () => <HeaderBackButton fallbackRoute="ChatHome" /> }}
                   />
                   <Stack.Screen name="Register" component={RegisterPage} />
                   <Stack.Screen name="VerificationCode" component={VerificationCodePage} />
@@ -422,7 +486,7 @@ export default function App() {
                   <Stack.Screen
                     name="FormApplication"
                     component={FormApplicationPage}
-                    options={{ headerTitle: "", headerLeft: () => <HeaderBackButton fallbackRoute="HomeTabs" /> }}
+                    options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
                     name="ManageApplications"
@@ -435,12 +499,12 @@ export default function App() {
                   <Stack.Screen
                     name="EventForm"
                     component={EventFormPage}
-                    options={{ headerTitle: "", headerLeft: () => <HeaderBackButton fallbackRoute="ManageEvents" /> }}
+                    options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
                     name="Events Detail"
                     component={ActivityDetailPage}
-                    options={{ headerTitle: "", headerLeft: () => <HeaderBackButton fallbackRoute="HomeTabs" /> }}
+                    options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
                     name="ManageVideos"
