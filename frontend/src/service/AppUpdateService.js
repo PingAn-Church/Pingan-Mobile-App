@@ -97,6 +97,23 @@ export const isLikelyChinaRegion = () => {
   return false;
 };
 
+// The direct-distribution download for this device: the China mirror for
+// China-based devices, the international (Google) link otherwise, each with a
+// fallback to the other, then the browser Play URL. Also returns the China
+// mirror's share password when that mirror is what we'll open — some CN clouds
+// (e.g. Lanzou) gate the share behind a password the user has to type in.
+export const resolveDirectDownload = (release) => {
+  const cnUrl = release?.downloadPageUrlCn || null;
+  const intlUrl = release?.downloadPageUrl || null;
+  const inChina = isLikelyChinaRegion();
+  const url =
+    (inChina ? cnUrl || intlUrl : intlUrl || cnUrl) ||
+    release?.browserPlayStoreUrl ||
+    null;
+  const password = url && url === cnUrl ? release?.downloadPasswordCn || null : null;
+  return { url, password };
+};
+
 export const openReleaseTarget = async (release, channel = getDistributionChannel()) => {
   const normalizedChannel = String(channel || DEFAULT_CHANNEL).toLowerCase();
 
@@ -114,12 +131,7 @@ export const openReleaseTarget = async (release, channel = getDistributionChanne
     }
   }
 
-  // Direct distribution: China mirror for China-based devices, international
-  // (Google) link otherwise; each falls back to the other, then the browser URL.
-  const inChina = isLikelyChinaRegion();
-  const preferred = inChina ? release?.downloadPageUrlCn : release?.downloadPageUrl;
-  const alternate = inChina ? release?.downloadPageUrl : release?.downloadPageUrlCn;
-  const downloadUrl = preferred || alternate || release?.browserPlayStoreUrl;
+  const { url: downloadUrl } = resolveDirectDownload(release);
   if (!downloadUrl) {
     throw new Error("No update URL is configured for this release.");
   }

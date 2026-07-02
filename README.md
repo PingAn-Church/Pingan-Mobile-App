@@ -231,18 +231,21 @@ backend must be redeployed for new update metadata to take effect.
 Android builds check the backend for a newer version and open a download link.
 Because Google Play/Drive are blocked in China, the app serves a China mirror to
 China-based devices (detected on-device by region/timezone) and the
-international (Google) link to everyone else. `npm run dir-link` sets those two
-links and the "what's new" message shown in the update dialog.
+international (Google) link to everyone else. `npm run dir-link` sets those
+links, the China-mirror share password, and the "what's new" message shown in
+the update dialog. If the China mirror is password-gated (e.g. Lanzou), CN users
+get a confirmation that shows the password before they are redirected.
 
 Pass the flags after `--` (npm strips `--`/`-` flags otherwise). All are
 optional; omitted values are left unchanged:
 
 ```bash
 cd frontend
-# -g / --google   international link (non-China devices)
+# -g / --google    international link (non-China devices)
 # -c / --china     China-mirror link (China devices)
+# -p / --password  China-mirror share password (shown to CN users before redirect)
 # -m / --message   update message (shown for both en and zh)
-npm run dir-link -- -g https://drive.google.com/… -c https://pan.example.cn/app.apk -m "0.1.9: faster chat, bug fixes"
+npm run dir-link -- -g https://drive.google.com/… -c https://pan.example.cn/app.apk -p 518c -m "0.1.9: faster chat, bug fixes"
 ```
 
 `-g`/`-c` must be `https` URLs. Non-ASCII message text (e.g. Chinese) is stored

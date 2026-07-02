@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import {
   AppState,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -28,6 +29,7 @@ import {
   ignoreReleaseVersion,
   isAndroidNative,
   openReleaseTarget,
+  resolveDirectDownload,
 } from "../service/AppUpdateService";
 
 const FOREGROUND_CHECK_INTERVAL_MS = 60 * 1000;
@@ -58,6 +60,7 @@ export const AppUpdateProvider = ({ children }) => {
   const [promptVisible, setPromptVisible] = useState(false);
   const [ignoreSelected, setIgnoreSelected] = useState(false);
   const [openError, setOpenError] = useState(null);
+  const [pendingDownload, setPendingDownload] = useState(null);
   const checkPromiseRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
   const lastForegroundCheckRef = useRef(0);
@@ -158,6 +161,16 @@ export const AppUpdateProvider = ({ children }) => {
 
   const openUpdate = useCallback(async () => {
     if (!release) return;
+    // Password-gated China mirrors (e.g. Lanzou) get a confirmation that surfaces
+    // the password before we leave the app. Play-store links are never gated.
+    if (channel !== "play") {
+      const { url, password } = resolveDirectDownload(release);
+      if (url && password) {
+        setOpenError(null);
+        setPendingDownload({ url, password });
+        return;
+      }
+    }
     try {
       await openReleaseTarget(release, channel);
       if (!forceUpdate) setPromptVisible(false);
@@ -165,6 +178,21 @@ export const AppUpdateProvider = ({ children }) => {
       setOpenError(err);
     }
   }, [channel, forceUpdate, release]);
+
+  const cancelPendingDownload = useCallback(() => setPendingDownload(null), []);
+
+  const confirmPendingDownload = useCallback(async () => {
+    const dl = pendingDownload;
+    if (!dl) return;
+    try {
+      await Linking.openURL(dl.url);
+      setPendingDownload(null);
+      if (!forceUpdate) setPromptVisible(false);
+    } catch (err) {
+      setPendingDownload(null);
+      setOpenError(err);
+    }
+  }, [pendingDownload, forceUpdate]);
 
   const showUpdatePrompt = useCallback(() => {
     if (status === "available" || status === "unsupported") {
@@ -268,6 +296,43 @@ export const AppUpdateProvider = ({ children }) => {
               ) : null}
               <TouchableOpacity style={styles.primaryButton} onPress={openUpdate}>
                 <Text style={styles.primaryButtonText}>{i18n.t("updateNow")}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={pendingDownload !== null}
+        onRequestClose={cancelPendingDownload}
+      >
+        <View style={styles.backdrop}>
+          <View style={styles.dialog}>
+            <View style={styles.titleRow}>
+              <Ionicons name="lock-closed" size={26} color="#D89B00" />
+              <Text style={styles.title}>{i18n.t("downloadPasswordTitle")}</Text>
+            </View>
+
+            <Text style={styles.message}>{i18n.t("downloadPasswordReason")}</Text>
+
+            <Text style={styles.passwordText} selectable>
+              {pendingDownload?.password}
+            </Text>
+
+            {openError ? (
+              <Text style={styles.errorText}>
+                {openError.message || i18n.t("appUpdateOpenFailed")}
+              </Text>
+            ) : null}
+
+            <View style={styles.pwButtonCol}>
+              <TouchableOpacity style={styles.primaryButtonBlock} onPress={confirmPendingDownload}>
+                <Text style={styles.primaryButtonText}>{i18n.t("downloadPasswordProceed")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButtonBlock} onPress={cancelPendingDownload}>
+                <Text style={styles.secondaryButtonText}>{i18n.t("cancel")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -379,5 +444,29 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: "#333",
     fontWeight: "700",
+  },
+  passwordText: {
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#111",
+    textAlign: "center",
+    letterSpacing: 3,
+    marginVertical: 18,
+  },
+  pwButtonCol: {
+    marginTop: 4,
+    gap: 10,
+  },
+  primaryButtonBlock: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#007AFF",
+  },
+  secondaryButtonBlock: {
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#E9EDF2",
   },
 });

@@ -31,6 +31,9 @@ public class AppUpdateProperties {
         // China-reachable mirror (Google Drive/Play are blocked in China). The
         // frontend serves this to devices that look China-based.
         private String downloadPageUrlCn = "https://rn-app.pingan.org.sg/android";
+        // Share password for the China mirror (e.g. Lanzou), shown to the user
+        // before redirecting. Empty means the mirror is not password-gated.
+        private String downloadPasswordCn = "";
         private String playStoreUrl = "market://details?id=org.pingan.app";
         private String browserPlayStoreUrl = "https://play.google.com/store/apps/details?id=org.pingan.app";
         private String apkSha256 = "";

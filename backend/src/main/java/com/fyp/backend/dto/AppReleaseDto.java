@@ -18,6 +18,7 @@ public class AppReleaseDto {
     private boolean forceUpdate;
     private String downloadPageUrl;
     private String downloadPageUrlCn;
+    private String downloadPasswordCn;
     private String playStoreUrl;
     private String browserPlayStoreUrl;
     private String apkSha256;

@@ -388,5 +388,8 @@
   "appIsLatestMessage": "You are already using the latest Android version.",
   "appUpdateUnknown": "Update status unknown",
   "appUpdateCheckFailed": "Could not check for updates. Please try again later.",
-  "appUpdateOpenFailed": "Could not open the update link."
+  "appUpdateOpenFailed": "Could not open the update link.",
+  "downloadPasswordTitle": "Download password",
+  "downloadPasswordReason": "This China download link is password-protected. Note the password below — the download page may ask you to enter it.",
+  "downloadPasswordProceed": "Sure, let's proceed to download"
 }

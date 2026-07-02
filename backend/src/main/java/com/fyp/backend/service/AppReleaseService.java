@@ -41,6 +41,7 @@ public class AppReleaseService {
                 release.isForceUpdate(),
                 release.getDownloadPageUrl(),
                 release.getDownloadPageUrlCn(),
+                release.getDownloadPasswordCn(),
                 release.getPlayStoreUrl(),
                 release.getBrowserPlayStoreUrl(),
                 release.getApkSha256(),

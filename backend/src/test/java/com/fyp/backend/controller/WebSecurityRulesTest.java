@@ -175,7 +175,7 @@ class WebSecurityRulesTest {
         when(appReleaseService.getLatest("android", "direct"))
                 .thenReturn(new AppReleaseDto("android", "direct", "0.1.5", 105, 105,
                         false, "https://rn-app.pingan.org.sg/android", "https://rn-app.pingan.org.sg/android",
-                        null, null, "", null, Map.of()));
+                        "", null, null, "", null, Map.of()));
 
         mockMvc.perform(get("/api/app-releases/latest")
                         .param("platform", "android")
