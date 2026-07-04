@@ -170,9 +170,9 @@ export default function ProfilePage() {
     },
     { titleKey: "manageEventPics", screen: "ManagePictures", icon: "image" },
     {
-      titleKey: "manageOthers",
-      screen: "Others",
-      icon: "menu",
+      titleKey: "manageReporting",
+      screen: "ManageReporting",
+      icon: "report",
     },
     {
       titleKey: "manageAdmins",

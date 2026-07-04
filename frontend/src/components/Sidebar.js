@@ -10,7 +10,6 @@ export default function Sidebar() {
     { label: "Home", route: "Home" },
     { label: "Events", route: "Events" },
     { label: "Social", route: "Social" },
-    { label: "Others", route: "Others" },
     { label: "Settings", route: "Settings" },
   ];
 

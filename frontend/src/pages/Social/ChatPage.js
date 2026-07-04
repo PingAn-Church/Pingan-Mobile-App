@@ -58,6 +58,7 @@ import VoicePlayer from "../../components/Chat/VoicePlayer";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
+import { reportMessage } from "../../service/ReportService";
 
 const normalizeDate = (raw) => {
   if (!raw) return null;
@@ -1375,6 +1376,14 @@ export default function ChatPage({ route }) {
     contextTranslation?.visible &&
     contextTranslation?.targetLang === contextTargetLanguage &&
     contextTranslation?.sourceContent === contextSourceContent;
+  // Any real (delivered, server-persisted) message from ANOTHER user can be
+  // reported — text, image, and voice alike.
+  const contextCanReport =
+    !!contextMessage &&
+    contextMessage.senderId !== currentUser?.id &&
+    !contextMessage.pending &&
+    !contextMessage.failed &&
+    !isLocalOnlyMessage(contextMessage);
 
   const activeConversationIcon =
     conversationIconUrls[String(conversationId)] || "";
@@ -1984,6 +1993,36 @@ export default function ChatPage({ route }) {
                   </Text>
                 </TouchableOpacity>
               )}
+
+            {contextCanReport && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={async () => {
+                  const selected = contextMenu.message;
+                  closeContextMenu();
+
+                  try {
+                    await reportMessage(selected.messageId);
+                    showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
+                  } catch (error) {
+                    if (error?.response?.status === 409) {
+                      showAlert(i18n.t("error"), i18n.t("alreadyReported"));
+                    } else {
+                      showAlert(i18n.t("error"), i18n.t("reportFailed"));
+                    }
+                  }
+                }}
+              >
+                <Text
+                  style={[
+                    styles.contextMenuItemText,
+                    styles.contextMenuDangerText,
+                  ]}
+                >
+                  {i18n.t("report")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>

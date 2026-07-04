@@ -14,7 +14,6 @@ import ChatPage from "./src/pages/Social/ChatPage"; // Assuming ChatPage is in a
 import RegisterPage from "./src/pages/Auth/RegisterPage"; // Assuming RegisterPage is in another file
 import VerificationCodePage from "./src/pages/Auth/VerificationCodePage";
 import LoginPage, { ForgotPasswordPage } from "./src/pages/Auth/LoginPage";
-import OthersPage, { OthersSectionPage } from "./src/pages/Others/OthersPage";
 import ProfilePage, {
   ManageApplicationsPage,
   ChangePasswordPage,
@@ -50,6 +49,7 @@ import ManageAdminsPage, {
   ManageUsersPage,
 } from "./src/pages/Others/ManageAdminsPage";
 import ManageInstructorsPage from "./src/pages/Others/ManageInstructorsPage";
+import ManageReportingPage from "./src/pages/Others/ManageReportingPage";
 import ManageEventsPage, {
   EventFormPage,
 } from "./src/pages/Others/ManageEventsPage";
@@ -130,10 +130,6 @@ function BottomTabNavigator() {
             iconName = focused ? "calendar" : "calendar-outline";
           } else if (route.name === "Social") {
             iconName = focused ? "chatbubble" : "chatbubble-outline";
-          } else if (route.name === "Others") {
-            iconName = focused
-              ? "information-circle"
-              : "information-circle-outline";
           } else if (route.name === "Settings") {
             iconName = focused ? "settings" : "settings-outline";
           }
@@ -189,11 +185,6 @@ function BottomTabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Others"
-        component={OthersPage}
-        options={{ headerTitle: i18n.t("Others") }}
-      />
-      <Tab.Screen
         name="Settings"
         component={ProfilePage}
         options={{ headerTitle: i18n.t("Settings") }}
@@ -216,7 +207,6 @@ function WebSidebarLayout() {
           <Stack.Screen name="Home" component={HomePage} />
           <Stack.Screen name="Events" component={MyActivityPage} />
           <Stack.Screen name="Social" component={SocialPage} />
-          <Stack.Screen name="Others" component={OthersPage} />
           <Stack.Screen name="Settings" component={ProfilePage} />
         </Stack.Navigator>
       </View>
@@ -329,7 +319,6 @@ const ROOT_BACK_FALLBACKS = {
   NewGroup: "ChatHome",
   DetailedPrivateChat: "ChatHome",
   DetailedGroupChat: "ChatHome",
-  OthersSection: "HomeTabs",
   FormApplication: "HomeTabs",
   ManageApplications: "HomeTabs",
   ManageEvents: "HomeTabs",
@@ -345,6 +334,7 @@ const ROOT_BACK_FALLBACKS = {
   ManageAdmins: "HomeTabs",
   ManageUsers: "HomeTabs",
   ManageInstructors: "HomeTabs",
+  ManageReporting: "HomeTabs",
   ChangePassword: "HomeTabs",
   EditProfile: "HomeTabs",
   StorageSettings: "HomeTabs",
@@ -479,11 +469,6 @@ export default function App() {
                   <Stack.Screen name="VerificationCode" component={VerificationCodePage} />
                   <Stack.Screen name="Login" component={LoginPage} />
                   <Stack.Screen
-                    name="OthersSection"
-                    component={OthersSectionPage}
-                    options={{ headerTitle: "" }}
-                  />
-                  <Stack.Screen
                     name="FormApplication"
                     component={FormApplicationPage}
                     options={{ headerTitle: "" }}
@@ -547,6 +532,11 @@ export default function App() {
                   <Stack.Screen
                     name="ManageInstructors"
                     component={ManageInstructorsPage}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="ManageReporting"
+                    component={ManageReportingPage}
                     options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
