@@ -121,6 +121,8 @@ import { ChatContext } from "../../context/ChatContext";
 import useUserSearch from "../../hooks/useUserSearch";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import { getBlockStatus, unblockUser } from "../../service/BlockService";
+import { confirmAction } from "../../utils/confirmAction";
 
 const NewChatScreen = () => {
   const { user } = useContext(UserContext);
@@ -137,6 +139,25 @@ const NewChatScreen = () => {
   }, [language]);
 
   const handleStartPrivateChat = async (selectedUser) => {
+    // Tapping a user I've blocked offers to unblock them first (the alternate
+    // unblock path besides the detail page's green Unblock button).
+    try {
+      const status = await getBlockStatus(selectedUser.id);
+      if (status?.blockedByMe) {
+        const confirmed = await confirmAction({
+          title: i18n.t("unblockUser"),
+          message: i18n.t("blockedUserTapAsk"),
+          confirmText: i18n.t("unblockUser"),
+          cancelText: i18n.t("cancel"),
+        });
+        if (!confirmed) return;
+        await unblockUser(selectedUser.id);
+      }
+    } catch (error) {
+      console.error("Block status check failed:", error);
+      // Fall through — the server still refuses messaging if a block remains.
+    }
+
     const existing = conversations.find(
       (c) =>
         c.conversationType === "private" &&

@@ -405,5 +405,18 @@
   "confirmDeleteMessage": "Permanently delete this message for everyone?",
   "reportActionFailed": "Failed to apply the action.",
   "loadReportsFailed": "Failed to load reports.",
-  "notAuthorized": "You are not authorized to view this page."
+  "notAuthorized": "You are not authorized to view this page.",
+  "notice": "Notice",
+  "blockUser": "Block User",
+  "unblockUser": "Unblock User",
+  "confirmBlockUser": "Block this user? You will no longer be able to message each other. You can unblock later with the green Unblock button on this page, or by tapping their name in Start New Chat.",
+  "confirmUnblockUser": "Unblock this user? Note: if they still have you blocked, you still won't be able to message each other.",
+  "userBlocked": "User blocked. You can no longer message each other.",
+  "userUnblocked": "User unblocked.",
+  "blockFailed": "Failed to block the user. Please try again later.",
+  "unblockFailed": "Failed to unblock the user. Please try again later.",
+  "blockedUserTapAsk": "You have blocked this user. Unblock and start chatting?",
+  "messagingBlockedNotice": "You can't exchange messages in this conversation because one of you has blocked the other.",
+  "messagingBlockedPlaceholder": "Messaging unavailable",
+  "groupContainsBlocked": "This group contains one or more users you have blocked. You can still read and send group messages."
 }

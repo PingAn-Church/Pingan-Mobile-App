@@ -14,6 +14,7 @@ import { getUserById } from "../../service/UserService";
 import { getPresignedDownloadUrl } from "../../service/OSSService";
 import defaultProfileImage from "../../../assets/user.png";
 import { deleteConversationFromDatabase } from "../../service/ChatService";
+import { blockUser, unblockUser, getBlockStatus } from "../../service/BlockService";
 import { useNavigation } from "@react-navigation/native";
 import { ChatContext } from "../../context/ChatContext";
 import { confirmAction } from "../../utils/confirmAction";
@@ -29,6 +30,8 @@ const DetailedPrivateChatPage = ({ route }) => {
   const { conversations, setConversations } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
 
   console.log("Fetching details for user:", otherParticipantId);
 
@@ -77,6 +80,67 @@ const DetailedPrivateChatPage = ({ route }) => {
 
     fetchParticipantDetails();
   }, [otherParticipantId]);
+
+  // 🔹 Whether I have this user blocked (drives the Block/Unblock button)
+  useEffect(() => {
+    const fetchBlockStatus = async () => {
+      try {
+        const status = await getBlockStatus(otherParticipantId);
+        setBlockedByMe(!!status?.blockedByMe);
+      } catch (error) {
+        console.error("Error fetching block status:", error);
+      }
+    };
+    fetchBlockStatus();
+  }, [otherParticipantId]);
+
+  const handleToggleBlock = async () => {
+    if (blockBusy) return;
+
+    if (blockedByMe) {
+      // Green "Unblock user" path.
+      const confirmed = await confirmAction({
+        title: i18n.t("unblockUser"),
+        message: i18n.t("confirmUnblockUser"),
+        confirmText: i18n.t("unblockUser"),
+        cancelText: i18n.t("cancel"),
+      });
+      if (!confirmed) return;
+
+      setBlockBusy(true);
+      try {
+        await unblockUser(otherParticipantId);
+        setBlockedByMe(false);
+        showAlert(i18n.t("success"), i18n.t("userUnblocked"), [{ text: i18n.t("ok") }]);
+      } catch (error) {
+        showAlert(i18n.t("error"), i18n.t("unblockFailed"), [{ text: i18n.t("ok") }]);
+      } finally {
+        setBlockBusy(false);
+      }
+      return;
+    }
+
+    // Double-check before blocking; the message also explains how to unblock later.
+    const confirmed = await confirmAction({
+      title: i18n.t("blockUser"),
+      message: i18n.t("confirmBlockUser"),
+      confirmText: i18n.t("blockUser"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setBlockBusy(true);
+    try {
+      await blockUser(otherParticipantId);
+      setBlockedByMe(true);
+      showAlert(i18n.t("success"), i18n.t("userBlocked"), [{ text: i18n.t("ok") }]);
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("blockFailed"), [{ text: i18n.t("ok") }]);
+    } finally {
+      setBlockBusy(false);
+    }
+  };
 
   const handleDeletePrivateConversation = async () => {
     const confirmed = await confirmAction({
@@ -171,6 +235,26 @@ const DetailedPrivateChatPage = ({ route }) => {
             {i18n.t("deleteConvo")}
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleToggleBlock}
+          disabled={blockBusy}
+          style={[
+            styles.blockButton,
+            blockedByMe ? styles.unblockButton : styles.blockButtonRed,
+            blockBusy && { opacity: 0.6 },
+          ]}
+        >
+          {blockBusy ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text
+              style={{ color: "#fff", fontWeight: "bold", textAlign: "center" }}
+            >
+              {blockedByMe ? i18n.t("unblockUser") : i18n.t("blockUser")}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -211,6 +295,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  blockButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 14,
+    minWidth: 180,
+  },
+  blockButtonRed: {
+    backgroundColor: "#C62828",
+  },
+  unblockButton: {
+    backgroundColor: "#2E7D32",
   },
 });
 

@@ -23,7 +23,7 @@ import * as Clipboard from "expo-clipboard";
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 import defaultProfileImage from "../../../assets/user.png";
@@ -59,6 +59,7 @@ import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
 import { reportMessage } from "../../service/ReportService";
+import { getBlockStatus, getBlockedIds } from "../../service/BlockService";
 
 const normalizeDate = (raw) => {
   if (!raw) return null;
@@ -583,6 +584,63 @@ export default function ChatPage({ route }) {
     conversationType === "group" ||
     (conversationType === "private" && privateChatParticipantId !== null);
 
+  // --- user blocking ---------------------------------------------------------
+  // Private chats: refresh the block relationship every time the screen gains
+  // focus (so blocking/unblocking on the detail page mutes/unmutes on return).
+  // Messaging stays muted while a block exists in EITHER direction.
+  const [blockStatus, setBlockStatus] = useState(null);
+  const messagingBlocked =
+    conversationType === "private" && blockStatus?.canMessage === false;
+
+  const refreshBlockStatus = useCallback(() => {
+    if (conversationType !== "private" || privateChatParticipantId === null) {
+      setBlockStatus(null);
+      return;
+    }
+    getBlockStatus(privateChatParticipantId)
+      .then(setBlockStatus)
+      .catch(() => setBlockStatus(null)); // fail open — server still enforces
+  }, [conversationType, privateChatParticipantId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshBlockStatus();
+    }, [refreshBlockStatus])
+  );
+
+  // Web two-pane: the user-detail panel is embedded (no focus change), so also
+  // re-check when the details panel closes — that's where Block/Unblock lives.
+  useEffect(() => {
+    if (!showDetailsPanel) refreshBlockStatus();
+  }, [showDetailsPanel, refreshBlockStatus]);
+
+  // Group chats: a one-off heads-up per conversation when the group contains
+  // someone the user has blocked (group messaging itself is unaffected).
+  const blockedGroupNoticeRef = useRef(new Set());
+  useEffect(() => {
+    if (conversationType !== "group" || !conversationId) return;
+    const key = String(conversationId);
+    if (blockedGroupNoticeRef.current.has(key)) return;
+
+    const checkBlockedMembers = async () => {
+      try {
+        const blockedIds = await getBlockedIds();
+        if (!blockedIds.length) return;
+        const memberIds = (conversation?.participants || []).map((p) => Number(p));
+        if (memberIds.some((id) => blockedIds.includes(id))) {
+          blockedGroupNoticeRef.current.add(key);
+          showAlert(i18n.t("notice"), i18n.t("groupContainsBlocked"), [
+            { text: i18n.t("ok") },
+          ]);
+        }
+      } catch (error) {
+        // Best-effort notice only.
+      }
+    };
+
+    checkBlockedMembers();
+  }, [conversationType, conversationId, conversation?.participants]);
+
   const chatDisplayName =
     conversationType === "group"
       ? conversation?.groupName || "Group Chat"
@@ -962,6 +1020,7 @@ export default function ChatPage({ route }) {
   };
 
   const handleSendOrUpdate = async () => {
+    if (messagingBlocked) return;
     if (!inputText.trim() || !currentUser?.id || !conversationId || !conversationType) return;
 
     if (editingMessage) {
@@ -1203,6 +1262,7 @@ export default function ChatPage({ route }) {
   // (chat image rendering lives in the module-level <ChatImage> component above)
 
   const pickAndSendImage = async () => {
+    if (messagingBlocked) return;
     if (!currentUser?.id || !conversationId || !conversationType) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -1276,6 +1336,7 @@ export default function ChatPage({ route }) {
   };
 
   const handleVoiceRecordingComplete = async (audioUri, duration) => {
+    if (messagingBlocked) return;
     if (!currentUser?.id || !conversationId || !conversationType || !audioUri) return;
     if (sendingVoiceLockRef.current) return;
     sendingVoiceLockRef.current = true;
@@ -1349,6 +1410,7 @@ export default function ChatPage({ route }) {
   };
 
   const isSendDisabled =
+    messagingBlocked ||
     !inputText.trim() ||
     !currentUser?.id ||
     !conversationId ||
@@ -1657,9 +1719,21 @@ export default function ChatPage({ route }) {
         </TouchableOpacity>
       )}
 
-      <View style={styles.inputContainer}>
-        <TouchableOpacity onPress={pickAndSendImage} style={styles.attachButton} activeOpacity={0.82}>
-          <Ionicons name="image" size={23} color="#111111" />
+      {messagingBlocked && (
+        <View style={styles.blockedBanner}>
+          <Ionicons name="ban-outline" size={16} color="#8E8E93" />
+          <Text style={styles.blockedBannerText}>{i18n.t("messagingBlockedNotice")}</Text>
+        </View>
+      )}
+
+      <View style={[styles.inputContainer, messagingBlocked && styles.inputContainerBlocked]}>
+        <TouchableOpacity
+          onPress={pickAndSendImage}
+          style={styles.attachButton}
+          activeOpacity={0.82}
+          disabled={messagingBlocked}
+        >
+          <Ionicons name="image" size={23} color={messagingBlocked ? "#B0B0B3" : "#111111"} />
         </TouchableOpacity>
 
         <View style={styles.inputPill}>
@@ -1667,17 +1741,21 @@ export default function ChatPage({ route }) {
             ref={textInputRef}
             value={inputText}
             onChangeText={setInputText}
-            placeholder={i18n.t("typeMessage")}
+            placeholder={messagingBlocked ? i18n.t("messagingBlockedPlaceholder") : i18n.t("typeMessage")}
             placeholderTextColor="#98989D"
             style={styles.inputField}
             multiline
+            editable={!messagingBlocked}
           />
 
-          <View style={styles.voiceRecorderWrap}>
+          <View
+            style={styles.voiceRecorderWrap}
+            pointerEvents={messagingBlocked ? "none" : "auto"}
+          >
             <VoiceRecorder
               onRecordingComplete={handleVoiceRecordingComplete}
               iconSize={24}
-              iconColor="#1F1F22"
+              iconColor={messagingBlocked ? "#B0B0B3" : "#1F1F22"}
               buttonSize={38}
             />
           </View>
@@ -2900,6 +2978,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F2F7",
     borderTopWidth: 1,
     borderColor: "#E1E1E6",
+  },
+  inputContainerBlocked: {
+    opacity: 0.55,
+  },
+  blockedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#ECECEF",
+    borderTopWidth: 1,
+    borderColor: "#E1E1E6",
+  },
+  blockedBannerText: {
+    fontSize: 12,
+    color: "#8E8E93",
+    flexShrink: 1,
   },
   // Floating "jump to latest" button, sits just above the input bar, bottom-right.
   jumpToEndButton: {
