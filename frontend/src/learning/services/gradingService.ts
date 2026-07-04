@@ -26,10 +26,30 @@ export interface PendingAttempt {
   questions: PendingQuestion[];
 }
 
-export const getPendingGrading = async (): Promise<PendingAttempt[]> => {
-  const res = await apiService.get<any>("/getPendingGrading");
+export interface PagedPendingAttempts {
+  items: PendingAttempt[];
+  pagination: {
+    page: number;
+    size: number;
+    totalCount: number;
+    hasMore: boolean;
+  };
+}
+
+export const getPendingGrading = async ({
+  page = 0,
+  size = 20,
+  courseId,
+}: {
+  page?: number;
+  size?: number;
+  courseId?: string;
+} = {}): Promise<PagedPendingAttempts> => {
+  const params: Record<string, string> = { page: String(page), size: String(size) };
+  if (courseId) params.courseId = courseId;
+  const res = await apiService.get<any>("/getPendingGrading", params);
   const data = res?.data ?? res ?? [];
-  return (Array.isArray(data) ? data : []).map((a: any) => ({
+  const items = (Array.isArray(data) ? data : []).map((a: any) => ({
     attemptId: str(a.attempt_id),
     quizId: str(a.quiz_id),
     quizTitle: str(a.quiz_title, "Quiz"),
@@ -46,6 +66,15 @@ export const getPendingGrading = async (): Promise<PendingAttempt[]> => {
       studentAnswer: str(q.student_answer),
     })),
   }));
+  return {
+    items,
+    pagination: {
+      page: num(res?.pagination?.page),
+      size: num(res?.pagination?.size, size),
+      totalCount: num(res?.pagination?.totalCount, items.length),
+      hasMore: !!res?.pagination?.hasMore,
+    },
+  };
 };
 
 export const gradeShortAnswer = (body: {

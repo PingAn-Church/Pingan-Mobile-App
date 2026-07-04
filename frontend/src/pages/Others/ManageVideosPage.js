@@ -7,7 +7,7 @@ import {
   Button,
   Alert,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
@@ -27,6 +27,9 @@ const getEmbedUrl = (videoId, type) => {
 
 export default function ManageVideosPage() {
   const [videos, setVideos] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
   const { language } = useContext(LanguageContext);
 
@@ -37,33 +40,36 @@ export default function ManageVideosPage() {
     });
   }, [language]);
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadVideos = async () => {
-        try {
-          const fetchedVideos = await fetchVideos();
-          console.log("videos: ", fetchedVideos);
-          setVideos(fetchedVideos);
-        } catch (error) {
-          showAlert(i18n.t("error"), i18n.t("loadVideoFailed"), [
-            { text: i18n.t("ok") },
-          ]);
-        }
-      };
-      loadVideos();
-    }, [])
-  );
-
-  const loadVideos = async () => {
+  const loadVideos = async (nextPage = 0, replace = false) => {
+    if (!replace && (loading || !hasMore)) return;
+    setLoading(true);
     try {
-      const fetchedVideos = await fetchVideos();
-      setVideos(fetchedVideos);
+      const response = await fetchVideos({ page: nextPage, size: 10 });
+      const fetchedVideos = Array.isArray(response?.data) ? response.data : [];
+      setVideos((prev) =>
+        replace
+          ? fetchedVideos
+          : [...prev, ...fetchedVideos.filter((video) => !prev.some((p) => p.id === video.id))]
+      );
+      setPage(Number.isFinite(Number(response?.pagination?.page)) ? Number(response.pagination.page) : nextPage);
+      setHasMore(Boolean(response?.pagination?.hasMore));
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("loadVideoFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      setVideos([]);
+      setPage(0);
+      setHasMore(true);
+      loadVideos(0, true);
+    }, [])
+  );
 
   const handleDeleteVideo = async (id) => {
     const confirmed = await confirmAction({
@@ -78,7 +84,7 @@ export default function ManageVideosPage() {
 
     try {
       await deleteVideo(id);
-      loadVideos();
+      loadVideos(0, true);
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("deleteVideoFailed"), [
         { text: i18n.t("ok") },
@@ -88,9 +94,15 @@ export default function ManageVideosPage() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {videos.map((video) => (
-          <View key={video.id} style={styles.videoWrapper}>
+      <FlatList
+        contentContainerStyle={styles.scrollContainer}
+        data={videos}
+        keyExtractor={(item) => String(item.id)}
+        onEndReached={() => loadVideos(page + 1, false)}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
+        renderItem={({ item: video }) => (
+          <View style={styles.videoWrapper}>
             <View style={styles.videoContainer}>
               <PlatformWebView
                 source={{ uri: getEmbedUrl(video.videoId, video.videoType) }}
@@ -107,8 +119,8 @@ export default function ManageVideosPage() {
             </View>
             <Text style={styles.videoTitle}>{video.title}</Text>
           </View>
-        ))}
-      </ScrollView>
+        )}
+      />
 
       <TouchableOpacity
         style={styles.addButton}

@@ -248,20 +248,20 @@ export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
   }
 };
 
-export const fetchPictures = async (fileType) => {
+export const fetchPictures = async (fileType, { size = 20, marker } = {}) => {
   try {
     const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/list-pictures`),
       {
-        params: { fileType },
+        params: { fileType, size, ...(marker ? { marker } : {}) },
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
     return response.data;
   } catch (error) {
     console.error("Error fetching pictures:", error);
-    return [];
+    return { success: false, data: [], pagination: { hasMore: false, nextMarker: null } };
   }
 };
 

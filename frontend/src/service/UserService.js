@@ -76,8 +76,8 @@ export const getUserById = async (userId) => {
   }
 };
 
-// Fetch all users excluding the current logged-in user
-export const getAllUsers = async () => {
+// Admin-only paged user directory. Returns { success, data, pagination }.
+export const getAllUsers = async ({ q = "", page = 0, size = 20, verified, active = true, role } = {}) => {
   const token = await getAuthToken();
 
   if (!token) {
@@ -86,6 +86,14 @@ export const getAllUsers = async () => {
 
   try {
     const response = await axios.get(apiUrl(`/api/users`), {
+      params: {
+        q,
+        page,
+        size,
+        ...(verified === undefined ? {} : { verified }),
+        ...(active === undefined ? {} : { active }),
+        ...(role ? { role } : {}),
+      },
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -171,7 +179,7 @@ export const getOnlineUsers = async () => {
   }
 };
 
-export const getVerifiedUsers = async () => {
+export const getVerifiedUsers = async ({ q = "", page = 0, size = 20 } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");
 
@@ -179,6 +187,7 @@ export const getVerifiedUsers = async () => {
     const response = await axios.get(
       apiUrl(`/api/users/verified`),
       {
+        params: { q, page, size },
         headers: { Authorization: `Bearer ${token}` },
       }
     );
@@ -189,7 +198,7 @@ export const getVerifiedUsers = async () => {
   }
 };
 
-export const getAdminUsers = async () => {
+export const getAdminUsers = async ({ q = "", page = 0, size = 20 } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");
 
@@ -197,6 +206,7 @@ export const getAdminUsers = async () => {
     const response = await axios.get(
       apiUrl(`/api/users/admins`),
       {
+        params: { q, page, size },
         headers: { Authorization: `Bearer ${token}` },
       }
     );
@@ -207,7 +217,7 @@ export const getAdminUsers = async () => {
   }
 };
 
-export const getInstructorUsers = async () => {
+export const getInstructorUsers = async ({ q = "", page = 0, size = 20 } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");
 
@@ -215,6 +225,7 @@ export const getInstructorUsers = async () => {
     const response = await axios.get(
       apiUrl(`/api/users/instructors`),
       {
+        params: { q, page, size },
         headers: { Authorization: `Bearer ${token}` },
       }
     );
@@ -306,12 +317,13 @@ export const updateUserActiveStatus = async (userId, active) => {
   }
 };
 
-export const getInactiveUsers = async () => {
+export const getInactiveUsers = async ({ q = "", page = 0, size = 20 } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");
 
   try {
     const response = await axios.get(apiUrl(`/api/users/inactive`), {
+      params: { q, page, size },
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
@@ -321,12 +333,13 @@ export const getInactiveUsers = async () => {
   }
 };
 
-export const getDeletedAccounts = async () => {
+export const getDeletedAccounts = async ({ q = "", page = 0, size = 20 } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");
 
   try {
     const response = await axios.get(apiUrl(`/api/users/deleted`), {
+      params: { q, page, size },
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;

@@ -4,9 +4,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   useWindowDimensions,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Carousel from "../../components/Carousel";
@@ -16,7 +18,7 @@ import { getAllEvents } from "../../service/EventService";
 import { fetchVideos } from "../../service/VideoService";
 import { Ionicons } from "@expo/vector-icons";
 import PlatformWebView from "../../components/PlatformWebView";
-import { fetchPictures } from "../../service/OSSService";
+import { resolvePresignedAssetUrl } from "../../service/OSSService";
 import { getPublishedCourses } from "../../learning/services/courseService";
 import CourseCoverImage from "../../learning/components/CourseCoverImage";
 import i18n from "../../../i18n";
@@ -44,7 +46,7 @@ export default function HomePage() {
   const [announcements, setAnnouncements] = useState([]);
   const [events, setEvents] = useState([]);
   const [videos, setVideos] = useState([]);
-  const [pictures, setPictures] = useState([]);
+  const [announcementImages, setAnnouncementImages] = useState({});
   const [courses, setCourses] = useState([]);
 
   const convertToDateTime = (dateString, timeString) => {
@@ -67,10 +69,9 @@ export default function HomePage() {
     useCallback(() => {
       loadVideos();
       loadAnnouncements();
-      loadPictures();
       loadEvents();
       loadCourses();
-    }, [])
+    }, [isDesktop])
   );
 
   const loadCourses = async () => {
@@ -84,45 +85,38 @@ export default function HomePage() {
     try {
       const data = await getAllAnnouncements();
       setAnnouncements(data);
-    } catch (error) { console.error(error); }
-  };
-
-  const loadPictures = async () => {
-    try {
-      const data = await fetchPictures("announcement");
-      setPictures(data);
+      const pairs = await Promise.all(
+        data.map(async (announcement) => {
+          if (!announcement?.imageUrl) return [announcement.id, null];
+          return [
+            announcement.id,
+            await resolvePresignedAssetUrl(announcement.imageUrl, "announcement"),
+          ];
+        })
+      );
+      setAnnouncementImages(Object.fromEntries(pairs));
     } catch (error) { console.error(error); }
   };
 
   const getImageForAnnouncement = (announcement) => {
-    const matchedImage = pictures.find((pic) =>
-      pic.includes(announcement.imageUrl.split("/").pop())
-    );
-    return matchedImage || null;
+    return announcementImages[announcement.id] || null;
   };
 
   const loadEvents = async () => {
     try {
-      const data = await getAllEvents();
-      const now = new Date();
-      // Filter logic
-      const upcoming = data.filter(event => {
-        const eventEndTime = convertToDateTime(event.date, event.endTime);
-        // Keep event visible 1 hour after it ends
-        return now <= new Date(eventEndTime.getTime() + 60 * 60 * 1000);
+      const response = await getAllEvents({
+        status: "upcoming",
+        size: isDesktop ? 4 : 3,
+        sort: "startAt,asc",
       });
-
-      upcoming.sort((a, b) => convertToDateTime(a.date, a.startTime) - convertToDateTime(b.date, b.startTime));
-
-      // On desktop show 4, on mobile show 3 to fit horizontal scroll better
-      setEvents(upcoming.slice(0, isDesktop ? 4 : 3));
+      setEvents(Array.isArray(response?.data) ? response.data : []);
     } catch (error) { console.error(error); }
   };
 
   const loadVideos = async () => {
     try {
-      const fetchedVideos = await fetchVideos();
-      setVideos(fetchedVideos);
+      const response = await fetchVideos({ size: isDesktop ? 4 : 3 });
+      setVideos(Array.isArray(response?.data) ? response.data : []);
     } catch (error) { console.error(error); }
   };
 
@@ -328,9 +322,13 @@ export default function HomePage() {
 export function VideosPage() {
   const navigation = useNavigation();
   const [videos, setVideos] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { language } = useContext(LanguageContext);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  const pageSize = isDesktop ? 8 : 5;
 
   useEffect(() => {
     navigation.setOptions({
@@ -345,25 +343,51 @@ export function VideosPage() {
       : `https://v.qq.com/txp/iframe/player.html?vid=${videoId}`;
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadVideos = async () => {
-        try {
-          const fetchedVideos = await fetchVideos();
-          setVideos(fetchedVideos);
-        } catch (error) {
-          console.error("Error fetching videos:", error);
-        }
-      };
-      loadVideos();
-    }, [])
+  const loadVideosPage = useCallback(
+    async (nextPage = 0, replace = false) => {
+      setLoading(true);
+      try {
+        const response = await fetchVideos({ page: nextPage, size: pageSize });
+        const items = Array.isArray(response?.data) ? response.data : [];
+        setVideos((prev) => (replace ? items : [...prev, ...items.filter((v) => !prev.some((p) => p.id === v.id))]));
+        setPage(Number.isFinite(Number(response?.pagination?.page)) ? Number(response.pagination.page) : nextPage);
+        setHasMore(Boolean(response?.pagination?.hasMore));
+      } catch (error) {
+        console.error("Error fetching videos:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [pageSize]
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      setVideos([]);
+      setPage(0);
+      setHasMore(true);
+      loadVideosPage(0, true);
+    }, [loadVideosPage])
+  );
+
+  const loadMoreVideos = () => {
+    if (!loading && hasMore) {
+      loadVideosPage(page + 1, false);
+    }
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.videosPageContainer}>
-      <View style={{ width: isDesktop ? 800 : '100%', alignItems: 'center' }}>
-        {videos.map((video) => (
-          <View key={video.id} style={[styles.videoItem, { width: isDesktop ? '100%' : width * 0.9 }, Platform.OS === 'web' && isDesktop && styles.videosPageVideoItemWeb]}>
+    <FlatList
+      contentContainerStyle={styles.videosPageContainer}
+      data={videos}
+      keyExtractor={(item) => String(item.id)}
+      onEndReached={loadMoreVideos}
+      onEndReachedThreshold={0.3}
+      ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
+      ListEmptyComponent={!loading ? <Text style={styles.noData}>{i18n.t("noVideos")}</Text> : null}
+      renderItem={({ item: video }) => (
+        <View style={{ width: isDesktop ? 800 : '100%', alignItems: 'center' }}>
+          <View style={[styles.videoItem, { width: isDesktop ? '100%' : width * 0.9 }, Platform.OS === 'web' && isDesktop && styles.videosPageVideoItemWeb]}>
             <View style={[styles.videoWrapper, Platform.OS === 'web' && isDesktop && styles.videoWrapperWebAllVideos]}>
               <PlatformWebView
                 source={{ uri: getEmbedUrl(video.videoId, video.videoType) }}
@@ -374,9 +398,9 @@ export function VideosPage() {
             </View>
             <Text style={styles.videoTitle}>{video.title}</Text>
           </View>
-        ))}
-      </View>
-    </ScrollView>
+        </View>
+      )}
+    />
   );
 }
 

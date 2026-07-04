@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCourseDetail } from "@/services/courseService";
@@ -42,15 +42,18 @@ export default function CourseDetailScreen() {
     queryFn: () => checkEnrolled(courseId),
     enabled: !!courseId,
   });
-  const reviewsQuery = useQuery({
+  const reviewsQuery = useInfiniteQuery({
     queryKey: ["learning", "reviews", courseId],
-    queryFn: () => getCourseReviews(courseId),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getCourseReviews(courseId, { page: Number(pageParam), size: 20 }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
     enabled: !!courseId,
   });
 
   const data = detailQuery.data;
   const enrolled = enrolledQuery.data ?? false;
-  const reviews = reviewsQuery.data ?? [];
+  const reviews = reviewsQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
   // Sync the heart from the server's wishlist status on load and after refetch,
   // so it stays filled when the screen is re-opened (not just within a session).
@@ -136,16 +139,18 @@ export default function CourseDetailScreen() {
     );
   }
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <CourseCoverImage
-        uri={data.thumbnailUrl}
-        fallback="https://picsum.photos/seed/course/600/300"
-        style={styles.hero}
-      />
-      <TouchableOpacity style={styles.heart} onPress={toggleWishlist}>
-        <Ionicons name={wishlisted ? "heart" : "heart-outline"} size={24} color={Colors.white} />
-      </TouchableOpacity>
+  const renderHeader = () => (
+    <>
+      <View>
+        <CourseCoverImage
+          uri={data.thumbnailUrl}
+          fallback="https://picsum.photos/seed/course/600/300"
+          style={styles.hero}
+        />
+        <TouchableOpacity style={styles.heart} onPress={toggleWishlist}>
+          <Ionicons name={wishlisted ? "heart" : "heart-outline"} size={24} color={Colors.white} />
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.body}>
         <View style={[styles.categoryPill, { backgroundColor: data.categoryColor || Colors.secondary }]}>
@@ -247,34 +252,60 @@ export default function CourseDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {reviews.length === 0 ? (
+          {reviewsQuery.isLoading ? (
+            <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} />
+          ) : reviewsQuery.isError ? (
+            <Text style={styles.muted}>Could not load reviews.</Text>
+          ) : reviews.length === 0 ? (
             <Text style={styles.muted}>No reviews yet.</Text>
-          ) : (
-            reviews.map((r) => (
-              <View key={r.id} style={styles.review}>
-                <View style={styles.reviewTop}>
-                  <Text style={styles.reviewer}>{r.reviewerName}</Text>
-                  <View style={{ flexDirection: "row" }}>
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Ionicons
-                        key={s}
-                        name={s <= r.rating ? "star" : "star-outline"}
-                        size={13}
-                        color={Colors.starGold}
-                      />
-                    ))}
-                  </View>
-                </View>
-                <Text style={styles.reviewText}>{r.review}</Text>
-                {!!r.instructorReply && (
-                  <Text style={styles.reply}>Instructor: {r.instructorReply}</Text>
-                )}
-              </View>
-            ))
-          )}
+          ) : null}
         </View>
       </View>
-    </ScrollView>
+    </>
+  );
+
+  const renderReview = ({ item: r }: { item: (typeof reviews)[number] }) => (
+    <View style={[styles.review, styles.reviewListItem]}>
+      <View style={styles.reviewTop}>
+        <Text style={styles.reviewer}>{r.reviewerName}</Text>
+        <View style={{ flexDirection: "row" }}>
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Ionicons
+              key={s}
+              name={s <= r.rating ? "star" : "star-outline"}
+              size={13}
+              color={Colors.starGold}
+            />
+          ))}
+        </View>
+      </View>
+      <Text style={styles.reviewText}>{r.review}</Text>
+      {!!r.instructorReply && (
+        <Text style={styles.reply}>Instructor: {r.instructorReply}</Text>
+      )}
+    </View>
+  );
+
+  return (
+    <FlatList
+      style={styles.container}
+      data={reviews}
+      keyExtractor={(item) => item.id}
+      ListHeaderComponent={renderHeader}
+      renderItem={renderReview}
+      contentContainerStyle={{ paddingBottom: 40 }}
+      onEndReached={() => {
+        if (reviewsQuery.hasNextPage && !reviewsQuery.isFetchingNextPage) {
+          reviewsQuery.fetchNextPage();
+        }
+      }}
+      onEndReachedThreshold={0.3}
+      ListFooterComponent={
+        reviewsQuery.isFetchingNextPage ? (
+          <ActivityIndicator style={{ marginVertical: 14 }} color={Colors.secondary} />
+        ) : null
+      }
+    />
   );
 }
 
@@ -318,6 +349,7 @@ const styles = StyleSheet.create({
   reviewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   leaveReview: { color: Colors.secondary, fontWeight: "700" },
   review: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 12, marginBottom: 10 },
+  reviewListItem: { marginHorizontal: 18 },
   reviewTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   reviewer: { color: Colors.textPrimary, fontWeight: "700" },
   reviewText: { color: Colors.textSecondary, fontSize: 14 },

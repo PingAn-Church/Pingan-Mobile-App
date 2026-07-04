@@ -11,6 +11,21 @@ export interface CourseReview {
   instructorReply?: string | null;
 }
 
+export interface PagedReviews {
+  items: CourseReview[];
+  pagination: {
+    page: number;
+    size: number;
+    totalCount: number;
+    hasMore: boolean;
+  };
+}
+
+const num = (v: any, d = 0): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+
 const mapReview = (r: any): CourseReview => ({
   id: String(r.id),
   rating: Number(r.rating) || 0,
@@ -32,10 +47,24 @@ export const getMyReview = async (courseId: string): Promise<CourseReview | null
   return d && d.id != null ? mapReview(d) : null;
 };
 
-export const getCourseReviews = async (courseId: string): Promise<CourseReview[]> => {
-  const res = await apiService.get<any>(`/getCourseReviews/${encodeURIComponent(courseId)}`);
-  const data = res?.data ?? res ?? [];
-  return (Array.isArray(data) ? data : []).map(mapReview);
+export const getCourseReviews = async (
+  courseId: string,
+  { page = 0, size = 20 }: { page?: number; size?: number } = {}
+): Promise<PagedReviews> => {
+  const res = await apiService.get<any>(`/getCourseReviews/${encodeURIComponent(courseId)}`, {
+    page: String(page),
+    size: String(size),
+  });
+  const items = (Array.isArray(res?.data) ? res.data : []).map(mapReview);
+  return {
+    items,
+    pagination: {
+      page: num(res?.pagination?.page, page),
+      size: num(res?.pagination?.size, size),
+      totalCount: num(res?.pagination?.totalCount, items.length),
+      hasMore: !!res?.pagination?.hasMore,
+    },
+  };
 };
 
 export interface ReviewPayload {

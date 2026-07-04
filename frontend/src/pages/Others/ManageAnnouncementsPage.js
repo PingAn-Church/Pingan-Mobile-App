@@ -15,7 +15,7 @@ import {
   deleteAnnouncement,
 } from "../../service/AnnouncementService";
 import {
-  fetchPictures,
+  resolvePresignedAssetUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
   deletePicture,
@@ -30,7 +30,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 export default function ManageAnnouncementsPage() {
   const navigation = useNavigation();
   const [announcements, setAnnouncements] = useState([]);
-  const [pictures, setPictures] = useState([]);
+  const [announcementImages, setAnnouncementImages] = useState({});
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -43,7 +43,6 @@ export default function ManageAnnouncementsPage() {
   useFocusEffect(
     useCallback(() => {
       loadAnnouncements();
-      loadPictures();
     }, [])
   );
 
@@ -52,27 +51,24 @@ export default function ManageAnnouncementsPage() {
       const data = await getAllAnnouncements();
       console.log("Announcements:", data);
       setAnnouncements(data);
+      const pairs = await Promise.all(
+        data.map(async (announcement) => {
+          if (!announcement?.imageUrl) return [announcement.id, null];
+          return [
+            announcement.id,
+            await resolvePresignedAssetUrl(announcement.imageUrl, "announcement"),
+          ];
+        })
+      );
+      setAnnouncementImages(Object.fromEntries(pairs));
     } catch (error) {
       console.error("Error fetching announcements:", error);
     }
   };
 
-  const loadPictures = async () => {
-    try {
-      const data = await fetchPictures("announcement");
-      console.log("Pictures:", data);
-      setPictures(data);
-    } catch (error) {
-      console.error("Error fetching pictures:", error);
-    }
-  };
-
   // Map each announcement to its respective image
   const getImageForAnnouncement = (announcement) => {
-    const matchedImage = pictures.find((pic) =>
-      pic.includes(announcement.imageUrl.split("/").pop())
-    );
-    return matchedImage || null;
+    return announcementImages[announcement.id] || null;
   };
 
   const handleDeleteAnnouncement = async (announcement) => {
@@ -97,7 +93,11 @@ export default function ManageAnnouncementsPage() {
 
       // Update UI
       setAnnouncements(announcements.filter((a) => a.id !== announcement.id));
-      setPictures(pictures.filter((p) => !p.includes(fileName)));
+      setAnnouncementImages((prev) => {
+        const next = { ...prev };
+        delete next[announcement.id];
+        return next;
+      });
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("deleteAnnouncementFailed"), [
         { text: i18n.t("ok") },

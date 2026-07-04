@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getCourseStats, type CourseStatsRow } from "@/services/authoringService";
 
@@ -61,9 +61,20 @@ function StatsCard({ item }: { item: CourseStatsRow }) {
 }
 
 export default function CourseStatsScreen() {
-  const { data, isLoading, isError, refetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["learning", "admin", "course-stats"],
-    queryFn: getCourseStats,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getCourseStats({ page: Number(pageParam), size: 20 }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
   });
 
   useFocusEffect(
@@ -72,7 +83,7 @@ export default function CourseStatsScreen() {
     }, [refetch])
   );
 
-  const stats = data ?? [];
+  const stats = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <View style={styles.container}>
@@ -91,6 +102,13 @@ export default function CourseStatsScreen() {
           data={stats}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} /> : null
+          }
           renderItem={({ item }) => <StatsCard item={item} />}
         />
       )}

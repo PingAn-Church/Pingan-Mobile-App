@@ -9,15 +9,26 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getAllCoursesAdmin } from "@/services/authoringService";
 
 export default function CourseManagementScreen() {
   const navigation = useNavigation<any>();
-  const { data, isLoading, isError, refetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["learning", "admin", "courses"],
-    queryFn: getAllCoursesAdmin,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getAllCoursesAdmin({ page: Number(pageParam), size: 20 }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
   });
 
   useFocusEffect(
@@ -26,7 +37,7 @@ export default function CourseManagementScreen() {
     }, [refetch])
   );
 
-  const courses = data ?? [];
+  const courses = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <View style={styles.container}>
@@ -52,6 +63,13 @@ export default function CourseManagementScreen() {
           data={courses}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} /> : null
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.row}

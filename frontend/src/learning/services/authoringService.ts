@@ -9,6 +9,23 @@ const num = (v: any, d = 0): number => {
 
 export type ManagedCourse = LearningCourse & { isPublished: boolean };
 
+export interface PagedResult<T> {
+  items: T[];
+  pagination: {
+    page: number;
+    size: number;
+    totalCount: number;
+    hasMore: boolean;
+  };
+}
+
+const pagination = (res: any, fallbackCount: number) => ({
+  page: num(res?.pagination?.page),
+  size: num(res?.pagination?.size, 20),
+  totalCount: num(res?.pagination?.totalCount, fallbackCount),
+  hasMore: !!res?.pagination?.hasMore,
+});
+
 const mapManaged = (c: any): ManagedCourse => ({
   id: str(c.id),
   title: str(c.title, "Untitled Course"),
@@ -27,10 +44,23 @@ const mapManaged = (c: any): ManagedCourse => ({
   isPublished: !!c.is_published,
 });
 
-export const getAllCoursesAdmin = async (): Promise<ManagedCourse[]> => {
-  const res = await apiService.get<any>("/getAllCourse");
+export const getAllCoursesAdmin = async ({
+  page = 0,
+  size = 20,
+  q = "",
+  published,
+}: {
+  page?: number;
+  size?: number;
+  q?: string;
+  published?: boolean;
+} = {}): Promise<PagedResult<ManagedCourse>> => {
+  const params: Record<string, string> = { page: String(page), size: String(size), q };
+  if (published !== undefined) params.published = String(published);
+  const res = await apiService.get<any>("/getAllCourse", params);
   const data = res?.data ?? res ?? [];
-  return (Array.isArray(data) ? data : []).map(mapManaged);
+  const items = (Array.isArray(data) ? data : []).map(mapManaged);
+  return { items, pagination: pagination(res, items.length) };
 };
 
 // Engagement stats per course for the instructor stats screen.
@@ -48,10 +78,22 @@ export interface CourseStatsRow {
   totalRatings: number;
 }
 
-export const getCourseStats = async (): Promise<CourseStatsRow[]> => {
-  const res = await apiService.get<any>("/getCourseStats");
+export const getCourseStats = async ({
+  page = 0,
+  size = 20,
+  q = "",
+  published,
+}: {
+  page?: number;
+  size?: number;
+  q?: string;
+  published?: boolean;
+} = {}): Promise<PagedResult<CourseStatsRow>> => {
+  const params: Record<string, string> = { page: String(page), size: String(size), q };
+  if (published !== undefined) params.published = String(published);
+  const res = await apiService.get<any>("/getCourseStats", params);
   const data = res?.data ?? res ?? [];
-  return (Array.isArray(data) ? data : []).map((c: any) => ({
+  const items = (Array.isArray(data) ? data : []).map((c: any) => ({
     id: str(c.id),
     title: str(c.title, "Untitled Course"),
     isPublished: !!c.is_published,
@@ -62,6 +104,7 @@ export const getCourseStats = async (): Promise<CourseStatsRow[]> => {
     rating: num(c.rating),
     totalRatings: num(c.total_ratings),
   }));
+  return { items, pagination: pagination(res, items.length) };
 };
 
 // Courses

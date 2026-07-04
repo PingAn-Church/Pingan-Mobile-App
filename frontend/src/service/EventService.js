@@ -3,13 +3,29 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
 
-export const getAllEvents = async () => {
+export const getAllEvents = async ({
+  status = "upcoming",
+  page = 0,
+  size = 20,
+  sort = "startAt,asc",
+  from,
+  to,
+} = {}) => {
   try {
-    const response = await axios.get(apiUrl(`/api/events`));
+    const response = await axios.get(apiUrl(`/api/events`), {
+      params: {
+        status,
+        page,
+        size,
+        sort,
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+      },
+    });
     return response.data;
   } catch (error) {
     console.error("Error fetching events:", error);
-    return [];
+    return { success: false, data: [], pagination: { hasMore: false } };
   }
 };
 

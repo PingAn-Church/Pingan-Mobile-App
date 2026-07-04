@@ -1,4 +1,4 @@
-import React, { useEffect, useContext, useState, useRef } from "react";
+import React, { useCallback, useEffect, useContext, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -75,7 +75,9 @@ const convertToDateTime = (dateString, timeString) => {
 export default function ManageEventsPage() {
   const navigation = useNavigation();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
-  console.log("UPCOMING EVENTS", upcomingEvents);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -85,44 +87,33 @@ export default function ManageEventsPage() {
     });
   }, [language]);
 
+  const loadEvents = useCallback(async (nextPage = 0, replace = false) => {
+    if (loading && !replace) return;
+    setLoading(true);
+    try {
+      const response = await getAllEvents({
+        status: "upcoming",
+        page: nextPage,
+        size: 20,
+        sort: "startAt,asc",
+      });
+      const items = Array.isArray(response?.data) ? response.data : [];
+      setUpcomingEvents((prev) =>
+        replace ? items : [...prev, ...items.filter((event) => !prev.some((p) => p.id === event.id))]
+      );
+      setPage(Number.isFinite(Number(response?.pagination?.page)) ? Number(response.pagination.page) : nextPage);
+      setHasMore(Boolean(response?.pagination?.hasMore));
+    } catch (err) {
+      console.error("Failed to load events:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading]);
+
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", loadEvents);
+    const unsubscribe = navigation.addListener("focus", () => loadEvents(0, true));
     return unsubscribe;
-  }, [navigation]);
-
-  const loadEvents = async () => {
-  try {
-    const data = await getAllEvents();
-    const now = new Date();
-    const upcoming = [];
-
-    data.forEach((event) => {
-      const eventEndTime = convertToDateTime(event.date, event.endTime);
-
-      // Guard against null before using .getTime()
-      if (eventEndTime && eventEndTime instanceof Date && !isNaN(eventEndTime)) {
-        const oneHourAfterEnd = new Date(eventEndTime.getTime() + 60 * 60 * 1000);
-        if (now <= oneHourAfterEnd) {
-          upcoming.push(event);
-        }
-      }
-    });
-
-    // SECURE SORT: Check for nulls during the sort process
-    upcoming.sort((a, b) => {
-      const dateA = convertToDateTime(a.date, a.startTime);
-      const dateB = convertToDateTime(b.date, b.startTime);
-      
-      const valA = dateA ? dateA.getTime() : 0;
-      const valB = dateB ? dateB.getTime() : 0;
-      return valA - valB;
-    });
-
-    setUpcomingEvents(upcoming);
-  } catch (err) {
-    console.error("Failed to load events:", err);
-  }
-};
+  }, [navigation, loadEvents]);
 
   const handleDelete = async (eventId) => {
     const confirmed = await confirmAction({
@@ -137,7 +128,7 @@ export default function ManageEventsPage() {
 
     try {
       await deleteEvent(eventId);
-      loadEvents();
+      loadEvents(0, true);
     } catch (err) {
       console.error("Failed to delete:", err);
     }
@@ -168,6 +159,12 @@ export default function ManageEventsPage() {
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
         contentContainerStyle={{ paddingBottom: 80 }}
+        onEndReached={() => {
+          if (!loading && hasMore) loadEvents(page + 1, false);
+        }}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 12 }} /> : null}
+        ListEmptyComponent={!loading ? <Text style={styles.noData}>{i18n.t("noUpcomingEvents")}</Text> : null}
       />
       <TouchableOpacity
         style={styles.createButton}
@@ -630,5 +627,11 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 18,
     fontWeight: "bold",
+  },
+  noData: {
+    fontSize: 16,
+    color: "gray",
+    textAlign: "center",
+    marginVertical: 20,
   },
 });

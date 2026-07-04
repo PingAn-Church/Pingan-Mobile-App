@@ -30,9 +30,11 @@ export const addVideo = async (title, videoId, videoType) => {
   }
 };
 
-export const fetchVideos = async () => {
+export const fetchVideos = async ({ page = 0, size = 20 } = {}) => {
   try {
-    const response = await axios.get(`${baseUrl()}/list`);
+    const response = await axios.get(`${baseUrl()}/list`, {
+      params: { page, size },
+    });
     return response.data;
   } catch (error) {
     console.error("Error fetching videos:", error);

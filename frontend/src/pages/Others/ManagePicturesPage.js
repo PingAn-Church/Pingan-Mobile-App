@@ -2,13 +2,14 @@ import React, { useContext, useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
-  ScrollView,
+  FlatList,
   Image,
   TouchableOpacity,
   Alert,
   StyleSheet,
   Button, 
-  Platform
+  Platform,
+  ActivityIndicator
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -28,6 +29,9 @@ import { showAlert } from "../../utils/showAlert";
 export default function ManagePicturesPage() {
   const navigation = useNavigation();
   const [pictures, setPictures] = useState([]);
+  const [marker, setMarker] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -39,18 +43,30 @@ export default function ManagePicturesPage() {
 
   useFocusEffect(
     useCallback(() => {
-      const loadPictures = async () => {
-        try {
-          const data = await fetchPictures("event");
-          console.log("pictures: ", data);
-          setPictures(data);
-        } catch (error) {
-          console.error("Error fetching pictures:", error);
-        }
-      };
-      loadPictures();
+      loadPictures(true);
     }, [])
   );
+
+  const loadPictures = async (replace = false) => {
+    if (!replace && (loading || !hasMore)) return;
+    setLoading(true);
+    try {
+      const response = await fetchPictures("event", {
+        size: 20,
+        marker: replace ? null : marker,
+      });
+      const data = Array.isArray(response?.data) ? response.data : [];
+      setPictures((prev) =>
+        replace ? data : [...prev, ...data.filter((picture) => !prev.includes(picture))]
+      );
+      setMarker(response?.pagination?.nextMarker || null);
+      setHasMore(Boolean(response?.pagination?.hasMore));
+    } catch (error) {
+      console.error("Error fetching pictures:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDeletePicture = async (fileUrl) => {
     console.log("fileurl: ", fileUrl);
@@ -77,13 +93,18 @@ export default function ManagePicturesPage() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {pictures.length === 0 ? (
-        <Text style={styles.noPicturesText}>{i18n.t("noPics")}</Text>
-      ) : (
-        <View style={styles.gridContainer}>
-          {pictures.map((picture, index) => (
-            <View key={index} style={styles.imageContainer}>
+    <View style={styles.screen}>
+      <FlatList
+        contentContainerStyle={styles.container}
+        data={pictures}
+        keyExtractor={(item) => item}
+        numColumns={Platform.OS === "web" ? 3 : 2}
+        onEndReached={() => loadPictures(false)}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
+        ListEmptyComponent={!loading ? <Text style={styles.noPicturesText}>{i18n.t("noPics")}</Text> : null}
+        renderItem={({ item: picture }) => (
+            <View style={styles.imageContainer}>
               <Image
                 source={{ uri: picture }}
                 style={styles.image}
@@ -97,9 +118,8 @@ export default function ManagePicturesPage() {
                 <Ionicons name="trash" size={25} color="white" />
               </TouchableOpacity>
             </View>
-          ))}
-        </View>
-      )}
+        )}
+      />
 
       {pictures.length < 20 ? (
         <TouchableOpacity
@@ -114,7 +134,7 @@ export default function ManagePicturesPage() {
           <Text style={styles.addButtonText}>{i18n.t("picLimit")}</Text>
         </TouchableOpacity>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -196,6 +216,7 @@ export function AddPicturePage() {
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#f5f5f5" },
   container: { flexGrow: 1, padding: 20, backgroundColor: "#f5f5f5" },
   header: { fontSize: 24, fontWeight: "bold", marginBottom: 20 },
   subHeader: {

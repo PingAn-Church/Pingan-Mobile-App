@@ -489,6 +489,9 @@ const ThreadDetailPage = ({ route }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [editingReplyId, setEditingReplyId] = useState(null);
   const [editContent, setEditContent] = useState("");
+  const [replyCursor, setReplyCursor] = useState(null);
+  const [repliesHasMore, setRepliesHasMore] = useState(true);
+  const [repliesLoading, setRepliesLoading] = useState(false);
 
   const flatListRef = useRef();
   const { language } = useContext(LanguageContext);
@@ -512,12 +515,15 @@ const ThreadDetailPage = ({ route }) => {
 
   const loadThreadAndReplies = async () => {
     try {
-      const [updatedThread, fetchedReplies] = await Promise.all([
+      const [updatedThread, repliesPage] = await Promise.all([
         fetchThreadById(thread.id),
-        fetchReplies(thread.id),
+        fetchReplies(thread.id, { size: 20 }),
       ]);
       setThread(updatedThread);
-      setReplies(fetchedReplies);
+      const items = Array.isArray(repliesPage?.data) ? repliesPage.data : [];
+      setReplies(items);
+      setReplyCursor(repliesPage?.pagination?.nextCursor || null);
+      setRepliesHasMore(Boolean(repliesPage?.pagination?.hasMore));
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("loadThreadFailed"), [
         { text: i18n.t("ok") },
@@ -531,12 +537,37 @@ const ThreadDetailPage = ({ route }) => {
     setRefreshing(false);
   };
 
+  const loadMoreReplies = async () => {
+    if (repliesLoading || !repliesHasMore) return;
+    setRepliesLoading(true);
+    try {
+      const repliesPage = await fetchReplies(thread.id, { after: replyCursor, size: 20 });
+      const items = Array.isArray(repliesPage?.data) ? repliesPage.data : [];
+      // Re-sort after merging: a reply posted locally sits at the end of the list
+      // and would otherwise appear before older pages fetched later.
+      setReplies((prev) =>
+        [
+          ...prev,
+          ...items.filter((reply) => !prev.some((existing) => existing.id === reply.id)),
+        ].sort((a, b) => Number(a.id) - Number(b.id))
+      );
+      setReplyCursor(repliesPage?.pagination?.nextCursor || replyCursor);
+      setRepliesHasMore(Boolean(repliesPage?.pagination?.hasMore));
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("loadThreadFailed"), [
+        { text: i18n.t("ok") },
+      ]);
+    } finally {
+      setRepliesLoading(false);
+    }
+  };
+
   const handleReply = async () => {
     if (!newReply.trim()) return;
 
     try {
-      await postReply(thread.id, { content: newReply });
-      await loadThreadAndReplies();
+      const reply = await postReply(thread.id, { content: newReply });
+      setReplies((prev) => [...prev.filter((r) => r.id !== reply.id), reply]);
 
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -605,6 +636,11 @@ const ThreadDetailPage = ({ route }) => {
             tintColor="#3b82f6"
           />
         }
+        onEndReached={loadMoreReplies}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          repliesLoading ? <Text style={styles.loadingMore}>{i18n.t("loading")}</Text> : null
+        }
         ListHeaderComponent={
           <View>
             <View style={styles.threadBox}>
@@ -662,9 +698,13 @@ const ThreadDetailPage = ({ route }) => {
                     onPress={async () => {
                       try {
                         await updateReply(item.id, editContent);
+                        setReplies((prev) =>
+                          prev.map((reply) =>
+                            reply.id === item.id ? { ...reply, content: editContent } : reply
+                          )
+                        );
                         setEditingReplyId(null);
                         setEditContent("");
-                        await loadThreadAndReplies();
                       } catch (err) {
                         showAlert(
                           i18n.t("error"),
@@ -712,7 +752,7 @@ const ThreadDetailPage = ({ route }) => {
 
                     try {
                       await deleteReply(item.id);
-                      await loadThreadAndReplies();
+                      setReplies((prev) => prev.filter((reply) => reply.id !== item.id));
                     } catch (err) {
                       showAlert(i18n.t("error"), i18n.t("deleteReplyFailed"), [
                         { text: i18n.t("ok") },
@@ -790,6 +830,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#333",
     lineHeight: 23,
+  },
+  loadingMore: {
+    textAlign: "center",
+    color: "#777",
+    paddingVertical: 10,
   },
 
   replyBox: {

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import {
   getPendingGrading,
@@ -113,9 +113,20 @@ function AttemptCard({ item, onGraded }: { item: PendingAttempt; onGraded: () =>
 
 export default function GradingScreen() {
   const queryClient = useQueryClient();
-  const { data, isLoading, isError, refetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["learning", "grading", "pending"],
-    queryFn: getPendingGrading,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getPendingGrading({ page: Number(pageParam), size: 20 }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? lastPage.pagination.page + 1 : undefined,
   });
 
   useFocusEffect(
@@ -128,7 +139,16 @@ export default function GradingScreen() {
     queryClient.invalidateQueries({ queryKey: ["learning", "grading", "pending"] });
   };
 
-  const attempts = data ?? [];
+  const attempts = data?.pages.flatMap((page) => page.items) ?? [];
+
+  // A page can filter down to zero cards server-side (e.g. every manual question
+  // already graded but unreleased) while later pages still have work. An empty
+  // list never triggers onEndReached, so keep fetching until something renders.
+  useEffect(() => {
+    if (!isLoading && !isFetchingNextPage && hasNextPage && attempts.length === 0) {
+      fetchNextPage();
+    }
+  }, [isLoading, isFetchingNextPage, hasNextPage, attempts.length, fetchNextPage]);
 
   return (
     <View style={styles.container}>
@@ -150,6 +170,13 @@ export default function GradingScreen() {
           data={attempts}
           keyExtractor={(item) => item.attemptId}
           contentContainerStyle={styles.list}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} /> : null
+          }
           renderItem={({ item }) => <AttemptCard item={item} onGraded={onGraded} />}
         />
       )}
