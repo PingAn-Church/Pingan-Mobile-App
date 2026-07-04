@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Update the Android in-app-update download links + release message that the
- * backend serves from application.properties (app.update.android.*).
+ * Update the Android in-app-update download links that the backend serves from
+ * application.properties (app.update.android.*).
  *
  * The app picks the link per device: China-based devices get the China mirror,
  * everyone else gets the international (Google) link. This script sets those two
- * URLs and the "what's new" message shown in the update dialog.
+ * URLs and the China-mirror share password.
  *
  * npm strips flags from `npm run <script> ...` unless separated by `--`, so pass
  * the flags AFTER a `--`:
@@ -13,14 +13,12 @@
  *   npm run dir-link -- -g https://drive.google.com/…   # international / Google
  *                       -c https://pan.example.cn/app    # China mirror
  *                       -p 518c                          # China-mirror password
- *                       -m "Bug fixes and speed-ups"     # update message (en+zh)
  *
  * Flags (all optional; omitted ones are left unchanged):
  *   --google,   -g  <https url>   international download page (non-China devices)
  *   --china,    -c  <https url>   China-mirror download page (China devices)
  *   --password, -p  <text>        China-mirror share password, shown in a prompt
  *                                 before redirecting (pass "" to clear it)
- *   --message,  -m  <text>        "what's new" text shown in the update dialog
  *
  * This only edits backend/src/main/resources/application.properties — it does
  * NOT create a git commit, and the backend must restart for new values to apply.
@@ -43,8 +41,6 @@ const backendPropertiesPath = path.resolve(
 const GOOGLE_URL = /(app\.update\.android\.direct\.download-page-url=).*/g;
 const CHINA_URL = /(app\.update\.android\.direct\.download-page-url-cn=).*/g;
 const CHINA_PASSWORD = /(app\.update\.android\.direct\.download-password-cn=).*/g;
-// Release notes exist per channel (direct + play) and language (en + zh) = 4.
-const RELEASE_NOTES = /(app\.update\.android\.(?:direct|play)\.release-notes\.(?:en|zh)=).*/g;
 
 function fail(msg) {
   console.error(`✗ ${msg}`);
@@ -77,7 +73,6 @@ const rawArgs = process.argv.slice(2).filter((a) => a && a !== "--");
 let china = null;
 let google = null;
 let password = null;
-let message = null;
 const unexpected = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -88,9 +83,6 @@ for (let i = 0; i < rawArgs.length; i++) {
   else if (a === "-g" || a === "--google") google = (rawArgs[++i] ?? "").trim();
   else if (a.startsWith("--google=")) google = a.slice("--google=".length).trim();
   else if (a.startsWith("-g=")) google = a.slice(3).trim();
-  else if (a === "-m" || a === "--message") message = rawArgs[++i] ?? "";
-  else if (a.startsWith("--message=")) message = a.slice("--message=".length);
-  else if (a.startsWith("-m=")) message = a.slice(3);
   else if (a === "-p" || a === "--password") password = (rawArgs[++i] ?? "").trim();
   else if (a.startsWith("--password=")) password = a.slice("--password=".length).trim();
   else if (a.startsWith("-p=")) password = a.slice(3).trim();
@@ -100,19 +92,18 @@ for (let i = 0; i < rawArgs.length; i++) {
 if (unexpected.length) {
   fail(
     `Unexpected arg(s): ${unexpected.join(", ")}. Pass flags after \`--\`, e.g.\n` +
-      '  npm run dir-link -- -g <https url> -c <https url> -m "message"'
+      "  npm run dir-link -- -g <https url> -c <https url>"
   );
 }
-if (china === null && google === null && message === null && password === null) {
+if (china === null && google === null && password === null) {
   fail(
     "Nothing to do. Usage (note the `--`):\n" +
-      '  npm run dir-link -- -g <https google url> -c <https china url> -p <password> -m "update message"'
+      "  npm run dir-link -- -g <https google url> -c <https china url> -p <password>"
   );
 }
 if (google !== null && !/^https:\/\//i.test(google)) fail("--google/-g must be an https URL.");
 if (china !== null && !/^https:\/\//i.test(china)) fail("--china/-c must be an https URL.");
 if (password !== null && password.includes("\n")) fail("--password/-p must be a single line.");
-if (message !== null && message.includes("\n")) fail("--message/-m must be a single line.");
 
 if (!fs.existsSync(backendPropertiesPath)) {
   fail(`Backend properties not found at ${backendPropertiesPath}`);
@@ -129,15 +120,11 @@ if (china !== null) {
 if (password !== null) {
   props = replaceExpected(props, CHINA_PASSWORD, `$1${propVal(password)}`, "direct download-password-cn (China mirror password)", 1);
 }
-if (message !== null) {
-  props = replaceExpected(props, RELEASE_NOTES, `$1${propVal(message)}`, "release-notes entries (direct+play, en+zh)", 4);
-}
 
 fs.writeFileSync(backendPropertiesPath, props);
 
-console.log("✓ updated backend app-update download links / message:");
+console.log("✓ updated backend app-update download links:");
 if (google !== null) console.log(`  google  → ${google}`);
 if (china !== null) console.log(`  china   → ${china}`);
 if (password !== null) console.log(`  password → ${password || "(cleared)"}`);
-if (message !== null) console.log(`  message → ${message}`);
 console.log("Redeploy/restart the backend for the new values to take effect.");

@@ -15,13 +15,15 @@
  *   npm run update patch forced-update
  *                            # also raise the minimum supported version so
  *                            # older installs are force-updated
+ *   npm run update -- patch -m "Bug fixes and speed-ups"
+ *                            # also update the in-app update message
  *
  * npm strips --flags from `npm run` unless separated by `--`, so the force
  * toggle is accepted as a bare word above; the flag form works after `--`:
  *   npm run update -- patch --forced-update
  *
- * Download links + the update message live in the backend and are managed
- * separately with `npm run dir-link` (see scripts/set-download-links.js).
+ * Download links live in the backend and are managed separately with
+ * `npm run dir-link` (see scripts/set-download-links.js).
  *
  * This only edits local files — it does NOT create a git commit or tag.
  */
@@ -52,6 +54,7 @@ const XCODE_MARKETING_VERSION = /(MARKETING_VERSION = )\d+\.\d+\.\d+(;)/g;
 const BACKEND_ANDROID_LATEST_NAME = /(app\.update\.android\.(?:direct|play)\.latest-version-name=).*/g;
 const BACKEND_ANDROID_LATEST_CODE = /(app\.update\.android\.(?:direct|play)\.latest-version-code=)\d+/g;
 const BACKEND_ANDROID_MIN_SUPPORTED_CODE = /(app\.update\.android\.(?:direct|play)\.min-supported-version-code=)\d+/g;
+const BACKEND_ANDROID_RELEASE_NOTES = /(app\.update\.android\.(?:direct|play)\.release-notes\.(?:en|zh)=).*/g;
 
 function fail(msg) {
   console.error(`✗ ${msg}`);
@@ -101,6 +104,18 @@ function replaceExpected(raw, regex, replacement, label, expectedCount) {
   return raw.replace(regex, replacement);
 }
 
+// Spring Boot reads .properties as ISO-8859-1, so non-ASCII (e.g. Chinese) must
+// be stored as \uXXXX escapes or it becomes mojibake. Encode per UTF-16 unit
+// (astral chars become two escapes, which is exactly what Java expects).
+const toPropsAscii = (s) =>
+  s.replace(/[^\x00-\x7F]/g, (ch) => "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
+
+// Escape `$` so values aren't read as replacement patterns ($1, $&, ...).
+const esc = (s) => s.replace(/\$/g, "$$$$");
+
+// A value ready to drop into a .properties line via String.replace.
+const propVal = (s) => esc(toPropsAscii(s));
+
 // --- parse CLI: <bump> [forced-update] --------------------------------------
 // npm strips --flags from `npm run <script> ...` unless you use `--`, so the
 // force toggle is ALSO accepted as the bare word `forced-update`. The flag
@@ -108,13 +123,30 @@ function replaceExpected(raw, regex, replacement, label, expectedCount) {
 const rawArgs = process.argv.slice(2).filter((a) => a && a !== "--");
 
 let forceMinimumSupported = false;
+let releaseMessage = null;
 let arg = null;
 const unexpected = [];
+
+function setReleaseMessage(value) {
+  if (releaseMessage !== null) fail("Update message was provided more than once.");
+  if (value === undefined) fail("--message/-m requires a single-line value.");
+  releaseMessage = value;
+}
 
 for (let i = 0; i < rawArgs.length; i++) {
   const a = rawArgs[i];
   if (a === "--forced-update" || a === "forced-update") {
     forceMinimumSupported = true;
+  } else if (a === "-m" || a === "--message") {
+    setReleaseMessage(rawArgs[++i]);
+  } else if (a.startsWith("--message=")) {
+    setReleaseMessage(a.slice("--message=".length));
+  } else if (a.startsWith("-m=")) {
+    setReleaseMessage(a.slice(3));
+  } else if (a.startsWith("message=")) {
+    setReleaseMessage(a.slice("message=".length));
+  } else if (a.startsWith("release-notes=")) {
+    setReleaseMessage(a.slice("release-notes=".length));
   } else if (arg === null && !a.startsWith("--")) {
     arg = a;
   } else {
@@ -123,7 +155,8 @@ for (let i = 0; i < rawArgs.length; i++) {
 }
 
 if (unexpected.length) fail(`Unknown or unexpected arg(s): ${unexpected.join(", ")}`);
-if (!arg) fail("Usage: npm run update <patch|minor|major|x.y.z> [forced-update]");
+if (!arg) fail('Usage: npm run update <patch|minor|major|x.y.z> [forced-update] [-m "update message"]');
+if (releaseMessage !== null && releaseMessage.includes("\n")) fail("--message/-m must be a single line.");
 
 // --- read current version from app.config.js (source of truth) --------------
 const cfgRaw = fs.readFileSync(cfgPath, "utf8");
@@ -148,6 +181,50 @@ const nextCode = versionCode(next);
 const pkgRaw = fs.readFileSync(pkgPath, "utf8");
 if (!PKG_VERSION.test(pkgRaw)) fail('No "version" field found in package.json.');
 const pkgCurrent = JSON.parse(pkgRaw).version;
+
+// --- precompute backend metadata before writing files -----------------------
+let nextPropsRaw = null;
+if (!fs.existsSync(backendPropertiesPath)) {
+  if (releaseMessage !== null) {
+    fail(`Backend properties not found at ${backendPropertiesPath}`);
+  }
+} else {
+  nextPropsRaw = fs.readFileSync(backendPropertiesPath, "utf8");
+  nextPropsRaw = replaceExpected(
+    nextPropsRaw,
+    BACKEND_ANDROID_LATEST_NAME,
+    `$1${next}`,
+    "Android latest-version-name entries in backend application.properties",
+    2
+  );
+  nextPropsRaw = replaceExpected(
+    nextPropsRaw,
+    BACKEND_ANDROID_LATEST_CODE,
+    `$1${nextCode}`,
+    "Android latest-version-code entries in backend application.properties",
+    2
+  );
+
+  if (forceMinimumSupported) {
+    nextPropsRaw = replaceExpected(
+      nextPropsRaw,
+      BACKEND_ANDROID_MIN_SUPPORTED_CODE,
+      `$1${nextCode}`,
+      "Android min-supported-version-code entries in backend application.properties",
+      2
+    );
+  }
+
+  if (releaseMessage !== null) {
+    nextPropsRaw = replaceExpected(
+      nextPropsRaw,
+      BACKEND_ANDROID_RELEASE_NOTES,
+      `$1${propVal(releaseMessage)}`,
+      "Android release-notes entries in backend application.properties",
+      4
+    );
+  }
+}
 
 // --- write every version holder (regex replace preserves formatting)
 let nextCfg = replaceOnce(cfgRaw, CFG_VERSION, `$1$2${next}$2`, "expo.version in app.config.js");
@@ -186,34 +263,8 @@ if (fs.existsSync(iosProjectPath)) {
   fs.writeFileSync(iosProjectPath, projectRaw);
 }
 
-if (fs.existsSync(backendPropertiesPath)) {
-  let propsRaw = fs.readFileSync(backendPropertiesPath, "utf8");
-  propsRaw = replaceExpected(
-    propsRaw,
-    BACKEND_ANDROID_LATEST_NAME,
-    `$1${next}`,
-    "Android latest-version-name entries in backend application.properties",
-    2
-  );
-  propsRaw = replaceExpected(
-    propsRaw,
-    BACKEND_ANDROID_LATEST_CODE,
-    `$1${nextCode}`,
-    "Android latest-version-code entries in backend application.properties",
-    2
-  );
-
-  if (forceMinimumSupported) {
-    propsRaw = replaceExpected(
-      propsRaw,
-      BACKEND_ANDROID_MIN_SUPPORTED_CODE,
-      `$1${nextCode}`,
-      "Android min-supported-version-code entries in backend application.properties",
-      2
-    );
-  }
-
-  fs.writeFileSync(backendPropertiesPath, propsRaw);
+if (nextPropsRaw !== null) {
+  fs.writeFileSync(backendPropertiesPath, nextPropsRaw);
 }
 
 if (pkgCurrent !== current) {
@@ -225,3 +276,6 @@ console.log(
   `✓ version ${current} → ${next}, build ${nextCode}` +
     (forceMinimumSupported ? " (minimum supported)" : "")
 );
+if (releaseMessage !== null) {
+  console.log(`✓ update message → ${releaseMessage}`);
+}

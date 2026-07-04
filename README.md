@@ -216,6 +216,8 @@ npm run update minor                 # 0.1.2 -> 0.2.0
 npm run update major                 # 0.1.2 -> 1.0.0
 npm run update 1.2.3                 # set an explicit version
 npm run update patch forced-update   # also raise min-supported so older installs are force-updated
+npm run update -- patch -m "0.1.9: faster chat, bug fixes"
+                                      # also update the in-app update message
 ```
 
 The Android version code is `major*10000 + minor*100 + patch` (so `0.1.3` -> `103`).
@@ -223,18 +225,22 @@ The Android version code is `major*10000 + minor*100 + patch` (so `0.1.3` -> `10
 `forced-update` also has a `--forced-update` flag form, but note that `npm run`
 strips `--`/`-` flags unless you separate them with `--` (e.g.
 `npm run update -- patch --forced-update`) — the bare `forced-update` word above
-avoids that. The script only edits files; it does not commit or tag, and the
-backend must be redeployed for new update metadata to take effect.
+avoids that. `-m` / `--message` updates the release notes shown in the Android
+update dialog for both direct-download and Play channels, in both English and
+Chinese metadata entries. Non-ASCII message text (e.g. Chinese) is stored as
+`\uXXXX` escapes automatically, since Spring reads `.properties` as ISO-8859-1.
+The script only edits files; it does not commit or tag, and the backend must be
+redeployed for new update metadata to take effect.
 
-## In-App Update Links & Message
+## In-App Update Links
 
 Android builds check the backend for a newer version and open a download link.
 Because Google Play/Drive are blocked in China, the app serves a China mirror to
 China-based devices (detected on-device by region/timezone) and the
 international (Google) link to everyone else. `npm run dir-link` sets those
-links, the China-mirror share password, and the "what's new" message shown in
-the update dialog. If the China mirror is password-gated (e.g. Lanzou), CN users
-get a confirmation that shows the password before they are redirected.
+links and the China-mirror share password. If the China mirror is password-gated
+(e.g. Lanzou), CN users get a confirmation that shows the password before they
+are redirected.
 
 Pass the flags after `--` (npm strips `--`/`-` flags otherwise). All are
 optional; omitted values are left unchanged:
@@ -244,13 +250,10 @@ cd frontend
 # -g / --google    international link (non-China devices)
 # -c / --china     China-mirror link (China devices)
 # -p / --password  China-mirror share password (shown to CN users before redirect)
-# -m / --message   update message (shown for both en and zh)
-npm run dir-link -- -g https://drive.google.com/… -c https://pan.example.cn/app.apk -p 518c -m "0.1.9: faster chat, bug fixes"
+npm run dir-link -- -g https://drive.google.com/… -c https://pan.example.cn/app.apk -p 518c
 ```
 
-`-g`/`-c` must be `https` URLs. Non-ASCII message text (e.g. Chinese) is stored
-as `\uXXXX` escapes automatically, since Spring reads `.properties` as
-ISO-8859-1. These values live in
+`-g`/`-c` must be `https` URLs. These values live in
 `backend/src/main/resources/application.properties`, so redeploy the backend for
 changes to take effect.
 
