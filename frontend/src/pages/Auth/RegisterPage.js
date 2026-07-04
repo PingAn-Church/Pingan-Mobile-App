@@ -74,7 +74,7 @@ const TERMS_COPY = {
       {
         title: "8. Account deletion and retention",
         body:
-          "You may request account deletion by contacting an administrator. Administrators may deactivate or permanently delete accounts where allowed by app policy. Some records may be retained where reasonably needed for security, legal compliance, dispute handling, or church administration. Cached media on your device can be cleared from app settings where available.",
+          "You may delete your account at any time from the Settings page in the app, or request deletion by contacting an administrator. When an account is deleted, your personal profile data is removed or anonymized; messages, threads, and other content you shared with the community may remain visible under a \"Deleted Account\" name. Administrators may also deactivate or permanently delete accounts where allowed by app policy. Some records may be retained where reasonably needed for security, legal compliance, dispute handling, or church administration. Cached media on your device can be cleared from app settings where available.",
       },
       {
         title: "9. Availability, updates, and changes",
@@ -134,7 +134,7 @@ const TERMS_COPY = {
       {
         title: "8. 账户删除与数据保留",
         body:
-          "你可以联系管理员请求删除账户。管理员可在 App 政策允许的情况下停用或永久删除账户。出于安全、法律合规、争议处理或教会管理需要，部分记录可能会被合理保留。设备上的媒体缓存可在 App 设置中清除（如该功能可用）。",
+          "你可以随时在 App 的设置页面删除自己的账户，也可以联系管理员申请删除。账户删除后，你的个人资料将被移除或匿名化处理；你曾发送的消息、帖子等社区共享内容可能仍会保留，并以 “Deleted Account”（已删除账户）的名义显示。管理员也可在 App 政策允许的情况下停用或永久删除账户。出于安全、法律合规、争议处理或教会管理需要，部分记录可能会被合理保留。设备上的媒体缓存可在 App 设置中清除（如该功能可用）。",
       },
       {
         title: "9. 可用性、更新与变更",
@@ -565,6 +565,10 @@ const styles = StyleSheet.create({
   },
   termsScroll: {
     maxHeight: 480,
+    // Let the terms body shrink on short screens so the header and the Close
+    // button always stay inside the modal's 86% height cap (RN children default
+    // to flexShrink: 0, which would otherwise clip the button).
+    flexShrink: 1,
   },
   termsScrollContent: {
     paddingBottom: 8,
