@@ -94,10 +94,9 @@ class WebSecurityRulesTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void fullUserListIsAllowedForAdmin() throws Exception {
-        when(jwtUtil.extractEmail(anyString())).thenReturn("admin@example.com");
-        when(userRepository.findByEmail("admin@example.com"))
-                .thenReturn(java.util.Optional.of(userWithEmail(1, "admin@example.com")));
-        when(userRepository.findAll()).thenReturn(List.of(userWithEmail(2, "other@example.com")));
+        when(userService.searchUsers(anyString(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(userWithEmail(2, "other@example.com")),
+                        PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/users").header("Authorization", "Bearer t"))
                 .andExpect(status().isOk());
@@ -150,7 +149,8 @@ class WebSecurityRulesTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void deletedAccountsListIsAllowedForAdmin() throws Exception {
-        when(userAccountDeletionService.listDeletedAccounts()).thenReturn(List.of());
+        when(userAccountDeletionService.listDeletedAccounts(anyString(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/users/deleted"))
                 .andExpect(status().isOk());

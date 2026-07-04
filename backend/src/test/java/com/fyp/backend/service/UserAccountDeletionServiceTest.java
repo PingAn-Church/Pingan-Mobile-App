@@ -117,7 +117,6 @@ class UserAccountDeletionServiceTest {
         when(eventRepository.findByCheckedInUserId(ID)).thenReturn(List.of());
         when(messageReportRepository.findBySenderIdOrReporterIdOrResolvedById(ID, ID, ID))
                 .thenReturn(List.of());
-        when(courseRepository.findByInstructorId(ID)).thenReturn(List.of());
         when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
     }
@@ -189,7 +188,7 @@ class UserAccountDeletionServiceTest {
         assertThrows(UserAccountDeletionService.DeletedAccountStillReferencedException.class,
                 () -> service.purgeDeletedAccount(ID));
 
-        verify(userRepository, never()).delete(any());
+        verify(userRepository, never()).delete(any(User.class));
     }
 
     @Test
