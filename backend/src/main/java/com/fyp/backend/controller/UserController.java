@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fyp.backend.dto.DeletedAccountDto;
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
 import com.fyp.backend.dto.UserSummaryDto;
@@ -31,6 +33,7 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserAccountDeletionService;
+import com.fyp.backend.service.UserAccountDeletionService.DeletedAccountStillReferencedException;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.Pagination;
@@ -136,7 +139,7 @@ public class UserController {
 
         String term = q == null ? "" : q.trim();
         Page<User> result = term.isEmpty()
-                ? userRepository.findByActiveTrue(pageable)
+                ? userRepository.findByActiveTrueAndDeletedAccountFalse(pageable)
                 : userRepository.searchActiveByName(term, pageable);
 
         List<UserSummaryDto> data = result.getContent().stream()
@@ -178,6 +181,7 @@ public class UserController {
         List<UserProfileDto> usersWithoutCurrentUser = allUsers.stream()
                 .filter(user -> !user.getId().equals(currentUser.getId())) // Exclude the current user
                 .filter(User::isActive) // Hide deactivated accounts
+                .filter(user -> !user.isDeletedAccount())
                 .map(UserProfileDto::from)
                 .collect(Collectors.toList());
 
@@ -251,6 +255,12 @@ public class UserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/deleted")
+    public ResponseEntity<List<DeletedAccountDto>> getDeletedAccounts() {
+        return ResponseEntity.ok(userAccountDeletionService.listDeletedAccounts());
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/update-active/{id}")
     public ResponseEntity<String> updateUserActiveStatus(
             @PathVariable Long id,
@@ -272,6 +282,36 @@ public class UserController {
         try {
             userAccountDeletionService.deleteUserCompletely(id);
             return ResponseEntity.ok("User and associated data permanently deleted.");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/deleted/{id}/purge")
+    public ResponseEntity<?> purgeDeletedAccount(@PathVariable Long id) {
+        try {
+            userAccountDeletionService.purgeDeletedAccount(id);
+            return ResponseEntity.ok("Deleted Account tombstone purged.");
+        } catch (DeletedAccountStillReferencedException e) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("message", e.getMessage());
+            body.put("references", e.getReferences());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<String> deleteOwnAccount(@RequestHeader("Authorization") String authorizationHeader) {
+        Long userId = userService.getUserIdFromToken(authorizationHeader);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Unauthorized");
+        }
+        try {
+            userAccountDeletionService.deleteOwnAccount(userId);
+            return ResponseEntity.ok("Account deleted.");
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
         }

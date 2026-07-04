@@ -1,9 +1,9 @@
 package com.fyp.backend.service;
 
 import java.sql.Timestamp;
-import java.util.Comparator;
-import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -79,12 +79,13 @@ public class MessageReportService {
         return messageReportRepository.save(report);
     }
 
-    /** All reports, pending first, newest first within each group. */
-    public List<MessageReport> getAllReports() {
-        return messageReportRepository.findAllByOrderByReportedAtDesc().stream()
-                .sorted(Comparator.comparing(
-                        (MessageReport r) -> MessageReport.STATUS_PENDING.equals(r.getStatus()) ? 0 : 1))
-                .toList();
+    /** Paged report queue, optionally filtered by status and reportedAt range. */
+    public Page<MessageReport> getReports(String status, Timestamp from, Timestamp to, Pageable pageable) {
+        String normalizedStatus = normalizeStatus(status);
+        if (from != null && to != null && from.after(to)) {
+            throw new IllegalArgumentException("from must be before or equal to to.");
+        }
+        return messageReportRepository.findReports(normalizedStatus, from, to, pageable);
     }
 
     @Transactional
@@ -133,5 +134,17 @@ public class MessageReportService {
         String last = user.getLastName() != null ? user.getLastName() : "";
         String name = (first + " " + last).trim();
         return name.isEmpty() ? user.getEmail() : name;
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+
+        String normalized = status.trim().toUpperCase();
+        if (MessageReport.STATUS_PENDING.equals(normalized) || MessageReport.STATUS_RESOLVED.equals(normalized)) {
+            return normalized;
+        }
+        throw new IllegalArgumentException("status must be PENDING or RESOLVED.");
     }
 }

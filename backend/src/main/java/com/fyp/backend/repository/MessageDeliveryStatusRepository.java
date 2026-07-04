@@ -13,6 +13,8 @@ public interface MessageDeliveryStatusRepository extends JpaRepository<MessageDe
     List<MessageDeliveryStatus> findByMessageId(Long messageId);
     void deleteByMessageIdAndUserId(Long messageId, Long userId);
 
+    long countByUserId(Long userId);
+
     // Account-deletion sweep: drop this user's delivery rows across every message
     // (including others' messages they were a recipient of), in one statement.
     @Modifying(flushAutomatically = true, clearAutomatically = true)

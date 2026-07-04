@@ -12,4 +12,6 @@ public interface ThreadRepository extends JpaRepository<Thread, Long> {
 
     // Threads authored by a user; deleting each cascades its replies (orphanRemoval).
     List<Thread> findByCreatedById(Long userId);
+
+    long countByCreatedById(Long userId);
 }

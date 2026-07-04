@@ -8,10 +8,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.sql.Timestamp;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -114,6 +119,42 @@ class MessageReportServiceTest {
         when(messageRepository.findById(5L)).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> service.createReport(5L, 2L));
+    }
+
+    // ---- listing reports ---------------------------------------------------
+
+    @Test
+    void listReportsNormalizesStatusAndDelegatesFilters() {
+        Timestamp from = Timestamp.valueOf("2026-07-01 00:00:00");
+        Timestamp to = Timestamp.valueOf("2026-07-31 23:59:59");
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<MessageReport> expected = new PageImpl<>(List.of(pendingReport(1L)), pageable, 1);
+        when(messageReportRepository.findReports("PENDING", from, to, pageable)).thenReturn(expected);
+
+        Page<MessageReport> actual = service.getReports("pending", from, to, pageable);
+
+        assertEquals(expected, actual);
+        verify(messageReportRepository).findReports("PENDING", from, to, pageable);
+    }
+
+    @Test
+    void listReportsRejectsUnknownStatus() {
+        Pageable pageable = PageRequest.of(0, 20);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.getReports("ARCHIVED", null, null, pageable));
+        verify(messageReportRepository, never()).findReports(any(), any(), any(), any());
+    }
+
+    @Test
+    void listReportsRejectsInvertedDateRange() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Timestamp from = Timestamp.valueOf("2026-08-01 00:00:00");
+        Timestamp to = Timestamp.valueOf("2026-07-01 00:00:00");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.getReports(MessageReport.STATUS_PENDING, from, to, pageable));
+        verify(messageReportRepository, never()).findReports(any(), any(), any(), any());
     }
 
     // ---- resolving reports -------------------------------------------------

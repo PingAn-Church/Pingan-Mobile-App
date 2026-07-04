@@ -20,6 +20,8 @@
 
 package com.fyp.backend.dto;
 
+import java.time.Instant;
+
 import com.fyp.backend.model.User;
 
 public class UserProfileDto {
@@ -32,6 +34,8 @@ public class UserProfileDto {
     private boolean isVerifiedUser;
     private boolean isAdmin;
     private boolean isInstructor;
+    private boolean deletedAccount;
+    private Instant deletedAt;
     private String birthday;
 
     public UserProfileDto(Long id, String firstName, String lastName, String email, String profileImage,
@@ -51,6 +55,22 @@ public class UserProfileDto {
      * Prefer this over the constructor so new role fields stay in one place.
      */
     public static UserProfileDto from(User user) {
+        if (user.isDeletedAccount()) {
+            UserProfileDto dto = new UserProfileDto(
+                    user.getId(),
+                    "Deleted",
+                    "Account",
+                    null,
+                    null,
+                    false,
+                    false,
+                    null);
+            dto.isInstructor = false;
+            dto.deletedAccount = true;
+            dto.deletedAt = user.getDeletedAt();
+            return dto;
+        }
+
         UserProfileDto dto = new UserProfileDto(
                 user.getId(),
                 user.getFirstName(),
@@ -61,6 +81,8 @@ public class UserProfileDto {
                 user.isAdmin(),
                 user.getBirthday());
         dto.isInstructor = user.isInstructor();
+        dto.deletedAccount = false;
+        dto.deletedAt = user.getDeletedAt();
         return dto;
     }
 
@@ -127,6 +149,22 @@ public class UserProfileDto {
 
     public void setInstructor(Boolean isInstructor) {
         this.isInstructor = isInstructor;
+    }
+
+    public boolean isDeletedAccount() {
+        return deletedAccount;
+    }
+
+    public void setDeletedAccount(boolean deletedAccount) {
+        this.deletedAccount = deletedAccount;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
     }
 
     public String getBirthday() {

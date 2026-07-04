@@ -13,6 +13,8 @@ import java.util.List;
 public interface ThreadReplyRepository extends JpaRepository<ThreadReply, Long> {
     List<ThreadReply> findByThreadId(Long threadId);
 
+    long countByAuthorId(Long userId);
+
     // Account-deletion cleanup: replies a user posted on threads owned by others.
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM ThreadReply r WHERE r.author.id = :userId")

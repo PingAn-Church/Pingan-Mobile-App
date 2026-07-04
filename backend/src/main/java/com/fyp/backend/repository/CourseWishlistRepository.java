@@ -16,6 +16,8 @@ public interface CourseWishlistRepository extends JpaRepository<CourseWishlist, 
 
     boolean existsByUserIdAndCourseId(Long userId, Long courseId);
 
+    long countByUserId(Long userId);
+
     void deleteByUserIdAndCourseId(Long userId, Long courseId);
 
     void deleteByCourseId(Long courseId);

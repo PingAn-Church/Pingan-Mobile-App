@@ -12,5 +12,7 @@ public interface LearningGoalRepository extends JpaRepository<LearningGoal, Long
 
     boolean existsByUserIdAndTemplateId(Long userId, Long templateId);
 
+    long countByUserId(Long userId);
+
     void deleteByUserId(Long userId);
 }

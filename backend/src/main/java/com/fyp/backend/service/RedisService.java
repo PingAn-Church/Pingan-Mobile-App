@@ -124,6 +124,17 @@ public class RedisService {
                 .collect(Collectors.toList());
     }
 
+    /** Remove all online-presence keys for an account email. */
+    public void clearUserOnlineStatus(String email) {
+        if (email == null || email.isBlank()) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(USER_STATUS_KEY + email + ":*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
+    }
+
     /**
      * Check if a refresh token is expired for a specific user and device.
      */

@@ -1,5 +1,7 @@
 package com.fyp.backend.model;
 
+import java.time.Instant;
+
 import org.hibernate.annotations.ColumnDefault;
 
 import jakarta.persistence.Column;
@@ -53,6 +55,15 @@ public class User {
     @ColumnDefault("true")
     @Column(nullable = false)
     private boolean active = true;
+
+    // Irreversible self-deletion tombstone. The row stays only to preserve
+    // shared UGC foreign keys such as chat messages and forum posts.
+    @ColumnDefault("false")
+    @Column(nullable = false)
+    private boolean deletedAccount = false;
+
+    @Column
+    private Instant deletedAt;
 
     // E-learning: gamification credits balance
     @ColumnDefault("0")

@@ -10,5 +10,7 @@ public interface UserPreferencesRepository extends JpaRepository<UserPreferences
 
     Optional<UserPreferences> findByUserId(Long userId);
 
+    long countByUserId(Long userId);
+
     void deleteByUserId(Long userId);
 }

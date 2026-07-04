@@ -125,6 +125,44 @@ class WebSecurityRulesTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void deleteOwnAccountIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(delete("/api/users/me").header("Authorization", "Bearer t"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void deleteOwnAccountIsAllowedForAuthenticated() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+
+        mockMvc.perform(delete("/api/users/me").header("Authorization", "Bearer t"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void deletedAccountsListIsForbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(get("/api/users/deleted"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void deletedAccountsListIsAllowedForAdmin() throws Exception {
+        when(userAccountDeletionService.listDeletedAccounts()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/users/deleted"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void deletedAccountPurgeIsAllowedForAdmin() throws Exception {
+        mockMvc.perform(delete("/api/users/deleted/7/purge"))
+                .andExpect(status().isOk());
+    }
+
     // ---- directory search: authenticated, no email, clamped ---------------
 
     @Test
@@ -135,7 +173,7 @@ class WebSecurityRulesTest {
     @Test
     @WithMockUser
     void userSearchOmitsEmailAndClampsPageSize() throws Exception {
-        when(userRepository.findByActiveTrue(any(Pageable.class)))
+        when(userRepository.findByActiveTrueAndDeletedAccountFalse(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(userWithEmail(2, "secret@example.com")),
                         PageRequest.of(0, 50), 1));
 
@@ -229,8 +267,26 @@ class WebSecurityRulesTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void reportQueueIsAllowedForAdmin() throws Exception {
-        when(messageReportService.getAllReports()).thenReturn(List.of());
-        mockMvc.perform(get("/api/reports")).andExpect(status().isOk());
+        when(messageReportService.getReports(any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(new MessageReport()), PageRequest.of(0, 50), 1));
+
+        mockMvc.perform(get("/api/reports")
+                        .param("status", "PENDING")
+                        .param("from", "2026-07-01")
+                        .param("to", "2026-07-31")
+                        .param("size", "9999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.pagination.size").value(50))
+                .andExpect(jsonPath("$.pagination.hasMore").value(false));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void reportQueueRejectsInvalidDate() throws Exception {
+        mockMvc.perform(get("/api/reports")
+                        .param("from", "not-a-date"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

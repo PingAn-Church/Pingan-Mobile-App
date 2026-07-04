@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
     Optional<RefreshToken> findByUserEmailAndDeviceId(String userEmail, String deviceId);
+    long countByUserEmail(String userEmail);
     void deleteByUserEmailAndDeviceId(String userEmail, String deviceId);
     void deleteByUserEmail(String userEmail);
 }

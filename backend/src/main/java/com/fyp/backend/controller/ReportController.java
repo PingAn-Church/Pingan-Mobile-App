@@ -1,8 +1,17 @@
 package com.fyp.backend.controller;
 
-import java.util.List;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -11,11 +20,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.service.MessageReportService;
 import com.fyp.backend.service.UserService;
+import com.fyp.backend.util.Pagination;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -57,8 +68,36 @@ public class ReportController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
-    public ResponseEntity<List<MessageReport>> getReports() {
-        return ResponseEntity.ok(messageReportService.getAllReports());
+    public ResponseEntity<?> getReports(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        int safePage = Pagination.clampPage(page);
+        int safeSize = Pagination.clampSize(size);
+
+        try {
+            Page<MessageReport> result = messageReportService.getReports(
+                    status,
+                    parseTimestampParam(from, false),
+                    parseTimestampParam(to, true),
+                    PageRequest.of(safePage, safeSize));
+
+            Map<String, Object> pagination = new LinkedHashMap<>();
+            pagination.put("page", safePage);
+            pagination.put("size", safeSize);
+            pagination.put("totalCount", result.getTotalElements());
+            pagination.put("hasMore", result.hasNext());
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("success", true);
+            body.put("data", result.getContent());
+            body.put("pagination", pagination);
+            return ResponseEntity.ok(body);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -83,6 +122,38 @@ public class ReportController {
         } catch (RuntimeException e) {
             // e.g. "Downgrade this admin before deactivating the account."
             return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    private Timestamp parseTimestampParam(String value, boolean endOfDay) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        try {
+            return Timestamp.from(Instant.parse(trimmed));
+        } catch (DateTimeParseException ignored) {
+            // Try less specific formats below.
+        }
+
+        try {
+            return Timestamp.from(OffsetDateTime.parse(trimmed).toInstant());
+        } catch (DateTimeParseException ignored) {
+            // Try local date-time below.
+        }
+
+        try {
+            return Timestamp.valueOf(LocalDateTime.parse(trimmed.replace(" ", "T")));
+        } catch (DateTimeParseException ignored) {
+            // Try date-only below.
+        }
+
+        try {
+            LocalDate date = LocalDate.parse(trimmed);
+            return Timestamp.valueOf(endOfDay ? date.atTime(LocalTime.MAX) : date.atStartOfDay());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("Invalid date/time parameter: " + value);
         }
     }
 }

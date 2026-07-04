@@ -7,6 +7,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,7 +25,10 @@ import lombok.NoArgsConstructor;
 @Entity
 @Data
 @NoArgsConstructor
-@Table(name = "message_reports")
+@Table(name = "message_reports", indexes = {
+        @Index(name = "idx_message_reports_status_reported_at", columnList = "status, reported_at"),
+        @Index(name = "idx_message_reports_reported_at", columnList = "reported_at")
+})
 public class MessageReport {
 
     public static final String STATUS_PENDING = "PENDING";
@@ -61,4 +66,14 @@ public class MessageReport {
     private Long resolvedById;
     private String resolvedByName;
     private Timestamp resolvedAt;
+
+    @PrePersist
+    void beforeInsert() {
+        if (reportedAt == null) {
+            reportedAt = new Timestamp(System.currentTimeMillis());
+        }
+        if (status == null || status.isBlank()) {
+            status = STATUS_PENDING;
+        }
+    }
 }

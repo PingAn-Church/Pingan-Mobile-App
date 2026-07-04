@@ -20,6 +20,15 @@ public class UserSummaryDto {
     public static UserSummaryDto from(User user) {
         UserSummaryDto dto = new UserSummaryDto();
         dto.id = user.getId();
+        if (user.isDeletedAccount()) {
+            dto.firstName = "Deleted";
+            dto.lastName = "Account";
+            dto.profileImage = null;
+            dto.isInstructor = false;
+            dto.isAdmin = false;
+            dto.isVerifiedUser = false;
+            return dto;
+        }
         dto.firstName = user.getFirstName();
         dto.lastName = user.getLastName();
         dto.profileImage = user.getProfileImage();

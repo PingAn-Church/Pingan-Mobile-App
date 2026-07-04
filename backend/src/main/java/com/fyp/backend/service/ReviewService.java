@@ -76,7 +76,7 @@ public class ReviewService {
         return reviewMap(r);
     }
 
-    private void recomputeCourseRating(Long courseId) {
+    public void recomputeCourseRating(Long courseId) {
         List<CourseRating> visible = ratingRepository.findByCourseIdAndReviewStatus(courseId, "visible");
         Course course = courseRepository.findById(courseId).orElse(null);
         if (course == null) return;

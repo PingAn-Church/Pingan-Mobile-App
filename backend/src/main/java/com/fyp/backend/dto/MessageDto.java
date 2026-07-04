@@ -2,6 +2,7 @@ package com.fyp.backend.dto;
 
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageDeliveryStatus;
+import com.fyp.backend.model.User;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -38,8 +39,8 @@ public class MessageDto {
         this.conversationId = message.getConversation().getId();
         this.conversationType = message.getConversationType();
         this.senderId = message.getSender().getId();
-        this.senderFirstName = message.getSender().getFirstName();
-        this.senderLastName = message.getSender().getLastName();
+        this.senderFirstName = displayFirstName(message.getSender());
+        this.senderLastName = displayLastName(message.getSender());
 
         // ✅ Extract recipient IDs (excluding sender)
         this.recipientIds = message.getConversation().getParticipants().stream()
@@ -54,5 +55,18 @@ public class MessageDto {
                         MessageDeliveryStatus::getStatus
                 ));
     }
-}
 
+    private String displayFirstName(User user) {
+        if (user == null) {
+            return "Unknown";
+        }
+        return user.isDeletedAccount() ? "Deleted" : user.getFirstName();
+    }
+
+    private String displayLastName(User user) {
+        if (user == null) {
+            return "User";
+        }
+        return user.isDeletedAccount() ? "Account" : user.getLastName();
+    }
+}

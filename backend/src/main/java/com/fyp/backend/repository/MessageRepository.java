@@ -14,6 +14,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findByConversationId(Long conversationId);
     List<Message> findByConversationIdAndType(Long conversationId, String type);
 
+    long countBySenderId(Long senderId);
+
     // Cursor (keyset) pagination, newest-first. The first page omits `before`;
     // subsequent pages pass the smallest id seen so far to fetch older messages.
     List<Message> findByConversationIdOrderByIdDesc(Long conversationId, Pageable pageable);
@@ -32,4 +34,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = "DELETE FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
     void deleteReadReceiptsByUserId(@Param("userId") Long userId);
+
+    @Query(value = "SELECT COUNT(*) FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
+    long countReadReceiptsByUserId(@Param("userId") Long userId);
 }

@@ -15,6 +15,8 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
 
     long countByUserIdAndQuizId(Long userId, Long quizId);
 
+    long countByUserId(Long userId);
+
     long countByUserIdAndQuizIdAndIsPassedTrue(Long userId, Long quizId);
 
     List<QuizAttempt> findByUserIdAndQuizIdIn(Long userId, List<Long> quizIds);

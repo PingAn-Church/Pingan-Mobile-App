@@ -65,15 +65,7 @@ public class UserService {
      */
     public Optional<UserProfileDto> getUserById(Long userId) {
         Optional<User> userOptional = userRepository.findById(userId);
-        return userOptional.map(user -> new UserProfileDto(
-                user.getId(),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getEmail(),
-                user.getProfileImage(),
-                user.isVerifiedUser(),
-                user.isAdmin(),
-                user.getBirthday()));
+        return userOptional.map(UserProfileDto::from);
     }
 
     /**
@@ -93,15 +85,8 @@ public class UserService {
         User currentUser = userOptional.get();
         return userRepository.findAll().stream()
                 .filter(user -> !user.getId().equals(currentUser.getId()))
-                .map(user -> new UserProfileDto(
-                        user.getId(),
-                        user.getFirstName(),
-                        user.getLastName(),
-                        user.getEmail(),
-                        user.getProfileImage(),
-                        user.isVerifiedUser(),
-                        user.isAdmin(),
-                        user.getBirthday()))
+                .filter(user -> !user.isDeletedAccount())
+                .map(UserProfileDto::from)
                 .collect(Collectors.toList());
     }
 
@@ -115,23 +100,25 @@ public class UserService {
     }
 
     public List<User> findVerifiedUsers() {
-        return userRepository.findByIsVerifiedUserTrue().stream()
+        return userRepository.findByIsVerifiedUserTrueAndDeletedAccountFalse().stream()
                 .filter(User::isActive)
                 .collect(Collectors.toList());
     }
 
     public List<User> findAdmins() {
-        return userRepository.findByIsAdminTrue();
+        return userRepository.findByIsAdminTrueAndDeletedAccountFalse().stream()
+                .filter(User::isActive)
+                .collect(Collectors.toList());
     }
 
     public List<User> findInstructors() {
-        return userRepository.findByIsInstructorTrue().stream()
+        return userRepository.findByIsInstructorTrueAndDeletedAccountFalse().stream()
                 .filter(User::isActive)
                 .collect(Collectors.toList());
     }
 
     public List<User> findInactiveUsers() {
-        return userRepository.findByActiveFalse();
+        return userRepository.findByActiveFalseAndDeletedAccountFalse();
     }
 
     /** Whether an account exists and is active (used to gate login/refresh). */
@@ -143,6 +130,9 @@ public class UserService {
     public void updateUserInstructorStatus(Long userId, boolean isInstructor) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        if (user.isDeletedAccount()) {
+            throw new RuntimeException("Deleted accounts cannot be granted instructor status.");
+        }
         user.setInstructor(isInstructor);
         userRepository.save(user);
     }
@@ -152,6 +142,9 @@ public class UserService {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isPresent()) {
             User user = userOptional.get();
+            if (user.isDeletedAccount()) {
+                throw new RuntimeException("Deleted accounts cannot be verified.");
+            }
             user.setVerifiedUser(isVerifiedUser);
             userRepository.save(user);
         } else {
@@ -168,6 +161,9 @@ public class UserService {
         if (!active && user.isAdmin()) {
             throw new RuntimeException("Downgrade this admin before deactivating the account.");
         }
+        if (user.isDeletedAccount()) {
+            throw new RuntimeException("Deleted accounts cannot be reactivated.");
+        }
         user.setActive(active);
         userRepository.save(user);
     }
@@ -177,6 +173,9 @@ public class UserService {
         Optional<User> userOptional = userRepository.findById(userId);
         if (userOptional.isPresent()) {
             User user = userOptional.get();
+            if (user.isDeletedAccount()) {
+                throw new RuntimeException("Deleted accounts cannot be granted admin status.");
+            }
 
             // Ensure at least **one admin remains** in the system
             Long adminCount = userRepository.countByIsAdminTrue();
@@ -215,6 +214,9 @@ public class UserService {
         }
 
         User user = userOptional.get();
+        if (user.isDeletedAccount()) {
+            throw new RuntimeException("Deleted accounts cannot be edited.");
+        }
 
         // Update fields except password
         if (userDto.getFirstName() != null)

@@ -15,5 +15,7 @@ public interface UserBlockRepository extends JpaRepository<UserBlock, Long> {
     List<UserBlock> findAllByBlockerId(Long blockerId);
 
     // Account hard-delete sweep: drop every block row the user appears in.
+    long countByBlockerIdOrBlockedId(Long blockerId, Long blockedId);
+
     void deleteByBlockerIdOrBlockedId(Long blockerId, Long blockedId);
 }

@@ -107,7 +107,7 @@ public class ConversationDto {
                 .map(User::getId)
                 .collect(Collectors.toList());
         this.participantNames = groupConversation.getParticipants().stream()
-                .map(user -> user.getFirstName() + " " + user.getLastName())
+                .map(ConversationDto::displayName)
                 .collect(Collectors.toList());
         this.participantProfiles = groupConversation.getParticipants().stream()
                 .map(UserSummaryDto::from)
@@ -116,7 +116,7 @@ public class ConversationDto {
                 ? groupConversation.getAdmins().stream().map(User::getId).collect(Collectors.toList())
                 : new ArrayList<>();
         this.adminNames = (groupConversation.getAdmins() != null)
-                ? groupConversation.getAdmins().stream().map(user -> user.getFirstName() + " " + user.getLastName()).collect(Collectors.toList())
+                ? groupConversation.getAdmins().stream().map(ConversationDto::displayName).collect(Collectors.toList())
                 : new ArrayList<>();
     }
 
@@ -136,12 +136,24 @@ public class ConversationDto {
                 .map(User::getId)
                 .collect(Collectors.toList());
         this.participantNames = privateConversation.getParticipants().stream()
-                .map(user -> user.getFirstName() + " " + user.getLastName())
+                .map(ConversationDto::displayName)
                 .collect(Collectors.toList());
         this.participantProfiles = privateConversation.getParticipants().stream()
                 .map(UserSummaryDto::from)
                 .collect(Collectors.toList());
         this.adminIds = new ArrayList<>();
         this.adminNames = new ArrayList<>();
+    }
+
+    private static String displayName(User user) {
+        if (user == null) {
+            return "Unknown User";
+        }
+        if (user.isDeletedAccount()) {
+            return "Deleted Account";
+        }
+        String name = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        return name.isEmpty() ? "Unknown User" : name;
     }
 }

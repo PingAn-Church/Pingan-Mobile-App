@@ -16,6 +16,8 @@ public interface UserVideoProgressRepository extends JpaRepository<UserVideoProg
 
     long countByUserIdAndVideoIdInAndIsCompletedTrue(Long userId, List<Long> videoIds);
 
+    long countByUserId(Long userId);
+
     void deleteByVideoIdIn(List<Long> videoIds);
 
     void deleteByUserId(Long userId);
