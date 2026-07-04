@@ -29,13 +29,6 @@ public class ThreadService {
     private final UserService userService;
     private final JwtUtil jwtUtil;
 
-    public List<ThreadDto> getAllThreads() {
-        return threadRepository.findAll()
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-    }
-
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size) {
         int safeSize = Pagination.clampSize(size);

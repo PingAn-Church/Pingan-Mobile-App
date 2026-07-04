@@ -9,11 +9,15 @@ import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import com.fyp.backend.util.Pagination;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +33,27 @@ public class ThreadReplyService {
                 .stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
+    }
+
+    public Map<String, Object> getRepliesPage(Long threadId, Long after, int size) {
+        int safeSize = Pagination.clampSize(size);
+        List<ThreadReply> fetched = after == null
+                ? replyRepository.findByThreadIdOrderByIdAsc(threadId, PageRequest.of(0, safeSize + 1))
+                : replyRepository.findByThreadIdAndIdGreaterThanOrderByIdAsc(threadId, after, PageRequest.of(0, safeSize + 1));
+        boolean hasMore = fetched.size() > safeSize;
+        List<ThreadReply> page = hasMore ? fetched.subList(0, safeSize) : fetched;
+        List<ThreadReplyDto> data = page.stream().map(this::mapToDto).collect(Collectors.toList());
+
+        Map<String, Object> pagination = new LinkedHashMap<>();
+        pagination.put("nextCursor", page.isEmpty() ? after : page.get(page.size() - 1).getId());
+        pagination.put("hasMore", hasMore);
+        pagination.put("size", safeSize);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("success", true);
+        body.put("data", data);
+        body.put("pagination", pagination);
+        return body;
     }
 
     public ThreadReplyDto addReply(ThreadReplyDto dto, String token) {

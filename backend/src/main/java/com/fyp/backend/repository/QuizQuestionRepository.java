@@ -11,6 +11,8 @@ import com.fyp.backend.model.QuizQuestion;
 public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Long> {
     List<QuizQuestion> findByQuizIdOrderByOrderIndexAsc(Long quizId);
 
+    List<QuizQuestion> findByQuizIdInOrderByQuizIdAscOrderIndexAsc(List<Long> quizIds);
+
     long countByQuizId(Long quizId);
 
     long countByQuizIdAndQuestionTypeIn(Long quizId, List<String> questionTypes);

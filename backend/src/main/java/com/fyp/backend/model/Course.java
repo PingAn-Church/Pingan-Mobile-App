@@ -9,13 +9,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "courses")
+@Table(name = "courses", indexes = {
+        @Index(name = "idx_courses_instructor_updated_id", columnList = "instructor_id,updated_at,id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

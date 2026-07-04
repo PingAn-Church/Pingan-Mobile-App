@@ -116,10 +116,12 @@ public class OSSController {
     }
 
     @GetMapping("/list-pictures")
-    public ResponseEntity<?> listAllPictures(@RequestParam String fileType) {
+    public ResponseEntity<?> listAllPictures(
+            @RequestParam String fileType,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String marker) {
         try {
-            List<String> pictureUrls = ossService.listAllObjects(fileType);
-            return ResponseEntity.ok(pictureUrls);
+            return ResponseEntity.ok(ossService.listObjectsPage(fileType, size, marker));
         } catch (Exception e) {
             logger.severe("Error listing pictures: " + e.getMessage());
             return ResponseEntity.status(500).body("Error listing pictures");

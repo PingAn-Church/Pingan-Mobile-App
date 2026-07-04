@@ -14,9 +14,15 @@ import java.util.UUID;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fyp.backend.dto.DeletedAccountDto;
 import com.fyp.backend.model.Certificate;
@@ -25,8 +31,6 @@ import com.fyp.backend.model.CourseEnrollment;
 import com.fyp.backend.model.CourseRating;
 import com.fyp.backend.model.Event;
 import com.fyp.backend.model.GroupConversation;
-import com.fyp.backend.model.Message;
-import com.fyp.backend.model.MessageDeliveryStatus;
 import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.model.PrivateConversation;
 import com.fyp.backend.model.Thread;
@@ -56,6 +60,8 @@ import com.fyp.backend.repository.UserBlockRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserPreferencesRepository;
 import com.fyp.backend.repository.UserRepository;
+
+import jakarta.persistence.criteria.Predicate;
 import com.fyp.backend.repository.UserVideoProgressRepository;
 
 /**
@@ -75,6 +81,7 @@ public class UserAccountDeletionService {
     private static final String DELETED_FIRST_NAME = "Deleted";
     private static final String DELETED_LAST_NAME = "Account";
     private static final String DELETED_DISPLAY_NAME = "Deleted Account";
+    private static final int MEDIA_URL_PAGE_SIZE = 500;
 
     @Autowired private UserRepository userRepository;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -237,6 +244,12 @@ public class UserAccountDeletionService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public Page<DeletedAccountDto> listDeletedAccounts(String q, Pageable pageable) {
+        return userRepository.findAll(deletedAccountFilter(q), pageable)
+                .map(user -> DeletedAccountDto.from(user, referenceSummary(user)));
+    }
+
     @Transactional
     public void purgeDeletedAccount(Long userId) {
         User user = userRepository.findById(userId)
@@ -372,11 +385,7 @@ public class UserAccountDeletionService {
     }
 
     private void detachAuthoredCourses(Long userId) {
-        for (Course course : courseRepository.findByInstructorId(userId)) {
-            course.setInstructorId(null);
-            course.setInstructorName(DELETED_DISPLAY_NAME);
-            courseRepository.save(course);
-        }
+        courseRepository.detachInstructor(userId, DELETED_DISPLAY_NAME);
     }
 
     private void recomputeAffectedCourses(Set<Long> courseIds) {
@@ -392,17 +401,11 @@ public class UserAccountDeletionService {
 
     /** Delete every message in a conversation (media + delivery statuses + read receipts). */
     private void purgeConversationMessages(Long conversationId) {
-        List<Message> messages = messageRepository.findByConversationId(conversationId);
-        for (Message m : messages) {
-            deleteMessageMedia(m);
-            List<MessageDeliveryStatus> statuses = messageDeliveryStatusRepository.findByMessageId(m.getId());
-            if (!statuses.isEmpty()) {
-                messageDeliveryStatusRepository.deleteAll(statuses);
-            }
-        }
-        if (!messages.isEmpty()) {
-            messageRepository.deleteAll(messages);
-        }
+        List<String> objectUrls = collectConversationMediaUrls(conversationId, null);
+        messageDeliveryStatusRepository.deleteByConversationId(conversationId);
+        messageRepository.deleteReadReceiptsByConversationId(conversationId);
+        messageRepository.deleteByConversationIdBulk(conversationId);
+        deleteObjectsAfterCommit(objectUrls);
     }
 
     /**
@@ -423,7 +426,9 @@ public class UserAccountDeletionService {
 
         boolean noParticipants = g.getParticipants() == null || g.getParticipants().isEmpty();
         if (noParticipants) {
-            ossService.deleteObjectByUrl(g.getGroupIcon());
+            List<String> groupIcon = new ArrayList<>();
+            addObjectUrl(groupIcon, g.getGroupIcon());
+            deleteObjectsAfterCommit(groupIcon);
             purgeConversationMessages(g.getId());
             groupConversationRepository.delete(g);
         } else {
@@ -439,33 +444,65 @@ public class UserAccountDeletionService {
 
     /** Delete only the given user's own messages in a conversation (media + statuses). */
     private void deleteOwnMessages(Long conversationId, Long userId) {
-        List<Message> own = messageRepository.findByConversationId(conversationId).stream()
-                .filter(m -> m.getSender() != null && userId.equals(m.getSender().getId()))
-                .toList();
-        for (Message m : own) {
-            deleteMessageMedia(m);
-            List<MessageDeliveryStatus> statuses = messageDeliveryStatusRepository.findByMessageId(m.getId());
-            if (!statuses.isEmpty()) {
-                messageDeliveryStatusRepository.deleteAll(statuses);
-            }
-        }
-        if (!own.isEmpty()) {
-            messageRepository.deleteAll(own);
-        }
+        List<String> objectUrls = collectConversationMediaUrls(conversationId, userId);
+        messageDeliveryStatusRepository.deleteByConversationIdAndSenderId(conversationId, userId);
+        messageRepository.deleteReadReceiptsByConversationIdAndSenderId(conversationId, userId);
+        messageRepository.deleteByConversationIdAndSenderIdBulk(conversationId, userId);
+        deleteObjectsAfterCommit(objectUrls);
     }
 
-    /** Best-effort delete of a message's OSS media (image URL, or "url|duration" for voice). */
-    private void deleteMessageMedia(Message m) {
-        String content = m.getContent();
+    private List<String> collectConversationMediaUrls(Long conversationId, Long senderId) {
+        List<String> urls = new ArrayList<>();
+        int page = 0;
+        List<String> batch;
+        do {
+            PageRequest pageable = PageRequest.of(page++, MEDIA_URL_PAGE_SIZE);
+            batch = senderId == null
+                    ? messageRepository.findMediaContentsByConversationId(conversationId, pageable)
+                    : messageRepository.findMediaContentsByConversationIdAndSenderId(conversationId, senderId, pageable);
+            for (String content : batch) {
+                addMessageMediaUrl(urls, content);
+            }
+        } while (batch.size() == MEDIA_URL_PAGE_SIZE);
+        return urls;
+    }
+
+    private void addMessageMediaUrl(List<String> urls, String content) {
         if (content == null || content.isBlank()) {
             return;
         }
-        String type = m.getType();
-        if ("image".equalsIgnoreCase(type)) {
-            ossService.deleteObjectByUrl(content);
-        } else if ("voice".equalsIgnoreCase(type)) {
-            int sep = content.indexOf('|');
-            ossService.deleteObjectByUrl(sep >= 0 ? content.substring(0, sep) : content);
+        int sep = content.indexOf('|');
+        addObjectUrl(urls, sep >= 0 ? content.substring(0, sep) : content);
+    }
+
+    private void addObjectUrl(List<String> urls, String url) {
+        if (url != null && !url.isBlank()) {
+            urls.add(url);
+        }
+    }
+
+    private void deleteObjectsAfterCommit(List<String> objectUrls) {
+        if (objectUrls.isEmpty()) {
+            return;
+        }
+        Runnable delete = () -> objectUrls.stream()
+                .distinct()
+                .forEach(url -> {
+                    try {
+                        ossService.deleteObjectByUrl(url);
+                    } catch (Exception e) {
+                        LOGGER.warning("Failed to delete OSS object after account cleanup: " + e.getMessage());
+                    }
+                });
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    delete.run();
+                }
+            });
+        } else {
+            delete.run();
         }
     }
 
@@ -517,6 +554,26 @@ public class UserAccountDeletionService {
         if (count > 0) {
             references.put(key, count);
         }
+    }
+
+    private Specification<User> deletedAccountFilter(String q) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("deletedAccount"), true));
+
+            String term = q == null ? "" : q.trim().toLowerCase();
+            if (!term.isEmpty()) {
+                Predicate textMatch = cb.like(cb.lower(root.get("email")), "%" + term + "%");
+                try {
+                    Long id = Long.parseLong(term);
+                    predicates.add(cb.or(textMatch, cb.equal(root.get("id"), id)));
+                } catch (NumberFormatException ignored) {
+                    predicates.add(textMatch);
+                }
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     public static class DeletedAccountStillReferencedException extends RuntimeException {

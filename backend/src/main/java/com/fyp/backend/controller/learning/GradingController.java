@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -34,11 +35,16 @@ public class GradingController {
     private UserService userService;
 
     @GetMapping("/getPendingGrading")
+    @SuppressWarnings("unchecked")
     public ApiResponse<List<Map<String, Object>>> getPendingGrading(
-            @RequestHeader("Authorization") String auth) {
+            @RequestHeader("Authorization") String auth,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Long courseId) {
         User requester = userService.getUserFromToken(auth)
                 .orElseThrow(() -> ApiException.unauthorized("Not authenticated"));
-        return ApiResponse.ok(quizService.pendingGrading(requester));
+        Map<String, Object> result = quizService.pendingGrading(requester, page, size, courseId);
+        return ApiResponse.ok((List<Map<String, Object>>) result.get("data"), result.get("pagination"));
     }
 
     @PostMapping("/gradeShortAnswer")

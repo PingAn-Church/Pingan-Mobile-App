@@ -263,7 +263,9 @@ package com.fyp.backend.service;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 import org.springframework.stereotype.Service;
@@ -274,8 +276,10 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.common.comm.SignVersion;
 import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.aliyun.oss.model.ListObjectsRequest;
 import com.aliyun.oss.model.OSSObjectSummary;
 import com.aliyun.oss.model.ObjectListing;
+import com.fyp.backend.util.Pagination;
 
 import io.github.cdimascio.dotenv.Dotenv;
 
@@ -381,29 +385,45 @@ public class OSSService {
         }
     }
 
-    public List<String> listAllObjects(String fileType) {
+    public Map<String, Object> listObjectsPage(String fileType, int size, String marker) {
         OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         List<String> pictureUrls = new ArrayList<>();
+        int safeSize = Pagination.clampSize(size);
 
         try {
             String folderPath = getFolderPath(fileType);
-            ObjectListing objectListing = ossClient.listObjects(bucketName, folderPath);
+            ListObjectsRequest request = new ListObjectsRequest(bucketName);
+            request.setPrefix(folderPath);
+            request.setMaxKeys(safeSize);
+            if (marker != null && !marker.isBlank()) {
+                request.setMarker(marker);
+            }
+
+            ObjectListing objectListing = ossClient.listObjects(request);
             for (OSSObjectSummary objectSummary : objectListing.getObjectSummaries()) {
                 String objectKey = objectSummary.getKey();
                 if (!objectKey.equals(folderPath)) {
-                    // Generate a pre-signed URL for each object
-                    URL signedUrl = generatePresignedDownloadUrl(objectKey, 60); // 60 minutes expiry
+                    URL signedUrl = generatePresignedDownloadUrl(objectKey, 60);
                     pictureUrls.add(signedUrl.toString());
                 }
             }
-            logger.info("Listed " + pictureUrls.size() + " pictures from folder: " + folderPath);
+
+            Map<String, Object> pagination = new LinkedHashMap<>();
+            pagination.put("nextMarker", objectListing.getNextMarker());
+            pagination.put("hasMore", objectListing.isTruncated());
+            pagination.put("size", safeSize);
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("success", true);
+            body.put("data", pictureUrls);
+            body.put("pagination", pagination);
+            return body;
         } catch (Exception e) {
-            logger.severe("Error listing objects: " + e.getMessage());
+            logger.severe("Error listing objects page: " + e.getMessage());
             throw new RuntimeException("Error listing objects", e);
         } finally {
             ossClient.shutdown();
         }
-        return pictureUrls;
     }
 
     public void deleteObject(String objectKey) {

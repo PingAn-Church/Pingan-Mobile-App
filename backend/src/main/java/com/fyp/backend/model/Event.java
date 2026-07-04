@@ -1,17 +1,22 @@
 package com.fyp.backend.model;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "events")
+@Table(name = "events", indexes = {
+        @Index(name = "idx_events_end_start_id", columnList = "end_at,start_at,id")
+})
 public class Event {
 
     @Id
@@ -24,6 +29,11 @@ public class Event {
     private String startTime;
     private String endTime;
     private String location;
+    @Column(name = "start_at")
+    private Instant startAt;
+
+    @Column(name = "end_at")
+    private Instant endAt;
 
     @ElementCollection
     private List<Long> checkedInUserIds = new ArrayList<>(); // List of user IDs who checked in
@@ -61,6 +71,12 @@ public class Event {
 
     public String getLocation() { return location; }
     public void setLocation(String location) { this.location = location; }
+
+    public Instant getStartAt() { return startAt; }
+    public void setStartAt(Instant startAt) { this.startAt = startAt; }
+
+    public Instant getEndAt() { return endAt; }
+    public void setEndAt(Instant endAt) { this.endAt = endAt; }
 
     public List<Long> getCheckedInUserIds() {
         if (checkedInUserIds == null) {

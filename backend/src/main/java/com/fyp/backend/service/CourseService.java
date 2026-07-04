@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import com.fyp.backend.exception.ApiException;
@@ -27,6 +28,7 @@ import com.fyp.backend.model.CourseSection;
 import com.fyp.backend.model.CourseVideo;
 import com.fyp.backend.model.QuizAttempt;
 import com.fyp.backend.model.ResourceProgress;
+import com.fyp.backend.model.User;
 import com.fyp.backend.model.UserVideoProgress;
 import com.fyp.backend.repository.CategoryRepository;
 import com.fyp.backend.repository.CourseOutcomeRepository;
@@ -40,6 +42,8 @@ import com.fyp.backend.repository.CourseWishlistRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.UserVideoProgressRepository;
+
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Read-side catalog logic (P2). Returns loosely-typed maps matching the JSON
@@ -68,11 +72,18 @@ public class CourseService {
                 .collect(Collectors.toList());
     }
 
-    /** All courses (published or not) for the authoring/management list. */
-    public List<Map<String, Object>> listAllCourses() {
-        List<Course> courses = courseRepository.findAll();
-        courses.sort(courseComparator("updated_at").reversed());
-        return courses.stream().map(c -> courseSummaryMap(c, false)).collect(Collectors.toList());
+    /** Paged management list. Admins see all courses; instructors only see their own. */
+    public Map<String, Object> listAllCourses(User requester, int page, int size, String q,
+            Boolean published, Long categoryId, String sortBy, String sortOrder) {
+        int safePage = Pagination.clampPage(page);
+        int safeSize = Pagination.clampSize(size);
+        Sort.Direction dir = "asc".equalsIgnoreCase(sortOrder) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort sort = Sort.by(dir, sortPropertyFor(sortBy)).and(Sort.by(Sort.Direction.DESC, "id"));
+        Pageable pageable = PageRequest.of(safePage, safeSize, sort);
+
+        Long instructorId = requester != null && !requester.isAdmin() ? requester.getId() : null;
+        Page<Course> result = courseRepository.findAll(courseFilter(q, published, categoryId, instructorId), pageable);
+        return Pagination.envelope(courseSummaryMaps(result.getContent(), false), result);
     }
 
     public Map<String, Object> listPublishedCourses(String category, int limit, int offset,
@@ -125,6 +136,32 @@ public class CourseService {
             default:
                 return "updatedAt";
         }
+    }
+
+    private Specification<Course> courseFilter(String q, Boolean published, Long categoryId, Long instructorId) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (published != null) {
+                predicates.add(cb.equal(root.get("isPublished"), published));
+            }
+            if (categoryId != null) {
+                predicates.add(cb.equal(root.get("categoryId"), categoryId));
+            }
+            if (instructorId != null) {
+                predicates.add(cb.equal(root.get("instructorId"), instructorId));
+            }
+
+            String term = q == null ? "" : q.trim().toLowerCase();
+            if (!term.isEmpty()) {
+                String like = "%" + term + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), like),
+                        cb.like(cb.lower(root.get("instructorName")), like),
+                        cb.like(cb.lower(root.get("tags")), like)));
+            }
+
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     public Map<String, Object> getModuleDetail(Long courseId, Long userId) {
@@ -255,21 +292,6 @@ public class CourseService {
 
     // ---- mappers --------------------------------------------------------
 
-    private Comparator<Course> courseComparator(String sortBy) {
-        String key = sortBy == null ? "updated_at" : sortBy;
-        switch (key) {
-            case "rating":
-                return Comparator.comparing(c -> c.getRating() == null ? 0.0 : c.getRating());
-            case "student_count":
-                return Comparator.comparing(c -> c.getStudentCount() == null ? 0 : c.getStudentCount());
-            case "created_at":
-                return Comparator.comparing(Course::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()));
-            case "updated_at":
-            default:
-                return Comparator.comparing(Course::getUpdatedAt, Comparator.nullsFirst(Comparator.naturalOrder()));
-        }
-    }
-
     private Map<String, Object> categoryMap(Category c) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", String.valueOf(c.getId()));
@@ -316,6 +338,71 @@ public class CourseService {
         m.put("created_at", course.getCreatedAt());
         m.put("updated_at", course.getUpdatedAt());
         return m;
+    }
+
+    private List<Map<String, Object>> courseSummaryMaps(List<Course> courses, boolean includeDescription) {
+        if (courses.isEmpty()) return List.of();
+
+        List<Long> courseIds = courses.stream().map(Course::getId).collect(Collectors.toList());
+        List<Long> categoryIds = courses.stream()
+                .map(Course::getCategoryId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, Category> categories = categoryRepository.findAllById(categoryIds).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+        Map<Long, Long> sectionCounts = countMap(sectionRepository.countByCourseIds(courseIds));
+        Map<Long, Long> videoCounts = countMap(videoRepository.countByCourseIds(courseIds));
+        Map<Long, Long> quizCounts = countMap(quizRepository.countByCourseIds(courseIds));
+
+        return courses.stream()
+                .map(course -> courseSummaryMap(
+                        course,
+                        includeDescription,
+                        categories.get(course.getCategoryId()),
+                        sectionCounts.getOrDefault(course.getId(), 0L),
+                        videoCounts.getOrDefault(course.getId(), 0L),
+                        quizCounts.getOrDefault(course.getId(), 0L)))
+                .collect(Collectors.toList());
+    }
+
+    private Map<String, Object> courseSummaryMap(Course course, boolean includeDescription, Category category,
+            long sectionCount, long videoCount, long quizCount) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", String.valueOf(course.getId()));
+        m.put("title", course.getTitle());
+        if (includeDescription) {
+            m.put("description", course.getDescription());
+        }
+        m.put("instructor_name", course.getInstructorName());
+        m.put("instructor_id", course.getInstructorId() == null ? null : String.valueOf(course.getInstructorId()));
+        m.put("category_id", course.getCategoryId() == null ? null : String.valueOf(course.getCategoryId()));
+        m.put("category_name", category != null ? category.getName() : "General");
+        m.put("category_color", category != null ? category.getColor() : null);
+        m.put("duration_hours", course.getDurationHours());
+        m.put("rating", course.getRating());
+        m.put("total_ratings", course.getTotalRatings());
+        m.put("thumbnail_url", course.getThumbnailUrl());
+        m.put("tags", splitTags(course.getTags()));
+        m.put("student_count", course.getStudentCount());
+        m.put("is_published", course.isPublished());
+        m.put("total_sections", sectionCount);
+        m.put("total_videos", videoCount);
+        m.put("total_quizzes", quizCount);
+        m.put("created_at", course.getCreatedAt());
+        m.put("updated_at", course.getUpdatedAt());
+        return m;
+    }
+
+    private Map<Long, Long> countMap(List<Object[]> rows) {
+        Map<Long, Long> out = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            if (row.length >= 2 && row[0] instanceof Number courseId && row[1] instanceof Number count) {
+                out.put(courseId.longValue(), count.longValue());
+            }
+        }
+        return out;
     }
 
     private Map<String, Object> videoMap(CourseVideo v) {

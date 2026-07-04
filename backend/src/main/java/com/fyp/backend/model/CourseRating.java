@@ -9,13 +9,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "course_ratings")
+@Table(name = "course_ratings", indexes = {
+        @Index(name = "idx_course_ratings_course_status_pinned_created_id", columnList = "course_id,review_status,is_pinned,created_at,id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

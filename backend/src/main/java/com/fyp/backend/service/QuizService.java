@@ -3,7 +3,6 @@ package com.fyp.backend.service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +11,8 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.QuizQuestionRepository;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.util.Pagination;
 
 /**
  * Quiz delivery + grading engine (P5/P6). Auto-grades multiple-choice,
@@ -327,53 +329,77 @@ public class QuizService {
      * owns (admins see every course). One entry per attempt with its ungraded
      * short-answer questions, oldest submission first.
      */
-    public List<Map<String, Object>> pendingGrading(User requester) {
-        List<Course> courses = requester.isAdmin()
-                ? courseRepository.findAll()
-                : courseRepository.findByInstructorId(requester.getId());
+    public Map<String, Object> pendingGrading(User requester, int page, int size, Long courseId) {
+        Page<QuizAttempt> attemptsPage = attemptRepository.findPendingGrading(
+                requester.isAdmin(),
+                requester.getId(),
+                courseId,
+                MANUAL_TYPES,
+                PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size)));
+        List<QuizAttempt> attempts = attemptsPage.getContent();
+        if (attempts.isEmpty()) {
+            return Pagination.envelope(List.of(), attemptsPage);
+        }
+
+        List<Long> quizIds = attempts.stream().map(QuizAttempt::getQuizId).distinct().toList();
+        Map<Long, CourseQuiz> quizzes = new LinkedHashMap<>();
+        quizRepository.findAllById(quizIds).forEach(q -> quizzes.put(q.getId(), q));
+
+        List<Long> courseIds = quizzes.values().stream().map(CourseQuiz::getCourseId).distinct().toList();
+        Map<Long, Course> courses = new LinkedHashMap<>();
+        courseRepository.findAllById(courseIds).forEach(c -> courses.put(c.getId(), c));
+
+        Map<Long, List<QuizQuestion>> manualQuestionsByQuiz = questionRepository
+                .findByQuizIdInOrderByQuizIdAscOrderIndexAsc(quizIds)
+                .stream()
+                .filter(this::isManuallyGraded)
+                .collect(java.util.stream.Collectors.groupingBy(
+                        QuizQuestion::getQuizId,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+
+        List<Long> studentIds = attempts.stream().map(QuizAttempt::getUserId).distinct().toList();
+        Map<Long, User> students = new LinkedHashMap<>();
+        userRepository.findAllById(studentIds).forEach(u -> students.put(u.getId(), u));
 
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Course course : courses) {
-            for (CourseQuiz quiz : quizRepository.findByCourseIdOrderByOrderIndexAsc(course.getId())) {
-                List<QuizQuestion> manualQuestions = questionRepository
-                        .findByQuizIdOrderByOrderIndexAsc(quiz.getId())
-                        .stream().filter(this::isManuallyGraded).toList();
-                if (manualQuestions.isEmpty()) continue;
+        for (QuizAttempt attempt : attempts) {
+            CourseQuiz quiz = quizzes.get(attempt.getQuizId());
+            if (quiz == null) continue;
+            Course course = courses.get(quiz.getCourseId());
+            if (course == null) continue;
+            List<QuizQuestion> manualQuestions = manualQuestionsByQuiz.getOrDefault(quiz.getId(), List.of());
+            if (manualQuestions.isEmpty()) continue;
 
-                for (QuizAttempt attempt : attemptRepository
-                        .findByQuizIdInAndGradesReleasedFalse(List.of(quiz.getId()))) {
-                    Map<String, Object> submitted = parseJsonMap(attempt.getAnswers());
-                    Map<String, Object> manualGrades = parseJsonMap(attempt.getGradedAnswers());
-
-                    List<Map<String, Object>> pendingQuestions = new ArrayList<>();
-                    for (QuizQuestion q : manualQuestions) {
-                        if (manualGrades.containsKey(String.valueOf(q.getId()))) continue;
-                        Map<String, Object> qm = new LinkedHashMap<>();
-                        qm.put("question_id", String.valueOf(q.getId()));
-                        qm.put("question", q.getQuestion());
-                        qm.put("points", points(q));
-                        qm.put("expected_answer", parseJsonOrRaw(q.getCorrectAnswer()));
-                        qm.put("student_answer", submitted.get(String.valueOf(q.getId())));
-                        pendingQuestions.add(qm);
-                    }
-                    if (pendingQuestions.isEmpty()) continue;
-
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("attempt_id", String.valueOf(attempt.getId()));
-                    m.put("quiz_id", String.valueOf(quiz.getId()));
-                    m.put("quiz_title", quiz.getTitle());
-                    m.put("course_id", String.valueOf(course.getId()));
-                    m.put("course_title", course.getTitle());
-                    m.put("student_name", studentName(attempt.getUserId()));
-                    m.put("attempt_number", attempt.getAttemptNumber());
-                    m.put("submitted_at", attempt.getCompletedAt() == null ? null : attempt.getCompletedAt().toString());
-                    m.put("questions", pendingQuestions);
-                    out.add(m);
-                }
+            Map<String, Object> submitted = parseJsonMap(attempt.getAnswers());
+            Map<String, Object> manualGrades = parseJsonMap(attempt.getGradedAnswers());
+            List<Map<String, Object>> pendingQuestions = new ArrayList<>();
+            for (QuizQuestion q : manualQuestions) {
+                if (manualGrades.containsKey(String.valueOf(q.getId()))) continue;
+                Map<String, Object> qm = new LinkedHashMap<>();
+                qm.put("question_id", String.valueOf(q.getId()));
+                qm.put("question", q.getQuestion());
+                qm.put("points", points(q));
+                qm.put("expected_answer", parseJsonOrRaw(q.getCorrectAnswer()));
+                qm.put("student_answer", submitted.get(String.valueOf(q.getId())));
+                pendingQuestions.add(qm);
             }
+            if (pendingQuestions.isEmpty()) continue;
+
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("attempt_id", String.valueOf(attempt.getId()));
+            m.put("quiz_id", String.valueOf(quiz.getId()));
+            m.put("quiz_title", quiz.getTitle());
+            m.put("course_id", String.valueOf(course.getId()));
+            m.put("course_title", course.getTitle());
+            m.put("student_name", studentName(students.get(attempt.getUserId())));
+            m.put("attempt_number", attempt.getAttemptNumber());
+            m.put("submitted_at", attempt.getCompletedAt() == null ? null : attempt.getCompletedAt().toString());
+            m.put("questions", pendingQuestions);
+            out.add(m);
         }
-        out.sort(Comparator.comparing(m -> String.valueOf(m.get("submitted_at"))));
-        return out;
+
+        return Pagination.envelope(out, attemptsPage);
     }
 
     /**
@@ -502,10 +528,15 @@ public class QuizService {
 
     private String studentName(Long userId) {
         return userRepository.findById(userId).map(u -> {
-            String name = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
-                    + (u.getLastName() == null ? "" : u.getLastName())).trim();
-            return name.isEmpty() ? (u.getEmail() == null ? "Learner" : u.getEmail()) : name;
+            return studentName(u);
         }).orElse("Learner");
+    }
+
+    private String studentName(User user) {
+        if (user == null) return "Learner";
+        String name = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        return name.isEmpty() ? (user.getEmail() == null ? "Learner" : user.getEmail()) : name;
     }
 
     // ---- grading --------------------------------------------------------

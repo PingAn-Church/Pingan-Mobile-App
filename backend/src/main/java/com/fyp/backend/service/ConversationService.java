@@ -7,13 +7,13 @@ import com.fyp.backend.model.*;
 import com.fyp.backend.repository.*;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +22,7 @@ import java.util.Optional;
 
 @Service
 public class ConversationService {
+    private static final int MEDIA_URL_PAGE_SIZE = 500;
 
     private final GroupConversationRepository groupConversationRepository;
     private final PrivateConversationRepository privateConversationRepository;
@@ -313,20 +314,7 @@ public class ConversationService {
         groupConversation.setUpdatedAt(now());
         groupConversationRepository.save(groupConversation);
 
-        // ✅ Add delivery statuses for existing messages
-        List<Message> existingMessages = messageRepository.findByConversationId(conversationId);
-        for (Message message : existingMessages) {
-            // Skip messages sent by the user being added (shouldn't happen but just in case)
-            if (!message.getSender().getId().equals(userId)) {
-                MessageDeliveryStatus status = new MessageDeliveryStatus(
-                        message,
-                        userToAdd,
-                        "SENT",
-                        now()
-                );
-                messageDeliveryStatusRepository.save(status);
-            }
-        }
+        messageDeliveryStatusRepository.insertSentStatusesForConversation(conversationId, userId);
 
         // ✅ Prepare updated DTO
         ConversationDto updatedConversation = new ConversationDto(groupConversation);
@@ -396,11 +384,7 @@ public class ConversationService {
         groupConversation.setUpdatedAt(now());
         groupConversationRepository.save(groupConversation);
 
-        // ✅ Remove delivery statuses for the removed participant
-        List<Message> messages = messageRepository.findByConversationId(conversationId);
-        for (Message message : messages) {
-            messageDeliveryStatusRepository.deleteByMessageIdAndUserId(message.getId(), userId);
-        }
+        messageDeliveryStatusRepository.deleteByConversationIdAndUserId(conversationId, userId);
 
         // ✅ Build and notify
         ConversationDto updatedConversation = new ConversationDto(groupConversation);
@@ -795,40 +779,69 @@ public class ConversationService {
     }
 
     private void performConversationCleanup(Conversation conversation) {
-        // Remove the group icon from OSS so deleting a group doesn't leave it orphaned.
+        Long conversationId = conversation.getId();
+        List<String> objectUrls = collectConversationMediaUrls(conversationId);
+
         if (conversation instanceof GroupConversation group) {
-            ossService.deleteObjectByUrl(group.getGroupIcon());
+            addObjectUrl(objectUrls, group.getGroupIcon());
         }
 
-        List<Message> messages = messageRepository.findByConversationId(conversation.getId());
-
-        for (Message message : messages) {
-            // Delete delivery statuses
-            List<MessageDeliveryStatus> statuses = messageDeliveryStatusRepository.findByMessageId(message.getId());
-            messageDeliveryStatusRepository.deleteAll(statuses);
-
-            // Delete OSS image if applicable
-            if ("image".equalsIgnoreCase(message.getType())) {
-                try {
-                    String imageUrl = message.getContent();
-                    String objectKey = extractObjectKeyFromUrl(imageUrl);
-                    ossService.deleteObject(objectKey);
-                } catch (Exception e) {
-                    System.err.println("⚠️ Failed to delete image from OSS: " + e.getMessage());
-                }
-            }
-        }
-
-        // Delete messages
-        messageRepository.deleteAll(messages);
+        messageDeliveryStatusRepository.deleteByConversationId(conversationId);
+        messageRepository.deleteReadReceiptsByConversationId(conversationId);
+        messageRepository.deleteByConversationIdBulk(conversationId);
+        deleteObjectsAfterCommit(objectUrls);
     }
 
-    private String extractObjectKeyFromUrl(String url) {
-        try {
-            URL parsedUrl = new URL(url);
-            return parsedUrl.getPath().substring(1); // Removes leading "/"
-        } catch (Exception e) {
-            throw new RuntimeException("Invalid OSS URL format: " + url, e);
+    private List<String> collectConversationMediaUrls(Long conversationId) {
+        List<String> urls = new ArrayList<>();
+        int page = 0;
+        List<String> batch;
+        do {
+            batch = messageRepository.findMediaContentsByConversationId(
+                    conversationId, PageRequest.of(page++, MEDIA_URL_PAGE_SIZE));
+            for (String content : batch) {
+                addMessageMediaUrl(urls, content);
+            }
+        } while (batch.size() == MEDIA_URL_PAGE_SIZE);
+        return urls;
+    }
+
+    private void addMessageMediaUrl(List<String> urls, String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        int sep = content.indexOf('|');
+        addObjectUrl(urls, sep >= 0 ? content.substring(0, sep) : content);
+    }
+
+    private void addObjectUrl(List<String> urls, String url) {
+        if (url != null && !url.isBlank()) {
+            urls.add(url);
+        }
+    }
+
+    private void deleteObjectsAfterCommit(List<String> objectUrls) {
+        if (objectUrls.isEmpty()) {
+            return;
+        }
+        Runnable delete = () -> objectUrls.stream()
+                .distinct()
+                .forEach(url -> {
+                    try {
+                        ossService.deleteObjectByUrl(url);
+                    } catch (Exception e) {
+                        System.err.println("Failed to delete OSS object after conversation cleanup: " + e.getMessage());
+                    }
+                });
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    delete.run();
+                }
+            });
+        } else {
+            delete.run();
         }
     }
 

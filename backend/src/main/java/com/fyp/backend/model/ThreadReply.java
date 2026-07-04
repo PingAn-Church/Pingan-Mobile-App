@@ -5,7 +5,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "thread_replies")
+@Table(name = "thread_replies", indexes = {
+        @Index(name = "idx_thread_replies_thread_id_id", columnList = "thread_id,id")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

@@ -162,30 +162,16 @@ public class UserController {
     // Full directory with emails is admin-only; normal users use /search (no PII).
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
-    public ResponseEntity<List<UserProfileDto>> getAllUsers(
-            @RequestHeader("Authorization") String authorizationHeader) {
-        // Extract token from Authorization header
-        String token = authorizationHeader.substring(7); // Remove "Bearer " prefix
-        String email = jwtUtil.extractEmail(token); // Extract the email from the token
-
-        // Find the user by email
-        Optional<User> userOptional = userRepository.findByEmail(email);
-        if (!userOptional.isPresent()) {
-            return ResponseEntity.status(404).body(null); // User not found
-        }
-
-        User currentUser = userOptional.get();
-
-        // Fetch all users from the repository, excluding the current user
-        List<User> allUsers = userRepository.findAll();
-        List<UserProfileDto> usersWithoutCurrentUser = allUsers.stream()
-                .filter(user -> !user.getId().equals(currentUser.getId())) // Exclude the current user
-                .filter(User::isActive) // Hide deactivated accounts
-                .filter(user -> !user.isDeletedAccount())
-                .map(UserProfileDto::from)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(usersWithoutCurrentUser);
+    public ResponseEntity<Map<String, Object>> getAllUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false) Boolean verified,
+            @RequestParam(required = false, defaultValue = "true") Boolean active,
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = userPage(page, size);
+        Page<User> result = userService.searchUsers(q, verified, active, role, false, pageable);
+        return ResponseEntity.ok(userEnvelope(result));
     }
 
     // Presence is stored by email internally, but exposed keyed by user id so the
@@ -205,26 +191,24 @@ public class UserController {
         return ResponseEntity.ok(onlineById);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/verified")
-    public ResponseEntity<List<UserProfileDto>> getVerifiedUsers() {
-        List<User> verifiedUsers = userService.findVerifiedUsers();
-
-        List<UserProfileDto> userDtos = verifiedUsers.stream()
-                .map(UserProfileDto::from)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(userDtos);
+    public ResponseEntity<Map<String, Object>> getVerifiedUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<User> result = userService.searchUsers(q, true, true, null, false, userPage(page, size));
+        return ResponseEntity.ok(userEnvelope(result));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/admins")
-    public ResponseEntity<List<UserProfileDto>> getAdminUsers() {
-        List<User> adminUsers = userService.findAdmins();
-
-        List<UserProfileDto> adminDtos = adminUsers.stream()
-                .map(UserProfileDto::from)
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(adminDtos);
+    public ResponseEntity<Map<String, Object>> getAdminUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<User> result = userService.searchUsers(q, null, true, "admin", false, userPage(page, size));
+        return ResponseEntity.ok(userEnvelope(result));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -241,23 +225,37 @@ public class UserController {
     public ResponseEntity<String> updateUserAdminStatus(
             @PathVariable Long id,
             @RequestParam boolean isAdmin) {
-        userService.updateUserAdminStatus(id, isAdmin);
+        try {
+            userService.updateUserAdminStatus(id, isAdmin);
+        } catch (UserService.LastAdminException e) {
+            // 409 lets the client tell "last admin" apart from a generic failure.
+            return ResponseEntity.status(409).body(e.getMessage());
+        }
         return ResponseEntity.ok("User admin status updated!");
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/inactive")
-    public ResponseEntity<List<UserProfileDto>> getInactiveUsers() {
-        List<UserProfileDto> inactive = userService.findInactiveUsers().stream()
-                .map(UserProfileDto::from)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(inactive);
+    public ResponseEntity<Map<String, Object>> getInactiveUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<User> result = userService.searchUsers(q, null, false, null, false, userPage(page, size));
+        return ResponseEntity.ok(userEnvelope(result));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/deleted")
-    public ResponseEntity<List<DeletedAccountDto>> getDeletedAccounts() {
-        return ResponseEntity.ok(userAccountDeletionService.listDeletedAccounts());
+    public ResponseEntity<Map<String, Object>> getDeletedAccounts(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(
+                Pagination.clampPage(page),
+                Pagination.clampSize(size),
+                Sort.by(Sort.Direction.DESC, "deletedAt").and(Sort.by(Sort.Direction.ASC, "id")));
+        Page<DeletedAccountDto> result = userAccountDeletionService.listDeletedAccounts(q, pageable);
+        return ResponseEntity.ok(Pagination.envelope(result.getContent(), result));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -317,12 +315,14 @@ public class UserController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/instructors")
-    public ResponseEntity<List<UserProfileDto>> getInstructorUsers() {
-        List<UserProfileDto> instructors = userService.findInstructors().stream()
-                .map(UserProfileDto::from)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(instructors);
+    public ResponseEntity<Map<String, Object>> getInstructorUsers(
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<User> result = userService.searchUsers(q, null, true, "instructor", false, userPage(page, size));
+        return ResponseEntity.ok(userEnvelope(result));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -344,6 +344,20 @@ public class UserController {
         } catch (RuntimeException e) {
             return ResponseEntity.status(403).body(e.getMessage());
         }
+    }
+
+    private Pageable userPage(int page, int size) {
+        return PageRequest.of(
+                Pagination.clampPage(page),
+                Pagination.clampSize(size),
+                Sort.by("firstName").ascending().and(Sort.by("lastName").ascending()).and(Sort.by("id").ascending()));
+    }
+
+    private Map<String, Object> userEnvelope(Page<User> page) {
+        List<UserProfileDto> data = page.getContent().stream()
+                .map(UserProfileDto::from)
+                .collect(Collectors.toList());
+        return Pagination.envelope(data, page);
     }
 
 }

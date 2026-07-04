@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,12 +13,14 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.ApiResponse;
 import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.service.ReviewService;
 import com.fyp.backend.service.UserService;
+import com.fyp.backend.util.Pagination;
 
 @RestController
 @RequestMapping("/api/fn")
@@ -54,8 +58,18 @@ public class ReviewController {
 
     /** All visible reviews for a course. */
     @GetMapping("/getCourseReviews/{courseId}")
-    public ApiResponse<List<Map<String, Object>>> listReviews(@PathVariable Long courseId) {
-        return ApiResponse.ok(reviewService.listReviews(courseId));
+    @SuppressWarnings("unchecked")
+    public ApiResponse<List<Map<String, Object>>> listReviews(
+            @PathVariable Long courseId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Sort sort = Sort.by(
+                Sort.Order.desc("isPinned"),
+                Sort.Order.desc("createdAt"),
+                Sort.Order.desc("id"));
+        Map<String, Object> result = reviewService.listReviews(
+                courseId, PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size), sort));
+        return ApiResponse.ok((List<Map<String, Object>>) result.get("data"), result.get("pagination"));
     }
 
     private int rating(Map<String, Object> body) {

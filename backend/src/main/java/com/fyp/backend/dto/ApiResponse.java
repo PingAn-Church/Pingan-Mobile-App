@@ -1,5 +1,7 @@
 package com.fyp.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * Standard response envelope for the e-learning ("/api/fn/*") endpoints.
  * Mirrors the { success, message, data } shape the ported mobile services expect.
@@ -9,6 +11,9 @@ public class ApiResponse<T> {
     private boolean success;
     private String message;
     private T data;
+    // Omitted from JSON when absent so non-paged responses keep their original shape.
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Object pagination;
 
     public ApiResponse() {
     }
@@ -19,12 +24,23 @@ public class ApiResponse<T> {
         this.data = data;
     }
 
+    public ApiResponse(boolean success, String message, T data, Object pagination) {
+        this.success = success;
+        this.message = message;
+        this.data = data;
+        this.pagination = pagination;
+    }
+
     public static <T> ApiResponse<T> ok(T data) {
         return new ApiResponse<>(true, "OK", data);
     }
 
     public static <T> ApiResponse<T> ok(String message, T data) {
         return new ApiResponse<>(true, message, data);
+    }
+
+    public static <T> ApiResponse<T> ok(T data, Object pagination) {
+        return new ApiResponse<>(true, "OK", data, pagination);
     }
 
     public static <T> ApiResponse<T> error(String message) {
@@ -53,5 +69,13 @@ public class ApiResponse<T> {
 
     public void setData(T data) {
         this.data = data;
+    }
+
+    public Object getPagination() {
+        return pagination;
+    }
+
+    public void setPagination(Object pagination) {
+        this.pagination = pagination;
     }
 }

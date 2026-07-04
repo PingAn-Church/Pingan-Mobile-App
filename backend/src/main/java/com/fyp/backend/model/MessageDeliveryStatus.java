@@ -8,7 +8,10 @@ import java.sql.Timestamp;
 @Entity
 @Data
 @NoArgsConstructor
-@Table(name = "message_delivery_status")
+@Table(name = "message_delivery_status", indexes = {
+        @Index(name = "idx_delivery_status_message_user", columnList = "message_id, user_id"),
+        @Index(name = "idx_delivery_status_user", columnList = "user_id")
+})
 public class MessageDeliveryStatus {
 
     @Id

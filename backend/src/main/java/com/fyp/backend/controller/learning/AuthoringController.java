@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -60,8 +61,20 @@ public class AuthoringController {
     }
 
     @GetMapping("/getCourseStats")
-    public ApiResponse<List<Map<String, Object>>> getCourseStats() {
-        return ApiResponse.ok(authoringService.courseStats());
+    @SuppressWarnings("unchecked")
+    public ApiResponse<List<Map<String, Object>>> getCourseStats(
+            @RequestHeader("Authorization") String auth,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false) Boolean published,
+            @RequestParam(defaultValue = "updated_at") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        User requester = userService.getUserFromToken(auth)
+                .orElseThrow(() -> ApiException.unauthorized("Not authenticated"));
+        Map<String, Object> result = authoringService.courseStats(
+                requester, page, size, q, published, sortBy, sortOrder);
+        return ApiResponse.ok((List<Map<String, Object>>) result.get("data"), result.get("pagination"));
     }
 
     @PutMapping("/setCourseOutcomes/{courseId}")

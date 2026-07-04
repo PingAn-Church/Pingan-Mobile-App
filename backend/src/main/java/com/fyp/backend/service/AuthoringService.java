@@ -1,13 +1,17 @@
 package com.fyp.backend.service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,7 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.Category;
 import com.fyp.backend.model.Course;
-import com.fyp.backend.model.CourseEnrollment;
 import com.fyp.backend.model.CourseOutcome;
 import com.fyp.backend.model.CourseQuiz;
 import com.fyp.backend.model.CourseResource;
@@ -38,6 +41,9 @@ import com.fyp.backend.repository.QuizQuestionRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserVideoProgressRepository;
+import com.fyp.backend.util.Pagination;
+
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Write-side authoring logic for the in-app instructor/admin portal (P3).
@@ -134,7 +140,7 @@ public class AuthoringService {
         outcomeRepository.deleteAll(outcomeRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         resourceRepository.deleteAll(resources);
         videoRepository.deleteAll(videos);
-        ratingRepository.deleteAll(ratingRepository.findByCourseId(courseId));
+        ratingRepository.deleteByCourseId(courseId);
         sectionRepository.deleteAll(sectionRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         courseRepository.delete(c);
 
@@ -157,25 +163,26 @@ public class AuthoringService {
         }
     }
 
-    /**
-     * Per-course engagement stats for the instructor portal: live enrolment
-     * and completion counts plus average learner progress. Counts are computed
-     * from enrollments (not the denormalized {@code Course.studentCount}) so
-     * they stay accurate even if that counter drifts.
-     */
-    public List<Map<String, Object>> courseStats() {
-        List<Course> courses = courseRepository.findAll();
-        courses.sort(Comparator.comparing(Course::getUpdatedAt,
-                Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
+    public Map<String, Object> courseStats(User requester, int page, int size, String q,
+            Boolean published, String sortBy, String sortOrder) {
+        int safePage = Pagination.clampPage(page);
+        int safeSize = Pagination.clampSize(size);
+        Sort.Direction dir = "asc".equalsIgnoreCase(sortOrder) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(safePage, safeSize,
+                Sort.by(dir, courseSortProperty(sortBy)).and(Sort.by(Sort.Direction.DESC, "id")));
+        Long instructorId = requester != null && !requester.isAdmin() ? requester.getId() : null;
+        Page<Course> result = courseRepository.findAll(courseStatsFilter(q, published, instructorId), pageable);
 
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (Course c : courses) {
-            List<CourseEnrollment> enrollments = enrollmentRepository.findByCourseId(c.getId());
-            long enrolled = enrollments.size();
-            long completed = enrollments.stream().filter(CourseEnrollment::isCompleted).count();
-            double progressSum = enrollments.stream()
-                    .mapToDouble(e -> e.getProgressPercentage() == null ? 0 : e.getProgressPercentage())
-                    .sum();
+        List<Long> courseIds = result.getContent().stream().map(Course::getId).collect(Collectors.toList());
+        Map<Long, Object[]> statsByCourse = enrollmentRepository.statsByCourseIds(courseIds).stream()
+                .collect(Collectors.toMap(row -> ((Number) row[0]).longValue(), row -> row));
+
+        List<Map<String, Object>> data = new ArrayList<>();
+        for (Course c : result.getContent()) {
+            Object[] stats = statsByCourse.get(c.getId());
+            long enrolled = stats != null && stats[1] instanceof Number n ? n.longValue() : 0;
+            long completed = stats != null && stats[2] instanceof Number n ? n.longValue() : 0;
+            double avgProgress = stats != null && stats[3] instanceof Number n ? n.doubleValue() : 0.0;
 
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", String.valueOf(c.getId()));
@@ -184,12 +191,44 @@ public class AuthoringService {
             m.put("enrolled_count", enrolled);
             m.put("completed_count", completed);
             m.put("completion_rate", enrolled > 0 ? Math.round(completed * 100.0 / enrolled) : 0);
-            m.put("average_progress", enrolled > 0 ? Math.round((progressSum / enrolled) * 10.0) / 10.0 : 0);
+            m.put("average_progress", enrolled > 0 ? Math.round(avgProgress * 10.0) / 10.0 : 0);
             m.put("rating", c.getRating());
             m.put("total_ratings", c.getTotalRatings());
-            out.add(m);
+            data.add(m);
         }
-        return out;
+
+        return Pagination.envelope(data, result);
+    }
+
+    private Specification<Course> courseStatsFilter(String q, Boolean published, Long instructorId) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (published != null) {
+                predicates.add(cb.equal(root.get("isPublished"), published));
+            }
+            if (instructorId != null) {
+                predicates.add(cb.equal(root.get("instructorId"), instructorId));
+            }
+            String term = q == null ? "" : q.trim().toLowerCase();
+            if (!term.isEmpty()) {
+                String like = "%" + term + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), like),
+                        cb.like(cb.lower(root.get("instructorName")), like)));
+            }
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    private String courseSortProperty(String sortBy) {
+        String key = sortBy == null ? "updated_at" : sortBy;
+        return switch (key) {
+            case "title" -> "title";
+            case "rating" -> "rating";
+            case "student_count" -> "studentCount";
+            case "created_at" -> "createdAt";
+            default -> "updatedAt";
+        };
     }
 
     // ---- categories -----------------------------------------------------
@@ -228,16 +267,7 @@ public class AuthoringService {
                     return categoryRepository.save(g);
                 });
         if (!general.getId().equals(id)) {
-            for (Course c : courseRepository.findByIsPublishedTrueAndCategoryId(id)) {
-                c.setCategoryId(general.getId());
-                courseRepository.save(c);
-            }
-            for (Course c : courseRepository.findAll()) {
-                if (id.equals(c.getCategoryId())) {
-                    c.setCategoryId(general.getId());
-                    courseRepository.save(c);
-                }
-            }
+            courseRepository.moveCategory(id, general.getId());
             categoryRepository.delete(cat);
         }
     }

@@ -1,13 +1,14 @@
 package com.fyp.backend.service;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.util.Pagination;
 
 @Service
 public class ReviewService {
@@ -31,17 +33,20 @@ public class ReviewService {
                 .map(this::reviewMap).orElse(null);
     }
 
-    public List<Map<String, Object>> listReviews(Long courseId) {
-        List<CourseRating> ratings = new ArrayList<>(
-                ratingRepository.findByCourseIdAndReviewStatus(courseId, "visible"));
-        // Pinned first, then newest first.
-        ratings.sort(Comparator
-                .comparing(CourseRating::isPinned).reversed()
-                .thenComparing(Comparator.comparing(CourseRating::getCreatedAt,
-                        Comparator.nullsFirst(Comparator.naturalOrder())).reversed()));
-        List<Map<String, Object>> out = new ArrayList<>();
-        for (CourseRating r : ratings) out.add(reviewMap(r));
-        return out;
+    public Map<String, Object> listReviews(Long courseId, Pageable pageable) {
+        Page<CourseRating> result = ratingRepository.findByCourseIdAndReviewStatus(courseId, "visible", pageable);
+        List<Long> userIds = result.getContent().stream()
+                .filter(r -> !r.isAnonymous())
+                .map(CourseRating::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, User> users = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+        List<Map<String, Object>> data = result.getContent().stream()
+                .map(r -> reviewMap(r, users.get(r.getUserId())))
+                .collect(Collectors.toList());
+        return Pagination.envelope(data, result);
     }
 
     @Transactional
@@ -77,16 +82,18 @@ public class ReviewService {
     }
 
     public void recomputeCourseRating(Long courseId) {
-        List<CourseRating> visible = ratingRepository.findByCourseIdAndReviewStatus(courseId, "visible");
         Course course = courseRepository.findById(courseId).orElse(null);
         if (course == null) return;
-        if (visible.isEmpty()) {
+        List<Object[]> summaryRows = ratingRepository.visibleRatingSummary(courseId);
+        Object[] summary = summaryRows.isEmpty() ? null : summaryRows.get(0);
+        double avg = summary != null && summary.length > 0 && summary[0] instanceof Number n ? n.doubleValue() : 0.0;
+        long count = summary != null && summary.length > 1 && summary[1] instanceof Number n ? n.longValue() : 0L;
+        if (count == 0) {
             course.setRating(0.0);
             course.setTotalRatings(0);
         } else {
-            double avg = visible.stream().mapToInt(CourseRating::getRating).average().orElse(0);
             course.setRating(Math.round(avg * 100.0) / 100.0);
-            course.setTotalRatings(visible.size());
+            course.setTotalRatings(count > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) count);
         }
         courseRepository.save(course);
     }
@@ -97,10 +104,14 @@ public class ReviewService {
     }
 
     private Map<String, Object> reviewMap(CourseRating r) {
+        return reviewMap(r, null);
+    }
+
+    private Map<String, Object> reviewMap(CourseRating r, User providedUser) {
         String name = "Anonymous";
         String avatar = null;
         if (!r.isAnonymous()) {
-            User u = userRepository.findById(r.getUserId()).orElse(null);
+            User u = providedUser != null ? providedUser : userRepository.findById(r.getUserId()).orElse(null);
             if (u != null) {
                 String full = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
                         + (u.getLastName() == null ? "" : u.getLastName())).trim();

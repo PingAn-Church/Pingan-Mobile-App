@@ -3,7 +3,8 @@ package com.fyp.backend.service;
 import com.fyp.backend.model.Video;
 import com.fyp.backend.repository.VideoRepository;
 import org.springframework.stereotype.Service;
-import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class VideoService {
@@ -18,8 +19,8 @@ public class VideoService {
         return videoRepository.save(video);
     }
 
-    public List<Video> getAllVideos() {
-        return videoRepository.findAllByOrderByCreatedAtDesc();
+    public Page<Video> getVideos(Pageable pageable) {
+        return videoRepository.findAll(pageable);
     }
 
     public void deleteVideo(Long id) {

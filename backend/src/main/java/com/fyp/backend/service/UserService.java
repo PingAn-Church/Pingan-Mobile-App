@@ -3,9 +3,11 @@ package com.fyp.backend.service;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,8 @@ import com.fyp.backend.dto.UserProfileDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.util.JwtUtil;
+
+import jakarta.persistence.criteria.Predicate;
 
 @Service
 public class UserService {
@@ -69,28 +73,6 @@ public class UserService {
     }
 
     /**
-     * Retrieves all users except the currently authenticated one.
-     * 
-     * @param token The JWT authorization token.
-     * @return List of UserProfileDto.
-     */
-    public List<UserProfileDto> getAllUsers(String token) {
-        String email = jwtUtil.extractEmail(token);
-        Optional<User> userOptional = userRepository.findByEmail(email);
-
-        if (!userOptional.isPresent()) {
-            return List.of(); // Return empty list if user not found
-        }
-
-        User currentUser = userOptional.get();
-        return userRepository.findAll().stream()
-                .filter(user -> !user.getId().equals(currentUser.getId()))
-                .filter(user -> !user.isDeletedAccount())
-                .map(UserProfileDto::from)
-                .collect(Collectors.toList());
-    }
-
-    /**
      * Retrieves a map of all online users.
      * 
      * @return Map of online users.
@@ -99,26 +81,56 @@ public class UserService {
         return redisService.getAllOnlineUsers();
     }
 
-    public List<User> findVerifiedUsers() {
-        return userRepository.findByIsVerifiedUserTrueAndDeletedAccountFalse().stream()
-                .filter(User::isActive)
-                .collect(Collectors.toList());
+    @Transactional(readOnly = true)
+    public Page<User> searchUsers(String q, Boolean verified, Boolean active, String role,
+            Boolean deletedAccount, Pageable pageable) {
+        return userRepository.findAll(userFilter(q, verified, active, role, deletedAccount), pageable);
     }
 
-    public List<User> findAdmins() {
-        return userRepository.findByIsAdminTrueAndDeletedAccountFalse().stream()
-                .filter(User::isActive)
-                .collect(Collectors.toList());
-    }
+    private Specification<User> userFilter(String q, Boolean verified, Boolean active, String role,
+            Boolean deletedAccount) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new java.util.ArrayList<>();
 
-    public List<User> findInstructors() {
-        return userRepository.findByIsInstructorTrueAndDeletedAccountFalse().stream()
-                .filter(User::isActive)
-                .collect(Collectors.toList());
-    }
+            if (deletedAccount != null) {
+                predicates.add(cb.equal(root.get("deletedAccount"), deletedAccount));
+            }
+            if (verified != null) {
+                predicates.add(cb.equal(root.get("isVerifiedUser"), verified));
+            }
+            if (active != null) {
+                predicates.add(cb.equal(root.get("active"), active));
+            }
 
-    public List<User> findInactiveUsers() {
-        return userRepository.findByActiveFalseAndDeletedAccountFalse();
+            String normalizedRole = role == null ? "" : role.trim().toLowerCase();
+            switch (normalizedRole) {
+                case "admin" -> predicates.add(cb.equal(root.get("isAdmin"), true));
+                case "instructor" -> predicates.add(cb.equal(root.get("isInstructor"), true));
+                case "verified" -> predicates.add(cb.equal(root.get("isVerifiedUser"), true));
+                case "user", "non-admin" -> predicates.add(cb.equal(root.get("isAdmin"), false));
+                default -> {
+                }
+            }
+
+            String term = q == null ? "" : q.trim().toLowerCase();
+            if (!term.isEmpty()) {
+                String like = "%" + term + "%";
+                Predicate textMatch = cb.or(
+                        cb.like(cb.lower(root.get("firstName")), like),
+                        cb.like(cb.lower(root.get("lastName")), like),
+                        cb.like(cb.lower(cb.concat(cb.concat(root.get("firstName"), " "), root.get("lastName"))), like),
+                        cb.like(cb.lower(root.get("email")), like));
+
+                try {
+                    Long id = Long.parseLong(term);
+                    predicates.add(cb.or(textMatch, cb.equal(root.get("id"), id)));
+                } catch (NumberFormatException ignored) {
+                    predicates.add(textMatch);
+                }
+            }
+
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     /** Whether an account exists and is active (used to gate login/refresh). */
@@ -179,8 +191,8 @@ public class UserService {
 
             // Ensure at least **one admin remains** in the system
             Long adminCount = userRepository.countByIsAdminTrue();
-            if (!isAdmin && adminCount == 1) {
-                throw new RuntimeException("Cannot remove the last admin!");
+            if (!isAdmin && user.isAdmin() && adminCount <= 1) {
+                throw new LastAdminException("Cannot remove the last admin!");
             }
 
             user.setAdmin(isAdmin);
@@ -231,6 +243,13 @@ public class UserService {
             user.setProfileImage(userDto.getProfileImage());
 
         userRepository.save(user);
+    }
+
+    /** Demoting the last remaining admin is refused so the system can't lock itself out. */
+    public static class LastAdminException extends RuntimeException {
+        public LastAdminException(String message) {
+            super(message);
+        }
     }
 
 }

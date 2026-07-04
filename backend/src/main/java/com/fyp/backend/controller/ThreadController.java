@@ -54,8 +54,11 @@ public class ThreadController {
 
     // Get replies for a thread
     @GetMapping("/{id}/replies")
-    public List<ThreadReplyDto> getReplies(@PathVariable Long id) {
-        return replyService.getRepliesForThread(id);
+    public Map<String, Object> getReplies(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long after,
+            @RequestParam(defaultValue = "20") int size) {
+        return replyService.getRepliesPage(id, after, size);
     }
 
     // Add reply to a thread

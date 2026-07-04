@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.ApiResponse;
+import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.model.User;
 import com.fyp.backend.service.CourseService;
 import com.fyp.backend.service.UserService;
 
@@ -48,8 +50,21 @@ public class CourseController {
     /** Management list (published + drafts) for the authoring portal. */
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @GetMapping("/getAllCourse")
-    public ApiResponse<List<Map<String, Object>>> getAllCourse() {
-        return ApiResponse.ok(courseService.listAllCourses());
+    @SuppressWarnings("unchecked")
+    public ApiResponse<List<Map<String, Object>>> getAllCourse(
+            @RequestHeader("Authorization") String auth,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false) Boolean published,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = "updated_at") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortOrder) {
+        User requester = userService.getUserFromToken(auth)
+                .orElseThrow(() -> ApiException.unauthorized("Not authenticated"));
+        Map<String, Object> result = courseService.listAllCourses(
+                requester, page, size, q, published, categoryId, sortBy, sortOrder);
+        return ApiResponse.ok((List<Map<String, Object>>) result.get("data"), result.get("pagination"));
     }
 
     @GetMapping("/getModuleDetail/{courseId}")

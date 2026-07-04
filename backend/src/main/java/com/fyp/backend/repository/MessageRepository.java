@@ -11,15 +11,23 @@ import java.util.List;
 
 @Repository
 public interface MessageRepository extends JpaRepository<Message, Long> {
-    List<Message> findByConversationId(Long conversationId);
-    List<Message> findByConversationIdAndType(Long conversationId, String type);
-
     long countBySenderId(Long senderId);
 
     // Cursor (keyset) pagination, newest-first. The first page omits `before`;
     // subsequent pages pass the smallest id seen so far to fetch older messages.
     List<Message> findByConversationIdOrderByIdDesc(Long conversationId, Pageable pageable);
     List<Message> findByConversationIdAndIdLessThanOrderByIdDesc(Long conversationId, Long beforeId, Pageable pageable);
+
+    @Query("SELECT m.content FROM Message m WHERE m.conversation.id = :conversationId "
+            + "AND lower(m.type) IN ('image', 'voice') ORDER BY m.id ASC")
+    List<String> findMediaContentsByConversationId(@Param("conversationId") Long conversationId, Pageable pageable);
+
+    @Query("SELECT m.content FROM Message m WHERE m.conversation.id = :conversationId "
+            + "AND m.sender.id = :senderId AND lower(m.type) IN ('image', 'voice') ORDER BY m.id ASC")
+    List<String> findMediaContentsByConversationIdAndSenderId(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId,
+            Pageable pageable);
 
     // Unread = messages from other people in this conversation not yet READ by the user.
     @Query("SELECT COUNT(m) FROM Message m WHERE m.conversation.id = :conversationId AND m.sender.id <> :userId "
@@ -34,6 +42,29 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = "DELETE FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
     void deleteReadReceiptsByUserId(@Param("userId") Long userId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM message_read_receipts WHERE message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId)", nativeQuery = true)
+    void deleteReadReceiptsByConversationId(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM message_read_receipts WHERE message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId AND sender_id = :senderId)",
+            nativeQuery = true)
+    void deleteReadReceiptsByConversationIdAndSenderId(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM Message m WHERE m.conversation.id = :conversationId")
+    void deleteByConversationIdBulk(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM Message m WHERE m.conversation.id = :conversationId AND m.sender.id = :senderId")
+    void deleteByConversationIdAndSenderIdBulk(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
 
     @Query(value = "SELECT COUNT(*) FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
     long countReadReceiptsByUserId(@Param("userId") Long userId);

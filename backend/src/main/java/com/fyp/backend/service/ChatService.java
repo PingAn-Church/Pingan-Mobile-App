@@ -124,16 +124,6 @@ public class ChatService {
                 .orElse(null);
     }
 
-    public List<MessageDto> getChatHistory(Long conversationId, String conversationType, Long userId) {
-        Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
-        checkUserIsParticipant(conversation, userId);
-
-        List<Message> messages = messageRepository.findByConversationId(conversationId);
-        return messages.stream()
-                .map(MessageDto::new)
-                .collect(Collectors.toList());
-    }
-
     /**
      * Cursor-paginated chat history, newest-first internally but returned oldest->newest
      * for natural rendering. `before` is the smallest message id already loaded (null for
