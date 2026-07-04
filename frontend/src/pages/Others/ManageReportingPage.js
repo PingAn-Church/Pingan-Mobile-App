@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,59 @@ import { showAlert } from "../../utils/showAlert";
 import { UserContext } from "../../context/UserContext";
 import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
+
+const REPORT_PAGE_SIZE = 20;
+const STATUS_PENDING = "PENDING";
+const STATUS_RESOLVED = "RESOLVED";
+const DEFAULT_REPORT_FILTER = "week";
+const REPORT_FILTER_PRESETS = ["day", "week", "month", "all"];
+
+const createReportPageState = () => ({
+  items: [],
+  page: -1,
+  hasMore: true,
+  totalCount: 0,
+  loadingInitial: false,
+  loadingMore: false,
+  initialized: false,
+});
+
+const buildReportFilters = (preset = DEFAULT_REPORT_FILTER) => {
+  const normalizedPreset = REPORT_FILTER_PRESETS.includes(preset) ? preset : DEFAULT_REPORT_FILTER;
+  if (normalizedPreset === "all") {
+    return { preset: normalizedPreset, from: "", to: "" };
+  }
+
+  const to = new Date();
+  const from = new Date(to);
+  if (normalizedPreset === "day") {
+    from.setDate(to.getDate() - 1);
+  } else if (normalizedPreset === "month") {
+    from.setMonth(to.getMonth() - 1);
+  } else {
+    from.setDate(to.getDate() - 7);
+  }
+
+  return {
+    preset: normalizedPreset,
+    from: from.toISOString(),
+    to: to.toISOString(),
+  };
+};
+
+const reportFilterLabel = (preset) => {
+  switch (preset) {
+    case "day":
+      return i18n.t("reportDateLastDay");
+    case "month":
+      return i18n.t("reportDateLastMonth");
+    case "all":
+      return i18n.t("reportDateAll");
+    case "week":
+    default:
+      return i18n.t("reportDateLastWeek");
+  }
+};
 
 // Voice messages store their payload as "objectUrl|durationSeconds".
 const parseVoiceContent = (content) => {
@@ -87,7 +140,7 @@ function ReportedContent({ report }) {
 
   if (type === "image") {
     if (imageLoading) return <ActivityIndicator style={styles.contentSpinner} />;
-    if (!imageUrl) return <Text style={styles.contentUnavailable}>—</Text>;
+    if (!imageUrl) return <Text style={styles.contentUnavailable}>-</Text>;
     return <Image source={{ uri: imageUrl }} style={styles.contentImage} resizeMode="cover" />;
   }
 
@@ -111,34 +164,172 @@ export default function ManageReportingPage() {
   const navigation = useNavigation();
   const { user } = useContext(UserContext);
   const { language } = useContext(LanguageContext);
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [pendingReports, setPendingReports] = useState(createReportPageState);
+  const [resolvedReports, setResolvedReports] = useState(createReportPageState);
+  const [resolvedExpanded, setResolvedExpanded] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState(() => buildReportFilters());
   const [resolvingId, setResolvingId] = useState(null);
+
+  const pendingReportsRef = useRef(pendingReports);
+  const resolvedReportsRef = useRef(resolvedReports);
+  const resolvedExpandedRef = useRef(resolvedExpanded);
+  const filtersRef = useRef(appliedFilters);
+  const loadLocksRef = useRef({ [STATUS_PENDING]: false, [STATUS_RESOLVED]: false });
+  const requestIdsRef = useRef({ [STATUS_PENDING]: 0, [STATUS_RESOLVED]: 0 });
+
+  useEffect(() => {
+    pendingReportsRef.current = pendingReports;
+  }, [pendingReports]);
+
+  useEffect(() => {
+    resolvedReportsRef.current = resolvedReports;
+  }, [resolvedReports]);
+
+  useEffect(() => {
+    resolvedExpandedRef.current = resolvedExpanded;
+  }, [resolvedExpanded]);
+
+  useEffect(() => {
+    filtersRef.current = appliedFilters;
+  }, [appliedFilters]);
 
   useEffect(() => {
     navigation.setOptions({
       title: i18n.t("manageReporting"),
       headerBackTitle: i18n.t("back"),
     });
-  }, [language]);
+  }, [language, navigation]);
 
-  const fetchReports = useCallback(async () => {
+  const loadReportsPage = useCallback(async (status, page = 0, append = false, filtersOverride = null) => {
+    if (append && loadLocksRef.current[status]) return;
+
+    const setReportState = status === STATUS_PENDING ? setPendingReports : setResolvedReports;
+    const filters = filtersOverride || filtersRef.current;
+    const requestId = requestIdsRef.current[status] + 1;
+    requestIdsRef.current[status] = requestId;
+    loadLocksRef.current[status] = true;
+    setReportState((prev) => ({
+      ...prev,
+      loadingInitial: !append,
+      loadingMore: append,
+    }));
+
     try {
-      const data = await getReports();
-      setReports(Array.isArray(data) ? data : []);
+      const response = await getReports({
+        status,
+        page,
+        size: REPORT_PAGE_SIZE,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
+      });
+      const data = Array.isArray(response?.data) ? response.data : [];
+      const pagination = response?.pagination || {};
+
+      if (requestIdsRef.current[status] !== requestId) return;
+
+      setReportState((prev) => {
+        const items = append ? [...prev.items, ...data] : data;
+        return {
+          items,
+          page: Number.isFinite(Number(pagination.page)) ? Number(pagination.page) : page,
+          hasMore: Boolean(pagination.hasMore),
+          totalCount:
+            typeof pagination.totalCount === "number" ? pagination.totalCount : items.length,
+          loadingInitial: false,
+          loadingMore: false,
+          initialized: true,
+        };
+      });
     } catch (error) {
+      if (requestIdsRef.current[status] !== requestId) return;
+
       console.error("Failed to fetch reports:", error);
       showAlert(i18n.t("error"), i18n.t("loadReportsFailed"), [{ text: i18n.t("ok") }]);
+      setReportState((prev) => ({
+        ...prev,
+        loadingInitial: false,
+        loadingMore: false,
+        initialized: true,
+      }));
     } finally {
-      setLoading(false);
+      if (requestIdsRef.current[status] === requestId) {
+        loadLocksRef.current[status] = false;
+      }
     }
   }, []);
 
+  const reloadVisibleQueues = useCallback(
+    async (filters = null) => {
+      const effectiveFilters = filters || buildReportFilters(filtersRef.current.preset);
+      filtersRef.current = effectiveFilters;
+      setAppliedFilters(effectiveFilters);
+
+      setPendingReports(createReportPageState());
+      await loadReportsPage(STATUS_PENDING, 0, false, effectiveFilters);
+
+      if (resolvedExpandedRef.current) {
+        setResolvedReports(createReportPageState());
+        await loadReportsPage(STATUS_RESOLVED, 0, false, effectiveFilters);
+      } else {
+        setResolvedReports(createReportPageState());
+      }
+    },
+    [loadReportsPage]
+  );
+
   useFocusEffect(
     useCallback(() => {
-      fetchReports();
-    }, [fetchReports])
+      if (!user?.admin) {
+        setPendingReports(createReportPageState());
+        setResolvedReports(createReportPageState());
+        return undefined;
+      }
+
+      reloadVisibleQueues();
+      return undefined;
+    }, [reloadVisibleQueues, user?.admin])
   );
+
+  const applyReportFilterPreset = useCallback((preset) => {
+    const nextFilters = buildReportFilters(preset);
+    filtersRef.current = nextFilters;
+    setAppliedFilters(nextFilters);
+    reloadVisibleQueues(nextFilters);
+  }, [reloadVisibleQueues]);
+
+  const loadNextReports = useCallback(
+    (status) => {
+      const state = status === STATUS_PENDING ? pendingReportsRef.current : resolvedReportsRef.current;
+      if (!state.initialized || state.loadingInitial || state.loadingMore || !state.hasMore) return;
+      loadReportsPage(status, state.page + 1, true);
+    },
+    [loadReportsPage]
+  );
+
+  const loadNextReportsRef = useRef(loadNextReports);
+  useEffect(() => {
+    loadNextReportsRef.current = loadNextReports;
+  }, [loadNextReports]);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    viewableItems.forEach(({ item }) => {
+      if (item?.rowType === "loadMore") {
+        loadNextReportsRef.current(item.status);
+      }
+    });
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 30 }).current;
+
+  const handleToggleResolved = useCallback(() => {
+    const nextExpanded = !resolvedExpandedRef.current;
+    resolvedExpandedRef.current = nextExpanded;
+    setResolvedExpanded(nextExpanded);
+
+    if (nextExpanded && !resolvedReportsRef.current.initialized) {
+      loadReportsPage(STATUS_RESOLVED, 0, false);
+    }
+  }, [loadReportsPage]);
 
   const handleResolve = async (report, action) => {
     if (resolvingId) return; // one action at a time
@@ -160,7 +351,7 @@ export default function ManageReportingPage() {
     setResolvingId(report.id);
     try {
       await resolveReport(report.id, action);
-      await fetchReports();
+      await reloadVisibleQueues();
     } catch (error) {
       const serverMessage =
         typeof error?.response?.data === "string" ? error.response.data : null;
@@ -172,20 +363,98 @@ export default function ManageReportingPage() {
     }
   };
 
-  if (!user?.admin) {
-    return <Text style={styles.noAccess}>{i18n.t("notAuthorized")}</Text>;
-  }
+  const listRows = useMemo(() => {
+    const rows = [
+      {
+        rowType: "sectionHeader",
+        key: "pending-header",
+        status: STATUS_PENDING,
+        title: i18n.t("pendingReports"),
+        count: pendingReports.initialized ? pendingReports.totalCount : null,
+      },
+    ];
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
+    if (pendingReports.loadingInitial && !pendingReports.initialized) {
+      rows.push({ rowType: "loading", key: "pending-loading" });
+    } else if (pendingReports.initialized && pendingReports.items.length === 0) {
+      rows.push({ rowType: "empty", key: "pending-empty", label: i18n.t("noReports") });
+    } else {
+      pendingReports.items.forEach((report) =>
+        rows.push({ rowType: "report", key: `pending-${report.id}`, report })
+      );
+    }
+
+    if (pendingReports.initialized && pendingReports.hasMore) {
+      rows.push({
+        rowType: "loadMore",
+        key: `pending-load-more-${pendingReports.page}`,
+        status: STATUS_PENDING,
+      });
+    }
+
+    rows.push({
+      rowType: "resolvedToggle",
+      key: "resolved-toggle",
+    });
+
+    if (resolvedExpanded) {
+      rows.push({
+        rowType: "sectionHeader",
+        key: "resolved-header",
+        status: STATUS_RESOLVED,
+        title: i18n.t("resolvedReports"),
+        count: resolvedReports.initialized ? resolvedReports.totalCount : null,
+      });
+
+      if (resolvedReports.loadingInitial && !resolvedReports.initialized) {
+        rows.push({ rowType: "loading", key: "resolved-loading" });
+      } else if (resolvedReports.initialized && resolvedReports.items.length === 0) {
+        rows.push({ rowType: "empty", key: "resolved-empty", label: i18n.t("noReports") });
+      } else {
+        resolvedReports.items.forEach((report) =>
+          rows.push({ rowType: "report", key: `resolved-${report.id}`, report })
+        );
+      }
+
+      if (resolvedReports.initialized && resolvedReports.hasMore) {
+        rows.push({
+          rowType: "loadMore",
+          key: `resolved-load-more-${resolvedReports.page}`,
+          status: STATUS_RESOLVED,
+        });
+      }
+    }
+
+    return rows;
+  }, [language, pendingReports, resolvedExpanded, resolvedReports]);
+
+  const filterControls = (
+    <View style={styles.filterCard}>
+      <Text style={styles.filterTitle}>{i18n.t("reportDateFilter")}</Text>
+      <View style={styles.filterPresetRow}>
+        {REPORT_FILTER_PRESETS.map((preset) => {
+          const active = appliedFilters.preset === preset;
+          return (
+            <TouchableOpacity
+              key={preset}
+              style={[styles.filterPresetButton, active && styles.filterPresetButtonActive]}
+              onPress={() => applyReportFilterPreset(preset)}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[styles.filterPresetText, active && styles.filterPresetTextActive]}
+              >
+                {reportFilterLabel(preset)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
-    );
-  }
+    </View>
+  );
 
-  const renderReport = ({ item }) => {
-    const pending = item.status === "PENDING";
+  const renderReportCard = (item) => {
+    const pending = item.status === STATUS_PENDING;
     const busy = resolvingId === item.id;
 
     return (
@@ -207,7 +476,7 @@ export default function ManageReportingPage() {
         </View>
 
         <Text style={styles.metaText}>
-          {i18n.t("reportedBy")}: {item.reporterName || "-"} · {formatDateTime(item.reportedAt)}
+          {i18n.t("reportedBy")}: {item.reporterName || "-"} - {formatDateTime(item.reportedAt)}
         </Text>
 
         {pending ? (
@@ -241,7 +510,7 @@ export default function ManageReportingPage() {
           </View>
         ) : (
           <Text style={styles.resolutionText}>
-            {resolutionLabel(item.resolution)} · {i18n.t("resolvedBy")}: {item.resolvedByName || "-"} ·{" "}
+            {resolutionLabel(item.resolution)} - {i18n.t("resolvedBy")}: {item.resolvedByName || "-"} -{" "}
             {formatDateTime(item.resolvedAt)}
           </Text>
         )}
@@ -251,14 +520,72 @@ export default function ManageReportingPage() {
     );
   };
 
+  const renderListRow = ({ item }) => {
+    switch (item.rowType) {
+      case "sectionHeader":
+        return (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{item.title}</Text>
+            {typeof item.count === "number" ? (
+              <Text style={styles.sectionCount}>{item.count}</Text>
+            ) : null}
+          </View>
+        );
+      case "report":
+        return renderReportCard(item.report);
+      case "loading":
+        return <ActivityIndicator style={styles.sectionSpinner} />;
+      case "empty":
+        return <Text style={styles.emptyText}>{item.label}</Text>;
+      case "loadMore":
+        return (
+          <View style={styles.loadMoreRow}>
+            <ActivityIndicator size="small" color="#4B5563" />
+            <Text style={styles.loadMoreText}>{i18n.t("loadingMoreReports")}</Text>
+          </View>
+        );
+      case "resolvedToggle":
+        return (
+          <TouchableOpacity
+            style={styles.resolvedToggle}
+            onPress={handleToggleResolved}
+            activeOpacity={0.85}
+          >
+            <View>
+              <Text style={styles.resolvedToggleTitle}>{i18n.t("resolvedReports")}</Text>
+              <Text style={styles.resolvedToggleSubtitle}>
+                {resolvedExpanded
+                  ? i18n.t("hideResolvedReports")
+                  : i18n.t("showResolvedReports")}
+              </Text>
+            </View>
+            <Ionicons
+              name={resolvedExpanded ? "chevron-up" : "chevron-down"}
+              size={22}
+              color="#4B5563"
+            />
+          </TouchableOpacity>
+        );
+      default:
+        return null;
+    }
+  };
+
+  if (!user?.admin) {
+    return <Text style={styles.noAccess}>{i18n.t("notAuthorized")}</Text>;
+  }
+
   return (
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.listContent}
-      data={reports}
-      keyExtractor={(item) => String(item.id)}
-      renderItem={renderReport}
-      ListEmptyComponent={<Text style={styles.emptyText}>{i18n.t("noReports")}</Text>}
+      data={listRows}
+      keyExtractor={(item) => item.key}
+      renderItem={renderListRow}
+      ListHeaderComponent={filterControls}
+      keyboardShouldPersistTaps="handled"
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={viewabilityConfig}
     />
   );
 }
@@ -268,7 +595,100 @@ const styles = StyleSheet.create({
   listContent: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   noAccess: { textAlign: "center", fontSize: 18, color: "gray", marginTop: 30 },
-  emptyText: { textAlign: "center", fontSize: 16, color: "#6B7280", marginTop: 40 },
+  filterCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 10,
+  },
+  filterPresetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterPresetButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filterPresetButtonActive: {
+    backgroundColor: "#0A84FF",
+    borderColor: "#0A84FF",
+  },
+  filterPresetText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  filterPresetTextActive: {
+    color: "#FFFFFF",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  sectionCount: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  sectionSpinner: {
+    marginVertical: 18,
+  },
+  emptyText: { textAlign: "center", fontSize: 16, color: "#6B7280", marginVertical: 24 },
+  resolvedToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 4,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  resolvedToggleTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  resolvedToggleSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  loadMoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+  },
+  loadMoreText: {
+    fontSize: 13,
+    color: "#4B5563",
+    fontWeight: "600",
+  },
   card: {
     backgroundColor: "#fff",
     borderRadius: 12,

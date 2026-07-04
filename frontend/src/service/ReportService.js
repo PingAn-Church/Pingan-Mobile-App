@@ -19,10 +19,15 @@ export const reportMessage = async (messageId) => {
   return response.data;
 };
 
-/** Admin: the full report queue, pending first. */
-export const getReports = async () => {
+/** Admin: paged report queue. status: PENDING | RESOLVED. */
+export const getReports = async ({ status, page = 0, size = 20, from, to } = {}) => {
   const headers = await authHeaders();
-  const response = await axios.get(apiUrl(`/api/reports`), { headers });
+  const params = { page, size };
+  if (status) params.status = status;
+  if (from) params.from = from;
+  if (to) params.to = to;
+
+  const response = await axios.get(apiUrl(`/api/reports`), { params, headers });
   return response.data;
 };
 

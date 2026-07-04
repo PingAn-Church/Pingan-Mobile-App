@@ -20,6 +20,8 @@ import {
   updateUserActiveStatus,
   getInactiveUsers,
   deleteUser,
+  getDeletedAccounts,
+  purgeDeletedAccount,
 } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
 import i18n from "../../../i18n";
@@ -160,6 +162,7 @@ export function ManageUsersPage() {
   const [verifiedUsers, setVerifiedUsers] = useState([]);
   const [notVerifiedUsers, setNotVerifiedUsers] = useState([]);
   const [inactiveUsers, setInactiveUsers] = useState([]);
+  const [deletedAccounts, setDeletedAccounts] = useState([]);
   const [search, setSearch] = useState("");
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
@@ -178,6 +181,7 @@ export function ManageUsersPage() {
       const verifiedList = await getVerifiedUsers();
       const notVerifiedList = await getAllUsers();
       const inactiveList = await getInactiveUsers();
+      const deletedList = await getDeletedAccounts();
 
       const filteredVerified = verifiedList.filter(
         (u) => u.id !== user.id && u.admin === false
@@ -189,6 +193,7 @@ export function ManageUsersPage() {
       setVerifiedUsers(filteredVerified);
       setNotVerifiedUsers(filteredNotVerified);
       setInactiveUsers(inactiveList.filter((u) => u.id !== user.id));
+      setDeletedAccounts(deletedList || []);
     } catch (error) {
       console.error("Error fetching users:", error);
     }
@@ -256,6 +261,75 @@ export function ManageUsersPage() {
     }
   };
 
+  const formatDeletedAt = (value) => {
+    if (!value) return i18n.t("unknown");
+    try {
+      return new Date(value).toLocaleString();
+    } catch {
+      return String(value);
+    }
+  };
+
+  const formatReferences = (references = {}) =>
+    Object.entries(references)
+      .filter(([, count]) => Number(count) > 0)
+      .map(([key, count]) => `${key}: ${count}`)
+      .join(", ");
+
+  const deletedAccountMatchesSearch = (account, term) => {
+    const q = (term || "").trim().toLowerCase();
+    if (!q) return true;
+    return [
+      account?.displayName,
+      account?.email,
+      String(account?.id ?? ""),
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(q));
+  };
+
+  const confirmPurgeDeletedAccount = (account) => {
+    if (!account?.purgeEligible) {
+      const refs = formatReferences(account?.references);
+      showAlert(
+        i18n.t("purgeDeletedAccountBlocked"),
+        refs || i18n.t("remainingReferences"),
+        [{ text: i18n.t("ok") }]
+      );
+      return;
+    }
+
+    showAlert(
+      i18n.t("purgeDeletedAccountTitle"),
+      i18n.t("purgeDeletedAccountMessage"),
+      [
+        { text: i18n.t("cancel"), style: "cancel" },
+        {
+          text: i18n.t("delete"),
+          style: "destructive",
+          onPress: () => doPurgeDeletedAccount(account.id),
+        },
+      ]
+    );
+  };
+
+  const doPurgeDeletedAccount = async (userId) => {
+    try {
+      await purgeDeletedAccount(userId);
+      loadUsers();
+    } catch (error) {
+      console.error("Error purging deleted account:", error);
+      const refs = formatReferences(error?.response?.data?.references);
+      const message =
+        typeof error?.response?.data?.message === "string"
+          ? error.response.data.message
+          : i18n.t("purgeDeletedAccountFailed");
+      showAlert(i18n.t("error"), refs ? `${message}\n${refs}` : message, [
+        { text: i18n.t("ok") },
+      ]);
+    }
+  };
+
   // Remove from verified (moves to not verified)
   const handleRemoveVerified = async (userId) => {
     try {
@@ -310,6 +384,7 @@ export function ManageUsersPage() {
   const shownVerified = verifiedUsers.filter((u) => userMatchesSearch(u, search));
   const shownNotVerified = notVerifiedUsers.filter((u) => userMatchesSearch(u, search));
   const shownInactive = inactiveUsers.filter((u) => userMatchesSearch(u, search));
+  const shownDeleted = deletedAccounts.filter((u) => deletedAccountMatchesSearch(u, search));
 
   return (
     <ScrollView
@@ -380,6 +455,45 @@ export function ManageUsersPage() {
       ) : (
         <Text style={styles.noData}>{i18n.t("noInactiveUsers")}</Text>
       )}
+
+      <Text style={styles.subHeader}>{i18n.t("deletedAccounts")}</Text>
+      {shownDeleted.length > 0 ? (
+        shownDeleted.map((item) => (
+          <View key={item.id} style={styles.userItem}>
+            <View style={styles.deletedAccountTextBlock}>
+              <Text style={styles.userName}>{item.displayName}</Text>
+              <Text style={styles.deletedAccountMeta}>
+                {i18n.t("deletedAt")}: {formatDeletedAt(item.deletedAt)}
+              </Text>
+              <Text style={styles.deletedAccountMeta}>
+                {i18n.t("remainingReferences")}: {item.referenceCount}
+              </Text>
+              {item.referenceCount > 0 && (
+                <Text style={styles.deletedAccountRefs}>
+                  {formatReferences(item.references)}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={() => confirmPurgeDeletedAccount(item)}
+              style={[
+                styles.iconButton,
+                !item.purgeEligible && styles.disabledIconButton,
+              ]}
+              disabled={!item.purgeEligible}
+              accessibilityLabel={i18n.t("purgeDeletedAccountTitle")}
+            >
+              <Ionicons
+                name="trash"
+                size={24}
+                color={item.purgeEligible ? "red" : "#aaa"}
+              />
+            </TouchableOpacity>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.noData}>{i18n.t("noDeletedAccounts")}</Text>
+      )}
     </ScrollView>
   );
 }
@@ -438,9 +552,26 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 18,
   },
+  deletedAccountTextBlock: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  deletedAccountMeta: {
+    color: "#666",
+    fontSize: 13,
+    marginTop: 3,
+  },
+  deletedAccountRefs: {
+    color: "#888",
+    fontSize: 12,
+    marginTop: 4,
+  },
   iconButton: {
     padding: 8,
     borderRadius: 5,
+  },
+  disabledIconButton: {
+    opacity: 0.5,
   },
   noData: {
     fontSize: 16,

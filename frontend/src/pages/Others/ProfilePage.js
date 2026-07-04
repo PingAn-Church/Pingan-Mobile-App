@@ -22,7 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { MaterialIcons } from "@expo/vector-icons";
 import { UserContext } from "../../context/UserContext";
 import { useNotification } from "../../context/NotificationContext";
-import { getUserById } from "../../service/UserService";
+import { deleteOwnAccount, getUserById } from "../../service/UserService";
 import { getAllApplications } from "../../service/ApplicationService";
 import { useNavigation } from "@react-navigation/native";
 import { logoutUser } from "../../service/AuthService";
@@ -40,6 +40,7 @@ export default function ProfilePage() {
   const navigation = useNavigation();
   const [userDetails, setUserDetails] = useState([]);
   const [profileImage, setProfileImage] = useState(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const { language, toggleLanguage } = useContext(LanguageContext);
   const { handleDeactivatePushToken } = useNotification();
 
@@ -235,6 +236,82 @@ export default function ProfilePage() {
   }
 };
 
+  const confirmDeleteOwnAccount = () => {
+    if (deletingAccount) return;
+    if (user?.admin) {
+      showAlert(i18n.t("error"), i18n.t("deleteOwnAccountAdminBlocked"), [
+        { text: i18n.t("ok") },
+      ]);
+      return;
+    }
+    showAlert(
+      i18n.t("deleteOwnAccountTitle"),
+      i18n.t("deleteOwnAccountMessage"),
+      [
+        { text: i18n.t("cancel"), style: "cancel" },
+        {
+          text: i18n.t("continue"),
+          style: "destructive",
+          onPress: confirmDeleteOwnAccountFinal,
+        },
+      ]
+    );
+  };
+
+  const confirmDeleteOwnAccountFinal = () => {
+    showAlert(
+      i18n.t("deleteOwnAccountFinalTitle"),
+      i18n.t("deleteOwnAccountFinalMessage"),
+      [
+        { text: i18n.t("cancel"), style: "cancel" },
+        {
+          text: i18n.t("deleteOwnAccount"),
+          style: "destructive",
+          onPress: doDeleteOwnAccount,
+        },
+      ]
+    );
+  };
+
+  const doDeleteOwnAccount = async () => {
+    if (deletingAccount) return;
+    setDeletingAccount(true);
+    let completed = false;
+    try {
+      try {
+        await handleDeactivatePushToken();
+      } catch (pushError) {
+        console.warn("Failed to deactivate push token before account deletion:", pushError);
+      }
+
+      await deleteOwnAccount();
+      await logout();
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Welcome" }],
+      });
+
+      if (Platform.OS === "web") {
+        window.history.replaceState({}, "", "/");
+      }
+
+      showAlert(i18n.t("success"), i18n.t("deleteOwnAccountSuccess"));
+      completed = true;
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      const message =
+        typeof error?.response?.data === "string"
+          ? error.response.data
+          : i18n.t("deleteOwnAccountFailed");
+      showAlert(i18n.t("error"), message, [{ text: i18n.t("ok") }]);
+    } finally {
+      if (!completed) {
+        setDeletingAccount(false);
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -382,6 +459,20 @@ export default function ProfilePage() {
           onPress={handlePressLogout}
         >
           <Text style={styles.buttonText}>{i18n.t("logout")}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.deleteAccountButton, deletingAccount && styles.disabledButton]}
+          onPress={confirmDeleteOwnAccount}
+          disabled={deletingAccount}
+        >
+          {deletingAccount ? (
+            <ActivityIndicator color="#c0392b" />
+          ) : (
+            <Text style={styles.deleteAccountText}>
+              {i18n.t("deleteOwnAccount")}
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -685,6 +776,20 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
     marginHorizontal: 10,
+  },
+  deleteAccountButton: {
+    alignItems: "center",
+    paddingVertical: 10,
+    marginBottom: 28,
+    marginHorizontal: 10,
+  },
+  deleteAccountText: {
+    color: "#c0392b",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   editButton: {
     backgroundColor: "#007AFF",
