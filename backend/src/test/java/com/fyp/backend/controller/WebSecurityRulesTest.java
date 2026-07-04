@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -28,9 +30,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fyp.backend.config.security.JwtAuthenticationFilter;
 import com.fyp.backend.config.security.SpringSecurityConfig;
 import com.fyp.backend.dto.AppReleaseDto;
+import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.AppReleaseService;
+import com.fyp.backend.service.MessageReportService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserAccountDeletionService;
@@ -42,7 +46,8 @@ import com.fyp.backend.util.JwtUtil;
  * established. Pure web-layer slice: the real security config + JWT filter are
  * loaded, every collaborator is mocked, and no DB/Redis/OSS/SMTP is touched.
  */
-@WebMvcTest(controllers = { UserController.class, OSSController.class, AppReleaseController.class })
+@WebMvcTest(controllers = { UserController.class, OSSController.class, AppReleaseController.class,
+        ReportController.class })
 @Import({ SpringSecurityConfig.class, JwtAuthenticationFilter.class })
 // Satisfy placeholders read while building the slice (e.g. server.address=${IP_ADDR}).
 @TestPropertySource(properties = { "IP_ADDR=127.0.0.1" })
@@ -57,6 +62,7 @@ class WebSecurityRulesTest {
     @MockBean private OSSService ossService;
     @MockBean private AppReleaseService appReleaseService;
     @MockBean private UserAccountDeletionService userAccountDeletionService;
+    @MockBean private MessageReportService messageReportService;
 
     private User userWithEmail(long id, String email) {
         User u = new User();
@@ -167,6 +173,83 @@ class WebSecurityRulesTest {
                 .thenReturn(new URL("https://oss.example.com/userProfilePictures/a.jpg"));
 
         mockMvc.perform(get("/oss/presigned-upload-url").param("fileName", "a.jpg").param("fileType", "profile"))
+                .andExpect(status().isOk());
+    }
+
+    // ---- message reporting: create is authenticated, review is ADMIN-only --
+
+    @Test
+    void reportCreateIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(post("/api/reports")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"messageId\": 5}"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void reportCreateIsAllowedForAuthenticated() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+        when(messageReportService.createReport(5L, 7L)).thenReturn(new MessageReport());
+
+        mockMvc.perform(post("/api/reports")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"messageId\": 5}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void duplicateReportReturnsConflict() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+        when(messageReportService.createReport(5L, 7L))
+                .thenThrow(new IllegalStateException("This message has already been reported."));
+
+        mockMvc.perform(post("/api/reports")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"messageId\": 5}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void reportQueueIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(get("/api/reports")).andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void reportQueueIsForbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(get("/api/reports")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void reportQueueIsAllowedForAdmin() throws Exception {
+        when(messageReportService.getAllReports()).thenReturn(List.of());
+        mockMvc.perform(get("/api/reports")).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void reportResolveIsForbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(post("/api/reports/1/resolve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\": \"NO_PROBLEM\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void reportResolveIsAllowedForAdmin() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(1L);
+        when(messageReportService.resolveReport(1L, "NO_PROBLEM", 1L)).thenReturn(new MessageReport());
+
+        mockMvc.perform(post("/api/reports/1/resolve")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\": \"NO_PROBLEM\"}"))
                 .andExpect(status().isOk());
     }
 
