@@ -14,7 +14,7 @@ export default {
         backgroundColor: "#ffffff",
       },
       ios: {
-        supportsTablet: true,
+        supportsTablet: false,
         buildNumber: "202",
         infoPlist: {
           NSPhotoLibraryUsageDescription:
