@@ -3,6 +3,7 @@ package com.fyp.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -129,12 +131,12 @@ class MessageReportServiceTest {
         Timestamp to = Timestamp.valueOf("2026-07-31 23:59:59");
         Pageable pageable = PageRequest.of(0, 20);
         Page<MessageReport> expected = new PageImpl<>(List.of(pendingReport(1L)), pageable, 1);
-        when(messageReportRepository.findReports("PENDING", from, to, pageable)).thenReturn(expected);
+        when(messageReportRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(expected);
 
         Page<MessageReport> actual = service.getReports("pending", from, to, pageable);
 
         assertEquals(expected, actual);
-        verify(messageReportRepository).findReports("PENDING", from, to, pageable);
+        verify(messageReportRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -143,7 +145,7 @@ class MessageReportServiceTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> service.getReports("ARCHIVED", null, null, pageable));
-        verify(messageReportRepository, never()).findReports(any(), any(), any(), any());
+        verify(messageReportRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
@@ -154,7 +156,7 @@ class MessageReportServiceTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> service.getReports(MessageReport.STATUS_PENDING, from, to, pageable));
-        verify(messageReportRepository, never()).findReports(any(), any(), any(), any());
+        verify(messageReportRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     // ---- resolving reports -------------------------------------------------

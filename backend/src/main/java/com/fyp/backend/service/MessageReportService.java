@@ -1,9 +1,12 @@
 package com.fyp.backend.service;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +16,9 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.MessageReportRepository;
 import com.fyp.backend.repository.MessageRepository;
 import com.fyp.backend.repository.UserRepository;
+
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Message reporting: any user can flag another user's message once; admins
@@ -85,7 +91,31 @@ public class MessageReportService {
         if (from != null && to != null && from.after(to)) {
             throw new IllegalArgumentException("from must be before or equal to to.");
         }
-        return messageReportRepository.findReports(normalizedStatus, from, to, pageable);
+        return messageReportRepository.findAll(reportFilter(normalizedStatus, from, to), pageable);
+    }
+
+    private Specification<MessageReport> reportFilter(String status, Timestamp from, Timestamp to) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("reportedAt"), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("reportedAt"), to));
+            }
+
+            if (query != null && !Long.class.equals(query.getResultType()) && !long.class.equals(query.getResultType())) {
+                Expression<Integer> statusRank = cb.<Integer>selectCase()
+                        .when(cb.equal(root.get("status"), MessageReport.STATUS_PENDING), 0)
+                        .otherwise(1);
+                query.orderBy(cb.asc(statusRank), cb.desc(root.get("reportedAt")), cb.desc(root.get("id")));
+            }
+
+            return predicates.isEmpty() ? cb.conjunction() : cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     @Transactional
