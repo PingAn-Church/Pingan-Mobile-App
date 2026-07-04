@@ -37,6 +37,7 @@ public class ChatService {
     private final RedisService redisService;
     private final MessagePublisher messagePublisher;
     private final PushNotificationService pushNotificationService;
+    private final UserBlockService userBlockService;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -47,7 +48,8 @@ public class ChatService {
                        OSSService ossService,
                        RedisService redisService,
                        MessagePublisher messagePublisher,
-                       PushNotificationService pushNotificationService) {
+                       PushNotificationService pushNotificationService,
+                       UserBlockService userBlockService) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -58,6 +60,7 @@ public class ChatService {
         this.redisService = redisService;
         this.messagePublisher = messagePublisher;
         this.pushNotificationService = pushNotificationService;
+        this.userBlockService = userBlockService;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -216,6 +219,20 @@ public class ChatService {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
         User sender = getUserById(messageDto.getSenderId());
         checkUserIsParticipant(conversation, sender.getId());
+
+        // Server-side block enforcement (the client mutes its composer, but that's
+        // cosmetic): private messages are refused while either participant blocks
+        // the other. Group messages are unaffected by design.
+        if ("private".equals(conversationType)) {
+            Long otherId = conversation.getParticipants().stream()
+                    .map(User::getId)
+                    .filter(id -> !id.equals(sender.getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (otherId != null && userBlockService.isMessagingBlocked(sender.getId(), otherId)) {
+                throw new IllegalArgumentException("Messaging is unavailable — one of you has blocked the other.");
+            }
+        }
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         Message message = new Message(messageDto, conversation, sender, timestamp.toString());

@@ -37,6 +37,7 @@ import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserAchievementRepository;
 import com.fyp.backend.repository.UserAnalyticsRepository;
+import com.fyp.backend.repository.UserBlockRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserPreferencesRepository;
 import com.fyp.backend.repository.UserRepository;
@@ -75,6 +76,7 @@ class UserAccountDeletionServiceTest {
     @Mock private UserAchievementRepository userAchievementRepository;
     @Mock private CourseRatingRepository courseRatingRepository;
     @Mock private UserPreferencesRepository userPreferencesRepository;
+    @Mock private UserBlockRepository userBlockRepository;
 
     @InjectMocks private UserAccountDeletionService service;
 

@@ -38,6 +38,7 @@ import com.fyp.backend.service.MessageReportService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserAccountDeletionService;
+import com.fyp.backend.service.UserBlockService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 
@@ -47,7 +48,7 @@ import com.fyp.backend.util.JwtUtil;
  * loaded, every collaborator is mocked, and no DB/Redis/OSS/SMTP is touched.
  */
 @WebMvcTest(controllers = { UserController.class, OSSController.class, AppReleaseController.class,
-        ReportController.class })
+        ReportController.class, BlockController.class })
 @Import({ SpringSecurityConfig.class, JwtAuthenticationFilter.class })
 // Satisfy placeholders read while building the slice (e.g. server.address=${IP_ADDR}).
 @TestPropertySource(properties = { "IP_ADDR=127.0.0.1" })
@@ -63,6 +64,7 @@ class WebSecurityRulesTest {
     @MockBean private AppReleaseService appReleaseService;
     @MockBean private UserAccountDeletionService userAccountDeletionService;
     @MockBean private MessageReportService messageReportService;
+    @MockBean private UserBlockService userBlockService;
 
     private User userWithEmail(long id, String email) {
         User u = new User();
@@ -251,6 +253,46 @@ class WebSecurityRulesTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"action\": \"NO_PROBLEM\"}"))
                 .andExpect(status().isOk());
+    }
+
+    // ---- user blocking: everything requires authentication -----------------
+
+    @Test
+    void blockListIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(get("/api/blocks")).andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void blockListIsAllowedForAuthenticated() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+        when(userBlockService.getBlockedIds(7L)).thenReturn(List.of(3L));
+
+        mockMvc.perform(get("/api/blocks").header("Authorization", "Bearer t"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void blockCreateIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(post("/api/blocks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\": 3}"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void blockCreateIsAllowedForAuthenticated() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+        when(userBlockService.getStatus(7L, 3L))
+                .thenReturn(Map.of("blockedByMe", true, "blockedMe", false, "canMessage", false));
+
+        mockMvc.perform(post("/api/blocks")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\": 3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.blockedByMe").value(true));
     }
 
     @Test

@@ -35,6 +35,7 @@ import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserAchievementRepository;
 import com.fyp.backend.repository.UserAnalyticsRepository;
+import com.fyp.backend.repository.UserBlockRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserPreferencesRepository;
 import com.fyp.backend.repository.UserRepository;
@@ -71,6 +72,9 @@ public class UserAccountDeletionService {
     // Auth / devices
     @Autowired private PushTokenRepository pushTokenRepository;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
+
+    // Blocking (plain userId columns, swept for hygiene)
+    @Autowired private UserBlockRepository userBlockRepository;
 
     // Forum
     @Autowired private ThreadRepository threadRepository;
@@ -154,6 +158,9 @@ public class UserAccountDeletionService {
         // 3) Devices / tokens.
         pushTokenRepository.deleteByUserId(userId);
         refreshTokenRepository.deleteByUserEmail(email);
+
+        // 3b) Blocks in either direction (plain userId columns, swept for hygiene).
+        userBlockRepository.deleteByBlockerIdOrBlockedId(userId, userId);
 
         // 4) Event check-in lists (element collection of user ids — no FK, but stale).
         for (Event e : eventRepository.findAll()) {
