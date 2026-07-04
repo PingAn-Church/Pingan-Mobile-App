@@ -26,6 +26,7 @@ import * as MediaLibrary from "expo-media-library";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
+import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import defaultProfileImage from "../../../assets/user.png";
 import i18n from "../../../i18n";
 import { isTranslationEnabled, translateText } from "../../service/TranslateService";
@@ -42,7 +43,11 @@ import {
   peekLocalUri as peekCachedMedia,
 } from "../../service/MediaCacheService";
 // Keyboard controller gives Android a true keyboard-sticky composer under edge-to-edge.
-import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
+import {
+  KeyboardAvoidingView,
+  KeyboardStickyView,
+  useReanimatedKeyboardAnimation,
+} from "react-native-keyboard-controller";
 import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
@@ -323,6 +328,15 @@ const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
       ) : null}
     </TouchableOpacity>
   );
+});
+
+const AndroidKeyboardListSpacer = React.memo(function AndroidKeyboardListSpacer() {
+  const { height } = useReanimatedKeyboardAnimation();
+  const spacerStyle = useAnimatedStyle(() => ({
+    height: Math.max(0, -height.value),
+  }));
+
+  return <Reanimated.View pointerEvents="none" style={spacerStyle} />;
 });
 
 export default function ChatPage({ route }) {
@@ -1719,6 +1733,20 @@ export default function ChatPage({ route }) {
         </TouchableOpacity>
       )}
 
+      {editingMessage && (
+        <View style={styles.editingBanner}>
+          <Text style={{ fontSize: webFontSize(12), color: "#666" }}>Editing message...</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setEditingMessage(null);
+              setInputText("");
+            }}
+          >
+            <Text style={{ color: "red", fontSize: webFontSize(12) }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {messagingBlocked && (
         <View style={styles.blockedBanner}>
           <Ionicons name="ban-outline" size={16} color="#8E8E93" />
@@ -1803,6 +1831,9 @@ export default function ChatPage({ route }) {
         onScrollToIndexFailed={handleScrollToIndexFailed}
         onEndReached={handleLoadOlder}
         onEndReachedThreshold={0.2}
+        // In an inverted FlatList the header renders at the visual bottom, so
+        // this spacer lifts the newest messages by the same distance as the composer.
+        ListHeaderComponent={Platform.OS === "android" ? AndroidKeyboardListSpacer : null}
         ListFooterComponent={
           loadingOlder ? (
             <ActivityIndicator style={{ marginVertical: 12 }} color="#888" />
@@ -2104,20 +2135,6 @@ export default function ChatPage({ route }) {
           </View>
         </View>
       </Modal>
-
-      {editingMessage && (
-        <View style={styles.editingBanner}>
-          <Text style={{ fontSize: webFontSize(12), color: "#666" }}>Editing message...</Text>
-          <TouchableOpacity
-            onPress={() => {
-              setEditingMessage(null);
-              setInputText("");
-            }}
-          >
-            <Text style={{ color: "red", fontSize: webFontSize(12) }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {Platform.OS === "android" ? (
         <KeyboardStickyView>{composerContent}</KeyboardStickyView>
