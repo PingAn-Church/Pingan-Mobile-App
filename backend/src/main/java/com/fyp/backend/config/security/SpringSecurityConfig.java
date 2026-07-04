@@ -36,8 +36,7 @@ public class SpringSecurityConfig {
                 }) // ✅ NEW: enable CORS rules from WebConfig
                 .authorizeHttpRequests((authorize) -> authorize
                         // Public read-only content (homepage works post-login)
-                        .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/videos/**", "/api/announcements/**",
-                                "/api/others/**")
+                        .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/videos/**", "/api/announcements/**")
                         .permitAll()
                         // OSS management must be authenticated: listing every stored object
                         // and deleting by name are abuse vectors and only ever run post-login.
