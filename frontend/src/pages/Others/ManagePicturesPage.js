@@ -7,9 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
-  Button, 
-  Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -33,6 +32,10 @@ export default function ManagePicturesPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const { language } = useContext(LanguageContext);
+  const { width } = useWindowDimensions();
+  // 3 columns on wide screens (tablets/desktop), 2 otherwise; the list is
+  // re-keyed below because FlatList can't change numColumns on the fly.
+  const numColumns = width >= 768 ? 3 : 2;
 
   useEffect(() => {
     navigation.setOptions({
@@ -97,14 +100,20 @@ export default function ManagePicturesPage() {
       <FlatList
         contentContainerStyle={styles.container}
         data={pictures}
+        key={numColumns}
         keyExtractor={(item) => item}
-        numColumns={Platform.OS === "web" ? 3 : 2}
+        numColumns={numColumns}
         onEndReached={() => loadPictures(false)}
         onEndReachedThreshold={0.3}
         ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
         ListEmptyComponent={!loading ? <Text style={styles.noPicturesText}>{i18n.t("noPics")}</Text> : null}
         renderItem={({ item: picture }) => (
-            <View style={styles.imageContainer}>
+            <View
+              style={[
+                styles.imageContainer,
+                numColumns === 3 ? styles.imageContainerThreeCol : styles.imageContainerTwoCol,
+              ]}
+            >
               <Image
                 source={{ uri: picture }}
                 style={styles.image}
@@ -223,29 +232,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 15,
   },
-  gridContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    // Use flex-start for Web grid, space-between for Mobile 2-column look
-    justifyContent: Platform.OS === 'web' ? "flex-start" : "space-between",
-    paddingVertical: 10,
-    // Gap works well on Web; Mobile relies on space-between + width percentage
-    gap: Platform.OS === 'web' ? 20 : 0, 
-  },
+  // Width follows the live column count (see numColumns), not the platform,
+  // so rotation/resize can move between 2 and 3 columns without overflow.
   imageContainer: {
-    ...Platform.select({
-      web: {
-        width: "31%",      // 3 columns on web
-        maxWidth: 350,     // Prevents images from getting too big
-        minWidth: 200,     // Prevents images from getting too tiny
-      },
-      default: {           // iOS and Android
-        width: "48%",      // 2 columns on mobile
-      },
-    }),
     aspectRatio: 1,
     marginBottom: 15,
+    marginHorizontal: "1%",
     position: 'relative', // Keeps delete button anchored to this container
+  },
+  imageContainerTwoCol: {
+    width: "48%",
+  },
+  imageContainerThreeCol: {
+    width: "31%",
+    maxWidth: 350, // Prevents images from getting too big
   },
   image: {
     width: "100%",

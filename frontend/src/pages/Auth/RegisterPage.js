@@ -317,6 +317,7 @@ export default function RegisterPage() {
     <>
       <KeyboardAwareScrollView
         style={styles.container}
+        contentContainerStyle={styles.formContent}
         bottomOffset={20}
         keyboardShouldPersistTaps="handled"
       >
@@ -456,6 +457,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
+  },
+  // Keep the form a comfortable width on tablets/desktop.
+  formContent: {
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
   },
   input: {
     borderWidth: 1,

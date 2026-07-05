@@ -223,6 +223,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     width: "100%",
+    // Keep the form a comfortable width on tablets/desktop.
+    maxWidth: 480,
+    alignSelf: "center",
   },
   input: {
     borderWidth: 1,

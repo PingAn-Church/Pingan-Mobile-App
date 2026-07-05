@@ -194,5 +194,8 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginTop: 80,
     width: "100%",
+    // Keep the buttons a comfortable width on tablets/desktop.
+    maxWidth: 480,
+    alignSelf: "center",
   },
 });

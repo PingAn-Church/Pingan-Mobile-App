@@ -386,7 +386,8 @@ export function VideosPage() {
       ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
       ListEmptyComponent={!loading ? <Text style={styles.noData}>{i18n.t("noVideos")}</Text> : null}
       renderItem={({ item: video }) => (
-        <View style={{ width: isDesktop ? 800 : '100%', alignItems: 'center' }}>
+        // Math.min keeps the 800px column inside 768-834dp tablet-portrait windows.
+        <View style={{ width: isDesktop ? Math.min(800, width - 32) : '100%', alignItems: 'center' }}>
           <View style={[styles.videoItem, { width: isDesktop ? '100%' : width * 0.9 }, Platform.OS === 'web' && isDesktop && styles.videosPageVideoItemWeb]}>
             <View style={[styles.videoWrapper, Platform.OS === 'web' && isDesktop && styles.videoWrapperWebAllVideos]}>
               <PlatformWebView

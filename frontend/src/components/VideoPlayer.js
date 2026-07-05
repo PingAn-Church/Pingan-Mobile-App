@@ -4,22 +4,24 @@ import {
   Image,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import PlatformWebView from "./PlatformWebView";
 import { Ionicons } from "@expo/vector-icons";
 
-const { width } = Dimensions.get("window");
-const videoWidth = width * 0.75; // Set a consistent width for the video player
-const videoHeight = videoWidth * 0.56; // Maintain 16:9 aspect ratio
-
 export default function VideoPlayer({ videoId }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const { width, height } = useWindowDimensions();
+  // 3/4 of the window width at 16:9, capped so the player never exceeds ~55%
+  // of the window height (landscape tablets). Recomputed on rotation, unlike
+  // the old module-scope Dimensions.get snapshot.
+  const videoWidth = Math.min(width * 0.75, height * 0.55 * (16 / 9));
+  const videoHeight = videoWidth * (9 / 16);
 
   const youtubeThumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`; // Thumbnail URL
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { width: videoWidth, height: videoHeight }]}>
       {isPlaying ? (
         <PlatformWebView
           source={{
@@ -49,8 +51,6 @@ export default function VideoPlayer({ videoId }) {
 
 const styles = StyleSheet.create({
   container: {
-    width: videoWidth,
-    height: videoHeight,
     borderRadius: 10,
     overflow: "hidden",
     alignSelf: "center",

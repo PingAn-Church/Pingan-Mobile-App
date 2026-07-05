@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +29,11 @@ export default function VideoScreen() {
   const uri = getEmbedUrl(route.params?.videoUrl);
   const [marking, setMarking] = useState(false);
   const [completed, setCompleted] = useState<boolean>(!!route.params?.isCompleted);
+  const { width, height } = useWindowDimensions();
+  // 16:9 at full width, but never taller than ~60% of the window so the title
+  // and mark-complete button stay on screen on landscape tablets.
+  const videoHeight = Math.min(width * (9 / 16), height * 0.6);
+  const videoWidth = videoHeight * (16 / 9);
 
   const markComplete = async () => {
     if (!videoId) return;
@@ -50,7 +55,7 @@ export default function VideoScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.videoWrapper}>
+      <View style={[styles.videoWrapper, { width: videoWidth, height: videoHeight }]}>
         {uri ? (
           <PlatformWebView
             source={{ uri }}
@@ -83,8 +88,7 @@ export default function VideoScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.primary },
   videoWrapper: {
-    width: "100%",
-    aspectRatio: 16 / 9,
+    alignSelf: "center",
     backgroundColor: "#000",
     justifyContent: "center",
     alignItems: "center",

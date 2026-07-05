@@ -8,7 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Platform,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import { getAllEvents } from "../../service/EventService";
 import { UserContext } from "../../context/UserContext";
@@ -38,6 +38,10 @@ export default function MyActivityPage() {
   const [eventPictures, setEventPictures] = useState(emptyPage);
   const { user } = useContext(UserContext);
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
+  // 3 photo columns on wide screens (tablets/desktop), 2 otherwise; the list is
+  // re-keyed below because FlatList can't change numColumns on the fly.
+  const numColumns = activeTab === "Photos" ? (width > 800 ? 3 : 2) : 1;
 
   const pageForTab = useMemo(
     () =>
@@ -180,7 +184,12 @@ export default function MyActivityPage() {
   );
 
   const renderPhoto = ({ item }) => (
-    <View style={styles.imageContainer}>
+    <View
+      style={[
+        styles.imageContainer,
+        numColumns === 3 ? styles.imageContainerThreeCol : styles.imageContainerTwoCol,
+      ]}
+    >
       <Image
         source={{ uri: item }}
         style={styles.image}
@@ -195,12 +204,12 @@ export default function MyActivityPage() {
 
   return (
     <FlatList
-      key={activeTab}
+      key={`${activeTab}-${numColumns}`}
       style={styles.container}
       contentContainerStyle={styles.listContent}
       data={pageForTab.items}
       keyExtractor={(item, index) => (typeof item === "string" ? item : String(item.id ?? index))}
-      numColumns={activeTab === "Photos" ? (Platform.OS === "web" && Dimensions.get("window").width > 800 ? 3 : 2) : 1}
+      numColumns={numColumns}
       ListHeaderComponent={tabs}
       renderItem={activeTab === "Photos" ? renderPhoto : renderEvent}
       onEndReached={() => {
@@ -283,24 +292,20 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
   },
+  // Width follows the live column count (see numColumns), not the platform,
+  // so rotation/resize can move between 2 and 3 columns without overflow.
   imageContainer: {
-    ...Platform.select({
-      ios: {
-        width: "48%",
-      },
-      android: {
-        width: "48%",
-      },
-      web: {
-        width: "31%",
-        maxWidth: 400,
-        minWidth: 200,
-      },
-    }),
     aspectRatio: 1,
     marginBottom: 15,
-    marginHorizontal: Platform.OS === "web" ? 10 : "1%",
+    marginHorizontal: "1%",
     position: "relative",
+  },
+  imageContainerTwoCol: {
+    width: "48%",
+  },
+  imageContainerThreeCol: {
+    width: "31%",
+    maxWidth: 400,
   },
   downloadButton: {
     position: "absolute",
