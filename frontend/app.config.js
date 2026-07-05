@@ -4,7 +4,7 @@ export default {
     expo: {
       name: "Ping An",
       slug: "pingan-mobile-app",
-      version: "0.3.0",
+      version: "0.3.1",
       // Tablets rotate freely (landscape sidebar layout); phones are locked to
       // portrait at runtime in App.js via expo-screen-orientation, and natively
       // on iPhone via Info.plist. Keep "default" so `expo prebuild` doesn't
@@ -19,7 +19,7 @@ export default {
       },
       ios: {
         supportsTablet: true,
-        buildNumber: "300",
+        buildNumber: "301",
         infoPlist: {
           NSPhotoLibraryUsageDescription:
             "We need access to your photo library to upload profile images.",
@@ -45,7 +45,7 @@ export default {
           "MODIFY_AUDIO_SETTINGS",
         ],
         package: "org.pingan.app",
-        versionCode: 300,
+        versionCode: 301,
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       },
       web: {
@@ -63,7 +63,7 @@ export default {
         IP_ADDR: process.env.IP_ADDR,
         ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
         DISTRIBUTION_CHANNEL: process.env.DISTRIBUTION_CHANNEL || "direct",
-        ANDROID_VERSION_CODE: 300,
+        ANDROID_VERSION_CODE: 301,
         eas: {
           projectId: "39be103c-2ac5-446e-abc7-506f4c087c45",
         },
