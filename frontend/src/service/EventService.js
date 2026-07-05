@@ -48,7 +48,7 @@ export const checkInToEvent = async (eventId, userId) => {
   if (!token) throw new Error("No auth token found");
 
   try {
-    const response = await axios.post(
+    await axios.post(
       apiUrl(`/api/events/${eventId}/checkin/${userId}`),
       {},
       {
@@ -57,10 +57,10 @@ export const checkInToEvent = async (eventId, userId) => {
         },
       }
     );
-    return response.data;
+    return true;
   } catch (error) {
     console.error("Error checking in:", error);
-    return { error: "Check-in failed" };
+    return false;
   }
 };
 

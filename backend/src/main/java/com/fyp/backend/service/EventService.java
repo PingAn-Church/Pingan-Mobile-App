@@ -1,5 +1,6 @@
 package com.fyp.backend.service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -18,8 +19,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.fyp.backend.dto.EventDto;
 import com.fyp.backend.dto.EventSummaryDto;
@@ -34,11 +37,15 @@ public class EventService {
 
     private static final Logger LOGGER = Logger.getLogger(EventService.class.getName());
     private static final ZoneId EVENT_ZONE = ZoneId.of("Asia/Singapore");
+    private static final Duration CHECK_IN_WINDOW_BEFORE = Duration.ofHours(1);
+    private static final Duration CHECK_IN_WINDOW_AFTER = Duration.ofHours(1);
     private static final DateTimeFormatter AM_PM_TIME =
             new DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("h:mm a").toFormatter(Locale.US);
 
     @Autowired
     private EventRepository eventRepository;
+
+    private Clock clock = Clock.systemUTC();
 
     @PostConstruct
     public void backfillEventDateTimes() {
@@ -82,17 +89,31 @@ public class EventService {
         return eventRepository.save(event);
     }
 
-    public boolean checkInUser(Long eventId, Long userId) {
-        Optional<Event> optionalEvent = eventRepository.findById(eventId);
-        if (optionalEvent.isPresent()) {
-            Event event = optionalEvent.get();
-            if (!event.getCheckedInUserIds().contains(userId)) {
-                event.getCheckedInUserIds().add(userId);
-                eventRepository.save(event);
-                return true;
-            }
+    public void checkInUser(Long eventId, Long userId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+        if (!isCheckInWindowOpen(event)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Check-in is not currently available.");
         }
-        return false;
+
+        java.util.List<Long> checkedInUserIds = event.getCheckedInUserIds();
+        if (checkedInUserIds.contains(userId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User already checked in.");
+        }
+
+        checkedInUserIds.add(userId);
+        event.setCheckedInUserIds(checkedInUserIds);
+        eventRepository.save(event);
+    }
+
+    private boolean isCheckInWindowOpen(Event event) {
+        if (event.getStartAt() == null || event.getEndAt() == null) {
+            return false;
+        }
+        Instant now = Instant.now(clock);
+        Instant opensAt = event.getStartAt().minus(CHECK_IN_WINDOW_BEFORE);
+        Instant closesAt = event.getEndAt().plus(CHECK_IN_WINDOW_AFTER);
+        return !now.isBefore(opensAt) && !now.isAfter(closesAt);
     }
 
     @Transactional

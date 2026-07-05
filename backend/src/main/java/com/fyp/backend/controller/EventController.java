@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,6 +26,7 @@ import com.fyp.backend.dto.EventDto;
 import com.fyp.backend.dto.EventSummaryDto;
 import com.fyp.backend.model.Event;
 import com.fyp.backend.service.EventService;
+import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.Pagination;
 
 @RestController
@@ -32,6 +35,9 @@ public class EventController {
 
     @Autowired
     private EventService eventService;
+
+    @Autowired
+    private UserService userService;
 
     // Fetch paged event summaries (without the per-event check-in id list)
     @GetMapping
@@ -66,9 +72,20 @@ public class EventController {
     // User checks into an event
     @PreAuthorize("hasRole('VERIFIED')")
     @PostMapping("/{id}/checkin/{userId}")
-    public String checkInUser(@PathVariable Long id, @PathVariable Long userId) {
-        boolean success = eventService.checkInUser(id, userId);
-        return success ? "User checked in successfully" : "User already checked in or event not found";
+    public ResponseEntity<String> checkInUser(
+            @PathVariable Long id,
+            @PathVariable Long userId,
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long authenticatedUserId = userService.getUserIdFromToken(authorizationHeader);
+        if (authenticatedUserId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Not authenticated");
+        }
+        if (!authenticatedUserId.equals(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("You can only check in as yourself.");
+        }
+
+        eventService.checkInUser(id, authenticatedUserId);
+        return ResponseEntity.ok("User checked in successfully");
     }
 
     @PreAuthorize("hasRole('ADMIN')")
