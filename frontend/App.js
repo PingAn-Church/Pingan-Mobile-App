@@ -87,10 +87,9 @@ import CertificateViewerScreen from "./src/learning/screens/CertificateViewerScr
 import AchievementsScreen from "./src/learning/screens/AchievementsScreen";
 import LearningGoalScreen from "./src/learning/screens/LearningGoalScreen";
 
-// Sidebar for desktop browsers
-import { useWindowDimensions, View, Animated, StyleSheet } from "react-native";
-//import { createDrawerNavigator } from "@react-navigation/drawer";
-import Sidebar from "./src/components/Sidebar";
+import { useWindowDimensions, Dimensions, View, Animated, StyleSheet } from "react-native";
+import * as Device from "expo-device";
+import * as ScreenOrientation from "expo-screen-orientation";
 import EntryScreen from "./src/components/EntryScreen";
 import HeaderBackButton from "./src/components/HeaderBackButton";
 
@@ -113,14 +112,23 @@ const Stack = createNativeStackNavigator();
 
 const Tab = createBottomTabNavigator();
 
-// Bottom Tab Navigator for Home, Community, Chat, Others
-function BottomTabNavigator() {
+// Home tabs for every form factor: a left sidebar rail at landscape
+// tablet/desktop widths, classic bottom tabs otherwise. One Tab.Navigator for
+// both modes keeps Home/Events/Social/Settings registered under the same
+// navigator, so navigate("Social") etc. always resolves and per-tab state
+// survives rotation.
+function HomeTabsNavigator() {
   const { language } = useContext(LanguageContext); // to listen to language change
+  const { width, height } = useWindowDimensions();
+  const sidebar = width >= 768 && width > height;
 
   return (
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={({ route }) => ({
+        tabBarPosition: sidebar ? "left" : "bottom",
+        tabBarVariant: sidebar ? "material" : "uikit",
+        tabBarLabelPosition: sidebar ? "beside-icon" : undefined,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -138,14 +146,21 @@ function BottomTabNavigator() {
         },
         tabBarActiveTintColor: "blue",
         tabBarInactiveTintColor: "gray",
-        tabBarStyle: {
-          height: 90,            // Increased height for more space
-          paddingBottom: 30,     // Safe padding at the bottom
-          paddingTop: 10,        // Optional: adds spacing above icons
-          backgroundColor: "#fff", // Consistent background
-          borderTopWidth: 0.5,   // Optional: subtle separator
-          borderTopColor: "#ccc",
-        },
+        tabBarStyle: sidebar
+          ? {
+              backgroundColor: "#fff",
+              borderRightWidth: 0.5,
+              borderRightColor: "#ccc",
+              minWidth: 200,
+            }
+          : {
+              height: 90,            // Increased height for more space
+              paddingBottom: 30,     // Safe padding at the bottom
+              paddingTop: 10,        // Optional: adds spacing above icons
+              backgroundColor: "#fff", // Consistent background
+              borderTopWidth: 0.5,   // Optional: subtle separator
+              borderTopColor: "#ccc",
+            },
 
         tabBarLabel: ({ focused }) => (
           <Text
@@ -192,29 +207,6 @@ function BottomTabNavigator() {
     </Tab.Navigator>
   );
 }
-
-//const Drawer = createDrawerNavigator();
-
-function WebSidebarLayout() {
-  return (
-    <View style={{ flex: 1, flexDirection: "row" }}>
-      <View style={{ width: 260 }}>
-        <Sidebar />
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <Stack.Navigator screenOptions={{ headerShown: true }}>
-          <Stack.Screen name="Home" component={HomePage} />
-          <Stack.Screen name="Events" component={MyActivityPage} />
-          <Stack.Screen name="Social" component={SocialPage} />
-          <Stack.Screen name="Settings" component={ProfilePage} />
-        </Stack.Navigator>
-      </View>
-    </View>
-  );
-}
-
-
 
 // Chat entry point. The two-pane ChatPage only renders its conversation
 // sidebar at >=1024px, so narrower web windows (and native) get the
@@ -400,14 +392,34 @@ function AuthGuard({ navigationRef }) {
 
 // Main App Navigator for stack and bottom tabs
 export default function App() {
-  const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
   const navigationRef = useNavigationContainerRef();
 
   // Warm the media cache at startup: reconcile the on-disk files and enforce the
   // user's size budget (LRU eviction) before any chat media is requested.
   useEffect(() => {
     initMediaCache();
+  }, []);
+
+  // Phones stay portrait (matching the iPhone Info.plist lock); tablets rotate
+  // freely for the landscape sidebar layout. The Android manifest deliberately
+  // has no orientation lock, so this runtime lock is what pins Android phones.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    (async () => {
+      try {
+        const type = await Device.getDeviceTypeAsync();
+        const { width, height } = Dimensions.get("window");
+        const isTablet =
+          type === Device.DeviceType.TABLET ||
+          (type === Device.DeviceType.UNKNOWN && Math.min(width, height) >= 600);
+        if (!isTablet) {
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        }
+      } catch (error) {
+        // Older dev clients lack the native module; skip rather than crash.
+        console.warn("Orientation lock unavailable:", error?.message);
+      }
+    })();
   }, []);
 
   return (
@@ -557,7 +569,7 @@ export default function App() {
                   />
                   <Stack.Screen
                     name="HomeTabs"
-                    component={isDesktop ? WebSidebarLayout : BottomTabNavigator}
+                    component={HomeTabsNavigator}
                     options={{ headerShown: false, headerTitle: "" }} // Hide header for bottom tabs
                   />
                   <Stack.Screen

@@ -5,7 +5,11 @@ export default {
       name: "Ping An",
       slug: "pingan-mobile-app",
       version: "0.3.0",
-      orientation: "portrait",
+      // Tablets rotate freely (landscape sidebar layout); phones are locked to
+      // portrait at runtime in App.js via expo-screen-orientation, and natively
+      // on iPhone via Info.plist. Keep "default" so `expo prebuild` doesn't
+      // re-lock the Android manifest.
+      orientation: "default",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",
       splash: {
@@ -14,7 +18,7 @@ export default {
         backgroundColor: "#ffffff",
       },
       ios: {
-        supportsTablet: false,
+        supportsTablet: true,
         buildNumber: "300",
         infoPlist: {
           NSPhotoLibraryUsageDescription:
