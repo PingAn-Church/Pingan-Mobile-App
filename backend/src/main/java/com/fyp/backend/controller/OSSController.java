@@ -1,44 +1,12 @@
-//package com.fyp.backend.controller;
-//
-//import com.fyp.backend.service.OSSService;
-//import org.springframework.http.ResponseEntity;
-//import org.springframework.web.bind.annotation.*;
-//
-//import java.net.URL;
-//
-//@RestController
-//@RequestMapping("/oss")
-//public class OSSController {
-//
-//    private final OSSService ossService;
-//
-//    public OSSController(OSSService ossService) {
-//        this.ossService = ossService;
-//    }
-//
-//    @GetMapping("/presigned-upload-url")
-//    public ResponseEntity<String> getPresignedUploadUrl(@RequestParam String fileName, @RequestParam String fileType) {
-//        String objectKey = fileType + "/" + fileName;
-//        URL presignedUrl = ossService.generatePresignedUploadUrl(objectKey, 60);
-//        return ResponseEntity.ok(presignedUrl.toString());
-//    }
-//}
-
 package com.fyp.backend.controller;
 
-import com.aliyun.oss.OSS;
-import com.aliyun.oss.OSSClientBuilder;
-import com.aliyun.oss.model.OSSObjectSummary;
-import com.aliyun.oss.model.ObjectListing;
 import com.fyp.backend.service.OSSService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URL;
 import java.text.Normalizer;
-import java.util.ArrayList;
 import java.util.logging.Logger;
-import java.util.List;
 
 @RestController
 @RequestMapping("/oss")

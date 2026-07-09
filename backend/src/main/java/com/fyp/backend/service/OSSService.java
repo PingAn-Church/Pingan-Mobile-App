@@ -1,263 +1,3 @@
-////package com.fyp.backend.service;
-////
-////import com.aliyun.oss.*;
-////import com.aliyun.oss.common.auth.DefaultCredentialProvider;
-////import com.aliyun.oss.common.comm.SignVersion;
-////import com.aliyun.oss.model.GeneratePresignedUrlRequest;
-////import org.springframework.beans.factory.annotation.Value;
-////import org.springframework.stereotype.Service;
-////
-////import java.net.URL;
-////import java.util.Date;
-////
-////@Service
-////public class OSSService {
-////
-////    @Value("${alibaba.oss.endpoint}")
-////    private String endpoint;
-////
-////    @Value("${alibaba.oss.accessKeyId}")
-////    private String accessKeyId;
-////
-////    @Value("${alibaba.oss.accessKeySecret}")
-////    private String accessKeySecret;
-////
-////    @Value("${alibaba.oss.bucketName}")
-////    private String bucketName;
-////
-////    @Value("${alibaba.oss.region}")
-////    private String region;
-////
-////    public OSSService() {}
-////
-////    /**
-////     * Generate a presigned URL for uploading (PUT method).
-////     */
-////    public URL generatePresignedUploadUrl(String objectKey, int expirationMinutes) {
-////        ClientBuilderConfiguration clientBuilderConfiguration = new ClientBuilderConfiguration();
-////        clientBuilderConfiguration.setSignatureVersion(SignVersion.V4);
-////
-////        OSS ossClient = OSSClientBuilder.create()
-////                .endpoint(endpoint)
-////                .credentialsProvider(new DefaultCredentialProvider(accessKeyId, accessKeySecret))
-////                .clientConfiguration(clientBuilderConfiguration)
-////                .region(region)
-////                .build();
-////
-////        try {
-////            Date expiration = new Date(System.currentTimeMillis() + expirationMinutes * 60 * 1000);
-////            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey, HttpMethod.PUT);
-////            request.setExpiration(expiration);
-////
-////            return ossClient.generatePresignedUrl(request);
-////        } catch (Exception e) {
-////            throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
-////        } finally {
-////            ossClient.shutdown();
-////        }
-////    }
-////}
-//
-//package com.fyp.backend.service;
-//
-//import com.aliyun.oss.*;
-//import com.aliyun.oss.common.auth.DefaultCredentialProvider;
-//import com.aliyun.oss.common.comm.SignVersion;
-//import com.aliyun.oss.model.GeneratePresignedUrlRequest;
-//import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.stereotype.Service;
-//
-//import java.net.URL;
-//import java.util.Date;
-//import java.util.logging.Logger;
-//
-//@Service
-//public class OSSService {
-//
-//    @Value("${alibaba.oss.endpoint}")
-//    private String endpoint;
-//
-//    @Value("${alibaba.oss.accessKeyId}")
-//    private String accessKeyId;
-//
-//    @Value("${alibaba.oss.accessKeySecret}")
-//    private String accessKeySecret;
-//
-//    @Value("${alibaba.oss.bucketName}")
-//    private String bucketName;
-//
-//    @Value("${alibaba.oss.region}")
-//    private String region;
-//
-//    private static final Logger logger = Logger.getLogger(OSSService.class.getName());
-//
-//    public OSSService() {}
-//
-//    /**
-//     * Generate a presigned URL for uploading (PUT method).
-//     */
-//    public URL generatePresignedUploadUrl(String objectKey, int expirationMinutes) {
-//        ClientBuilderConfiguration clientBuilderConfiguration = new ClientBuilderConfiguration();
-//        clientBuilderConfiguration.setSignatureVersion(SignVersion.V4);
-//
-//        OSS ossClient = OSSClientBuilder.create()
-//                .endpoint(endpoint)
-//                .credentialsProvider(new DefaultCredentialProvider(accessKeyId, accessKeySecret))
-//                .clientConfiguration(clientBuilderConfiguration)
-//                .region(region)
-//                .build();
-//
-//        try {
-//            Date expiration = new Date(System.currentTimeMillis() + expirationMinutes * 60 * 1000);
-//            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey, HttpMethod.PUT);
-//            request.setExpiration(expiration);
-//
-//            URL signedUrl = ossClient.generatePresignedUrl(request);
-//            logger.info("Generated Presigned Upload URL: " + signedUrl);
-//            return signedUrl;
-//        } catch (Exception e) {
-//            logger.severe("Error generating presigned upload URL: " + e.getMessage());
-//            throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
-//        } finally {
-//            ossClient.shutdown();
-//        }
-//    }
-//}
-//
-//package com.fyp.backend.service;
-//
-//import com.aliyun.oss.*;
-//import com.aliyun.oss.common.auth.DefaultCredentialProvider;
-//import com.aliyun.oss.common.comm.SignVersion;
-//import com.aliyun.oss.model.GeneratePresignedUrlRequest;
-//import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.stereotype.Service;
-//
-//import java.net.URL;
-//import java.util.Date;
-//import java.util.logging.Logger;
-//
-//@Service
-//public class OSSService {
-//
-//    @Value("${alibaba.oss.endpoint}")
-//    private String endpoint;
-//
-//    @Value("${alibaba.oss.accessKeyId}")
-//    private String accessKeyId;
-//
-//    @Value("${alibaba.oss.accessKeySecret}")
-//    private String accessKeySecret;
-//
-//    @Value("${alibaba.oss.bucketName}")
-//    private String bucketName;
-//
-//    @Value("${alibaba.oss.region}")
-//    private String region;
-//
-//    private static final Logger logger = Logger.getLogger(OSSService.class.getName());
-//
-//    public OSSService() {}
-//
-//    /**
-//     * Generate a presigned URL for uploading (PUT method).
-//     */
-//    public URL generatePresignedUploadUrl(String objectKey, int expirationMinutes) {
-//        ClientBuilderConfiguration clientBuilderConfiguration = new ClientBuilderConfiguration();
-//        clientBuilderConfiguration.setSignatureVersion(SignVersion.V4); // Ensure correct signature version
-//
-//        OSS ossClient = OSSClientBuilder.create()
-//                .endpoint(endpoint)
-//                .credentialsProvider(new DefaultCredentialProvider(accessKeyId, accessKeySecret))
-//                .clientConfiguration(clientBuilderConfiguration)
-//                .region(region)
-//                .build();
-//
-//        try {
-//            Date expiration = new Date(System.currentTimeMillis() + expirationMinutes * 60 * 1000);
-//            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey, HttpMethod.PUT);
-//            request.setExpiration(expiration);
-//
-//            // ✅ Ensure Content-Type is included in the signature
-//            request.setContentType("image/jpeg");
-//
-//            URL signedUrl = ossClient.generatePresignedUrl(request);
-//            logger.info("Generated Presigned Upload URL: " + signedUrl);
-//            return signedUrl;
-//        } catch (Exception e) {
-//            logger.severe("Error generating presigned upload URL: " + e.getMessage());
-//            throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
-//        } finally {
-//            ossClient.shutdown();
-//        }
-//    }
-//}
-
-//
-//package com.fyp.backend.service;
-//
-//import com.aliyun.oss.*;
-//import com.aliyun.oss.common.auth.DefaultCredentialProvider;
-//import com.aliyun.oss.common.comm.SignVersion;
-//import com.aliyun.oss.model.GeneratePresignedUrlRequest;
-//import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.stereotype.Service;
-//
-//import java.net.URL;
-//import java.util.Date;
-//import java.util.logging.Logger;
-//
-//@Service
-//public class OSSService {
-//
-//    @Value("${alibaba.oss.endpoint}")
-//    private String endpoint;
-//
-//    @Value("${alibaba.oss.accessKeyId}")
-//    private String accessKeyId;
-//
-//    @Value("${alibaba.oss.accessKeySecret}")
-//    private String accessKeySecret;
-//
-//    @Value("${alibaba.oss.bucketName}")
-//    private String bucketName;
-//
-//    @Value("${alibaba.oss.region}")
-//    private String region;
-//
-//    private static final Logger logger = Logger.getLogger(OSSService.class.getName());
-//
-//    public OSSService() {}
-//
-//    /**
-//     * Generate a presigned URL for uploading (PUT method).
-//     */
-//    public URL generatePresignedUploadUrl(String objectKey, int expirationMinutes) {
-//        ClientBuilderConfiguration clientBuilderConfiguration = new ClientBuilderConfiguration();
-//        clientBuilderConfiguration.setSignatureVersion(SignVersion.V4); // ✅ Ensure correct signing version
-//
-//        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
-//
-//        try {
-//            Date expiration = new Date(System.currentTimeMillis() + expirationMinutes * 60 * 1000);
-//            GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey, HttpMethod.PUT);
-//            request.setExpiration(expiration);
-//
-//            // ✅ Ensure Content-Type is signed in the request
-//            request.setContentType("image/jpeg");
-//
-//            URL signedUrl = ossClient.generatePresignedUrl(request);
-//            logger.info("Generated Presigned Upload URL: " + signedUrl);
-//            return signedUrl;
-//        } catch (Exception e) {
-//            logger.severe("Error generating presigned upload URL: " + e.getMessage());
-//            throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
-//        } finally {
-//            ossClient.shutdown();
-//        }
-//    }
-//}
-
 package com.fyp.backend.service;
 
 import java.net.URL;
@@ -270,11 +10,9 @@ import java.util.logging.Logger;
 
 import org.springframework.stereotype.Service;
 
-import com.aliyun.oss.ClientBuilderConfiguration; // ✅ Import dotenv for environment variables
 import com.aliyun.oss.HttpMethod;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
-import com.aliyun.oss.common.comm.SignVersion;
 import com.aliyun.oss.model.GeneratePresignedUrlRequest;
 import com.aliyun.oss.model.ListObjectsRequest;
 import com.aliyun.oss.model.OSSObjectSummary;
@@ -282,34 +20,77 @@ import com.aliyun.oss.model.ObjectListing;
 import com.fyp.backend.util.Pagination;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import jakarta.annotation.PreDestroy;
 
 @Service
 public class OSSService {
 
-    private final String endpoint;
+    private final String publicEndpoint;
+    private final String internalEndpoint;
     private final String accessKeyId;
     private final String accessKeySecret;
     private final String bucketName;
-    private final String region;
+
+    // Singleton clients, created lazily so the app still boots without OSS credentials
+    // (CI context tests, local dev without a .env). The public client signs URLs that
+    // clients use from outside Alibaba's network — the signing endpoint becomes the URL
+    // host. The internal client carries server-side traffic; on ECS it points at the
+    // region's internal endpoint (free bandwidth), and falls back to the public endpoint
+    // when ALIBABA_OSS_INTERNAL_ENDPOINT is unset (the -internal hostname only resolves
+    // inside Alibaba Cloud).
+    private volatile OSS publicClient;
+    private volatile OSS internalClient;
 
     private static final Logger logger = Logger.getLogger(OSSService.class.getName());
 
     public OSSService() {
-        // ✅ Load environment variables from .env file
+        // Load environment variables from .env file
         Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
 
-        this.endpoint = dotenv.get("ALIBABA_OSS_ENDPOINT", System.getenv("ALIBABA_OSS_ENDPOINT"));
+        this.publicEndpoint = dotenv.get("ALIBABA_OSS_ENDPOINT", System.getenv("ALIBABA_OSS_ENDPOINT"));
+        String internal = dotenv.get("ALIBABA_OSS_INTERNAL_ENDPOINT",
+                System.getenv("ALIBABA_OSS_INTERNAL_ENDPOINT"));
+        this.internalEndpoint = (internal == null || internal.isBlank()) ? this.publicEndpoint : internal;
         this.accessKeyId = dotenv.get("ALIBABA_OSS_ACCESS_KEY_ID", System.getenv("ALIBABA_OSS_ACCESS_KEY_ID"));
         this.accessKeySecret = dotenv.get("ALIBABA_OSS_ACCESS_KEY_SECRET",
                 System.getenv("ALIBABA_OSS_ACCESS_KEY_SECRET"));
         this.bucketName = dotenv.get("ALIBABA_OSS_BUCKET_NAME", System.getenv("ALIBABA_OSS_BUCKET_NAME"));
-        this.region = dotenv.get("ALIBABA_OSS_REGION", System.getenv("ALIBABA_OSS_REGION"));
+    }
 
-        // if (this.endpoint == null || this.accessKeyId == null || this.accessKeySecret
-        // == null || this.bucketName == null || this.region == null) {
-        // throw new IllegalStateException("OSS credentials are missing. Check your .env
-        // file.");
-        // }
+    private OSS publicClient() {
+        OSS client = publicClient;
+        if (client == null) {
+            synchronized (this) {
+                if (publicClient == null) {
+                    publicClient = new OSSClientBuilder().build(publicEndpoint, accessKeyId, accessKeySecret);
+                }
+                client = publicClient;
+            }
+        }
+        return client;
+    }
+
+    private OSS internalClient() {
+        OSS client = internalClient;
+        if (client == null) {
+            synchronized (this) {
+                if (internalClient == null) {
+                    internalClient = new OSSClientBuilder().build(internalEndpoint, accessKeyId, accessKeySecret);
+                }
+                client = internalClient;
+            }
+        }
+        return client;
+    }
+
+    @PreDestroy
+    void shutdownClients() {
+        if (publicClient != null) {
+            publicClient.shutdown();
+        }
+        if (internalClient != null) {
+            internalClient.shutdown();
+        }
     }
 
     public String getFolderPath(String fileType) {
@@ -336,26 +117,19 @@ public class OSSService {
      * Generate a presigned URL for uploading (PUT method) with custom Content-Type.
      */
     public URL generatePresignedUploadUrl(String objectKey, int expirationMinutes, String contentType) {
-        ClientBuilderConfiguration clientBuilderConfiguration = new ClientBuilderConfiguration();
-        clientBuilderConfiguration.setSignatureVersion(SignVersion.V4);
-
-        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
-
         try {
             Date expiration = new Date(System.currentTimeMillis() + expirationMinutes * 60 * 1000);
             GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey,
                     HttpMethod.PUT);
             request.setExpiration(expiration);
-            request.setContentType(contentType); // ✅ Use provided Content-Type
+            request.setContentType(contentType); // Content-Type is part of the signature
 
-            URL signedUrl = ossClient.generatePresignedUrl(request);
+            URL signedUrl = publicClient().generatePresignedUrl(request);
             logger.info("Generated Presigned Upload URL with Content-Type " + contentType + ": " + signedUrl);
             return signedUrl;
         } catch (Exception e) {
             logger.severe("Error generating presigned upload URL: " + e.getMessage());
             throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
-        } finally {
-            ossClient.shutdown();
         }
     }
 
@@ -363,30 +137,22 @@ public class OSSService {
      * Generate a presigned URL for downloading (GET method).
      */
     public URL generatePresignedDownloadUrl(String objectKey, int expirationMinutes) {
-        ClientBuilderConfiguration clientBuilderConfiguration = new ClientBuilderConfiguration();
-        clientBuilderConfiguration.setSignatureVersion(SignVersion.V4);
-
-        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
-
         try {
             Date expiration = new Date(System.currentTimeMillis() + expirationMinutes * 60 * 1000);
             GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, objectKey,
                     HttpMethod.GET);
             request.setExpiration(expiration);
 
-            URL signedUrl = ossClient.generatePresignedUrl(request);
+            URL signedUrl = publicClient().generatePresignedUrl(request);
             logger.info("Generated Presigned Download URL: " + signedUrl);
             return signedUrl;
         } catch (Exception e) {
             logger.severe("Error generating presigned download URL: " + e.getMessage());
             throw new RuntimeException("Error generating presigned URL: " + e.getMessage(), e);
-        } finally {
-            ossClient.shutdown();
         }
     }
 
     public Map<String, Object> listObjectsPage(String fileType, int size, String marker) {
-        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         List<String> pictureUrls = new ArrayList<>();
         int safeSize = Pagination.clampSize(size);
 
@@ -399,7 +165,7 @@ public class OSSService {
                 request.setMarker(marker);
             }
 
-            ObjectListing objectListing = ossClient.listObjects(request);
+            ObjectListing objectListing = internalClient().listObjects(request);
             for (OSSObjectSummary objectSummary : objectListing.getObjectSummaries()) {
                 String objectKey = objectSummary.getKey();
                 if (!objectKey.equals(folderPath)) {
@@ -421,21 +187,16 @@ public class OSSService {
         } catch (Exception e) {
             logger.severe("Error listing objects page: " + e.getMessage());
             throw new RuntimeException("Error listing objects", e);
-        } finally {
-            ossClient.shutdown();
         }
     }
 
     public void deleteObject(String objectKey) {
-        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         try {
-            ossClient.deleteObject(bucketName, objectKey);
+            internalClient().deleteObject(bucketName, objectKey);
             logger.info("Deleted object: " + objectKey);
         } catch (Exception e) {
             logger.severe("Error deleting object: " + e.getMessage());
             throw new RuntimeException("Error deleting object", e);
-        } finally {
-            ossClient.shutdown();
         }
     }
 
