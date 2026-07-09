@@ -34,6 +34,7 @@ import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.AppReleaseService;
+import com.fyp.backend.service.MediaTokenService;
 import com.fyp.backend.service.MessageReportService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.service.RedisService;
@@ -61,6 +62,7 @@ class WebSecurityRulesTest {
     @MockBean private RedisService redisService;
     @MockBean private UserService userService;
     @MockBean private OSSService ossService;
+    @MockBean private MediaTokenService mediaTokenService;
     @MockBean private AppReleaseService appReleaseService;
     @MockBean private UserAccountDeletionService userAccountDeletionService;
     @MockBean private MessageReportService messageReportService;

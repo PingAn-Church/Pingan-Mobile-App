@@ -154,8 +154,12 @@ public class OSSService {
         }
     }
 
+    /**
+     * One page of object KEYS under the folder for {@code fileType}. The controller
+     * decides the URL form (gateway vs. presigned), keeping this service HTTP-agnostic.
+     */
     public Map<String, Object> listObjectsPage(String fileType, int size, String marker) {
-        List<String> pictureUrls = new ArrayList<>();
+        List<String> objectKeys = new ArrayList<>();
         int safeSize = Pagination.clampSize(size);
 
         try {
@@ -171,8 +175,7 @@ public class OSSService {
             for (OSSObjectSummary objectSummary : objectListing.getObjectSummaries()) {
                 String objectKey = objectSummary.getKey();
                 if (!objectKey.equals(folderPath)) {
-                    URL signedUrl = generatePresignedDownloadUrl(objectKey, 60);
-                    pictureUrls.add(signedUrl.toString());
+                    objectKeys.add(objectKey);
                 }
             }
 
@@ -183,7 +186,7 @@ public class OSSService {
 
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("success", true);
-            body.put("data", pictureUrls);
+            body.put("data", objectKeys);
             body.put("pagination", pagination);
             return body;
         } catch (Exception e) {

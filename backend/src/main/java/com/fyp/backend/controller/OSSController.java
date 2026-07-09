@@ -1,11 +1,19 @@
 package com.fyp.backend.controller;
 
+import com.fyp.backend.service.MediaTokenService;
 import com.fyp.backend.service.OSSService;
+
+import io.github.cdimascio.dotenv.Dotenv;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URL;
 import java.text.Normalizer;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 @RestController
@@ -13,10 +21,43 @@ import java.util.logging.Logger;
 public class OSSController {
 
     private final OSSService ossService;
+    private final MediaTokenService mediaTokenService;
+
+    // Download URLs point at the backend /media gateway by default (private bucket,
+    // free internal OSS traffic); this flag is the emergency rollback to OSS presigned
+    // URLs without a redeploy. Resolved like the app's other switches: Spring property
+    // first (test-settable), then .env / process env, defaulting to enabled.
+    private final boolean mediaGatewayEnabled;
+
     private static final Logger logger = Logger.getLogger(OSSController.class.getName());
 
-    public OSSController(OSSService ossService) {
+    public OSSController(OSSService ossService, MediaTokenService mediaTokenService,
+            @Value("${MEDIA_GATEWAY_ENABLED:}") String mediaGatewayEnabledProperty) {
         this.ossService = ossService;
+        this.mediaTokenService = mediaTokenService;
+
+        String flag = mediaGatewayEnabledProperty;
+        if (flag == null || flag.isBlank()) {
+            Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
+            flag = dotenv.get("MEDIA_GATEWAY_ENABLED", System.getenv("MEDIA_GATEWAY_ENABLED"));
+        }
+        this.mediaGatewayEnabled = flag == null || flag.isBlank() || Boolean.parseBoolean(flag);
+    }
+
+    /**
+     * Temporary download URL for an object: a signed /media gateway URL built on this
+     * request's host (apps talk to Spring Boot directly, so the resolve host IS the
+     * media host), or a legacy OSS presigned URL when the gateway is disabled.
+     */
+    private String downloadUrlFor(String objectKey) {
+        if (mediaGatewayEnabled) {
+            String base = ServletUriComponentsBuilder.fromCurrentContextPath()
+                    .path("/media/" + objectKey)
+                    .build()
+                    .toUriString();
+            return base + "?" + mediaTokenService.mintQuery(objectKey);
+        }
+        return ossService.generatePresignedDownloadUrl(objectKey, 60).toString();
     }
 
     private String normalizeFileName(String rawFileName) {
@@ -74,11 +115,11 @@ public class OSSController {
     public ResponseEntity<?> getPresignedDownloadUrl(@RequestParam String fileName, @RequestParam String fileType) {
         try {
             String objectKey = ossService.getFolderPath(fileType) + fileName;
-            URL presignedUrl = ossService.generatePresignedDownloadUrl(objectKey, 60);
-            logger.info("Generated Presigned Download URL: " + presignedUrl);
-            return ResponseEntity.ok(presignedUrl.toString());
+            String downloadUrl = downloadUrlFor(objectKey);
+            logger.info("Generated download URL: " + downloadUrl);
+            return ResponseEntity.ok(downloadUrl);
         } catch (Exception e) {
-            logger.severe("Error generating OSS presigned download URL: " + e.getMessage());
+            logger.severe("Error generating OSS download URL: " + e.getMessage());
             return ResponseEntity.status(500).body("Error generating presigned URL");
         }
     }
@@ -89,7 +130,11 @@ public class OSSController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String marker) {
         try {
-            return ResponseEntity.ok(ossService.listObjectsPage(fileType, size, marker));
+            Map<String, Object> page = ossService.listObjectsPage(fileType, size, marker);
+            @SuppressWarnings("unchecked")
+            List<String> objectKeys = (List<String>) page.get("data");
+            page.put("data", objectKeys.stream().map(this::downloadUrlFor).toList());
+            return ResponseEntity.ok(page);
         } catch (Exception e) {
             logger.severe("Error listing pictures: " + e.getMessage());
             return ResponseEntity.status(500).body("Error listing pictures");
@@ -137,8 +182,7 @@ public class OSSController {
     ) {
         try {
             String objectKey = "conversations/" + conversationId + "/" + fileName;
-            URL presignedUrl = ossService.generatePresignedDownloadUrl(objectKey, 60);
-            return ResponseEntity.ok(presignedUrl.toString());
+            return ResponseEntity.ok(downloadUrlFor(objectKey));
         } catch (Exception e) {
             logger.severe("Error generating conversation download URL: " + e.getMessage());
             return ResponseEntity.status(500).body("Error generating download URL");
