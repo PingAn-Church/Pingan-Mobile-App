@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URL;
 import java.text.Normalizer;
@@ -29,35 +30,67 @@ public class OSSController {
     // first (test-settable), then .env / process env, defaulting to enabled.
     private final boolean mediaGatewayEnabled;
 
+    // Public backend origin used for signed /media URLs. In production Spring Boot sits
+    // behind a reverse proxy, so request-host inference can produce localhost/internal
+    // URLs unless the proxy headers are perfect. This explicit base keeps media links
+    // stable for already-built clients.
+    private final String mediaPublicBaseUrl;
+
     private static final Logger logger = Logger.getLogger(OSSController.class.getName());
 
     public OSSController(OSSService ossService, MediaTokenService mediaTokenService,
-            @Value("${MEDIA_GATEWAY_ENABLED:}") String mediaGatewayEnabledProperty) {
+            @Value("${MEDIA_GATEWAY_ENABLED:}") String mediaGatewayEnabledProperty,
+            @Value("${MEDIA_PUBLIC_BASE_URL:}") String mediaPublicBaseUrlProperty) {
         this.ossService = ossService;
         this.mediaTokenService = mediaTokenService;
 
-        String flag = mediaGatewayEnabledProperty;
-        if (flag == null || flag.isBlank()) {
-            Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
-            flag = dotenv.get("MEDIA_GATEWAY_ENABLED", System.getenv("MEDIA_GATEWAY_ENABLED"));
-        }
+        Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
+        String flag = firstNonBlank(
+                mediaGatewayEnabledProperty,
+                dotenv.get("MEDIA_GATEWAY_ENABLED", System.getenv("MEDIA_GATEWAY_ENABLED")));
         this.mediaGatewayEnabled = flag == null || flag.isBlank() || Boolean.parseBoolean(flag);
+        this.mediaPublicBaseUrl = normalizeBaseUrl(firstNonBlank(
+                mediaPublicBaseUrlProperty,
+                dotenv.get("MEDIA_PUBLIC_BASE_URL", System.getenv("MEDIA_PUBLIC_BASE_URL"))));
     }
 
     /**
-     * Temporary download URL for an object: a signed /media gateway URL built on this
-     * request's host (apps talk to Spring Boot directly, so the resolve host IS the
-     * media host), or a legacy OSS presigned URL when the gateway is disabled.
+     * Temporary download URL for an object: a signed /media gateway URL built from
+     * MEDIA_PUBLIC_BASE_URL when configured, otherwise from the current request's
+     * forwarded host, or a legacy OSS presigned URL when the gateway is disabled.
      */
     private String downloadUrlFor(String objectKey) {
         if (mediaGatewayEnabled) {
-            String base = ServletUriComponentsBuilder.fromCurrentContextPath()
+            UriComponentsBuilder builder = mediaPublicBaseUrl == null
+                    ? ServletUriComponentsBuilder.fromCurrentContextPath()
+                    : UriComponentsBuilder.fromUriString(mediaPublicBaseUrl);
+            String base = builder
                     .path("/media/" + objectKey)
                     .build()
                     .toUriString();
             return base + "?" + mediaTokenService.mintQuery(objectKey);
         }
         return ossService.generatePresignedDownloadUrl(objectKey, 60).toString();
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String normalizeBaseUrl(String value) {
+        String normalized = firstNonBlank(value);
+        if (normalized == null) {
+            return null;
+        }
+        return normalized.replaceAll("/+$", "");
     }
 
     private String normalizeFileName(String rawFileName) {
