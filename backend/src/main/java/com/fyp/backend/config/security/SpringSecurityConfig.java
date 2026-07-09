@@ -38,6 +38,9 @@ public class SpringSecurityConfig {
                         // Public read-only content (homepage works post-login)
                         .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/videos/**", "/api/announcements/**")
                         .permitAll()
+                        // Media gateway: authorization is the HMAC-signed query on each URL
+                        // (MediaTokenService) — image/audio loaders can't send JWT headers.
+                        .requestMatchers(HttpMethod.GET, "/media/**").permitAll()
                         // OSS management must be authenticated: listing every stored object
                         // and deleting by name are abuse vectors and only ever run post-login.
                         .requestMatchers(HttpMethod.DELETE, "/oss/delete").authenticated()

@@ -14,7 +14,9 @@ import com.aliyun.oss.HttpMethod;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.aliyun.oss.model.GetObjectRequest;
 import com.aliyun.oss.model.ListObjectsRequest;
+import com.aliyun.oss.model.OSSObject;
 import com.aliyun.oss.model.OSSObjectSummary;
 import com.aliyun.oss.model.ObjectListing;
 import com.fyp.backend.util.Pagination;
@@ -190,6 +192,29 @@ public class OSSService {
         }
     }
 
+    /**
+     * Fetch an object for the /media gateway, over the internal endpoint.
+     *
+     * @param rangeStart    first byte to read, or null for the whole object
+     * @param rangeEnd      last byte (inclusive), or null for "to end of object"
+     * @param noneMatchEtag If-None-Match entity tag (quoted, per RFC); when it matches
+     *                      the stored object this returns {@code null} (HTTP 304 — the
+     *                      caller sends no body and OSS sends no bytes)
+     * @return the object (stream + metadata; caller must close), or null on ETag match
+     * @throws com.aliyun.oss.OSSException unwrapped, so callers can map error codes
+     *                                     (NoSuchKey → 404, InvalidRange → 416)
+     */
+    public OSSObject getObject(String objectKey, Long rangeStart, Long rangeEnd, String noneMatchEtag) {
+        GetObjectRequest request = new GetObjectRequest(bucketName, objectKey);
+        if (rangeStart != null) {
+            request.setRange(rangeStart, rangeEnd != null ? rangeEnd : -1);
+        }
+        if (noneMatchEtag != null && !noneMatchEtag.isBlank()) {
+            request.setNonmatchingETagConstraints(List.of(noneMatchEtag));
+        }
+        return internalClient().getObject(request);
+    }
+
     public void deleteObject(String objectKey) {
         try {
             internalClient().deleteObject(bucketName, objectKey);
@@ -205,6 +230,11 @@ public class OSSService {
             "userProfilePictures/", "groupProfilePictures/", "documents/",
             "eventPictures/", "announcementPictures/", "coursePictures/",
             "otherPictures/", "conversations/");
+
+    /** Whether the key lives in a folder this app owns — the /media gateway serves nothing else. */
+    public static boolean isManagedKey(String objectKey) {
+        return objectKey != null && MANAGED_PREFIXES.stream().anyMatch(objectKey::startsWith);
+    }
 
     /**
      * Best-effort delete of an OSS object given its stored public URL. No-op for blank
