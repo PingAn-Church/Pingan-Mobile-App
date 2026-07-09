@@ -195,8 +195,15 @@ class WebSecurityRulesTest {
     }
 
     @Test
-    @WithMockUser
-    void ossDeleteIsAllowedForAuthenticated() throws Exception {
+    @WithMockUser(roles = "USER")
+    void ossDeleteIsForbiddenForNonAdmin() throws Exception {
+        mockMvc.perform(delete("/oss/delete").param("fileName", "x.jpg").param("fileType", "profile"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void ossDeleteIsAllowedForAdmin() throws Exception {
         when(ossService.getFolderPath("profile")).thenReturn("userProfilePictures/");
         mockMvc.perform(delete("/oss/delete").param("fileName", "x.jpg").param("fileType", "profile"))
                 .andExpect(status().isOk());
@@ -206,6 +213,43 @@ class WebSecurityRulesTest {
     void ossListIsBlockedForAnonymous() throws Exception {
         mockMvc.perform(get("/oss/list-pictures").param("fileType", "event"))
                 .andExpect(status().is4xxClientError());
+    }
+
+    // ---- minting temporary download URLs requires a login -------------------
+
+    @Test
+    void downloadUrlMintIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(get("/oss/presigned-download-url")
+                        .param("fileName", "x.jpg").param("fileType", "profile"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser
+    void downloadUrlMintIsAllowedForAuthenticated() throws Exception {
+        when(ossService.getFolderPath("profile")).thenReturn("userProfilePictures/");
+        when(mediaTokenService.mintQuery(anyString())).thenReturn("e=1&s=sig");
+
+        mockMvc.perform(get("/oss/presigned-download-url")
+                        .param("fileName", "x.jpg").param("fileType", "profile"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void conversationDownloadUrlMintIsBlockedForAnonymous() throws Exception {
+        mockMvc.perform(get("/oss/conversations/presigned-download-url")
+                        .param("fileName", "voice_1.m4a").param("conversationId", "42"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser
+    void conversationDownloadUrlMintIsAllowedForAuthenticated() throws Exception {
+        when(mediaTokenService.mintQuery(anyString())).thenReturn("e=1&s=sig");
+
+        mockMvc.perform(get("/oss/conversations/presigned-download-url")
+                        .param("fileName", "voice_1.m4a").param("conversationId", "42"))
+                .andExpect(status().isOk());
     }
 
     @Test

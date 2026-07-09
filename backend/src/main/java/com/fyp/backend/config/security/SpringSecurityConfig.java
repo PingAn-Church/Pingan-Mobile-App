@@ -41,9 +41,14 @@ public class SpringSecurityConfig {
                         // Media gateway: authorization is the HMAC-signed query on each URL
                         // (MediaTokenService) — image/audio loaders can't send JWT headers.
                         .requestMatchers(HttpMethod.GET, "/media/**").permitAll()
-                        // OSS management must be authenticated: listing every stored object
-                        // and deleting by name are abuse vectors and only ever run post-login.
-                        .requestMatchers(HttpMethod.DELETE, "/oss/delete").authenticated()
+                        // Minting temporary download URLs requires a login: every consumer is a
+                        // post-login screen, and leaving it open would let anyone who guesses a
+                        // filename mint a viewable URL. Deletes are admin-only; listing every
+                        // stored object stays login-gated.
+                        .requestMatchers(HttpMethod.GET, "/oss/presigned-download-url",
+                                "/oss/conversations/presigned-download-url")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/oss/delete").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/oss/list-pictures").authenticated()
                         // Remaining /oss + /s3 stay open because registration uploads an avatar pre-auth
                         .requestMatchers("/ws/**", "/auth/**", "/s3/**", "/oss/**")

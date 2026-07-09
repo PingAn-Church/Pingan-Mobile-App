@@ -220,10 +220,12 @@ export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride
  */
 export const getPresignedDownloadUrl = async (fileName, fileType) => {
   try {
+    const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/presigned-download-url`),
       {
         params: { fileName, fileType },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
     return response.data; // Returns the temporary URL
@@ -308,9 +310,13 @@ export const getConversationUploadUrl = async (fileName, conversationId, content
 
 export const getConversationDownloadUrl = async (fileName, conversationId) => {
   try {
+    const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/conversations/presigned-download-url`),
-      { params: { fileName, conversationId } }
+      {
+        params: { fileName, conversationId },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
     );
     return response.data;
   } catch (error) {
