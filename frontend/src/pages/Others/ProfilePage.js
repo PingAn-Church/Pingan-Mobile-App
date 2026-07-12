@@ -16,7 +16,8 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
-  Image, Platform
+  Image, Platform,
+  useWindowDimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -43,6 +44,12 @@ export default function ProfilePage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const { language, toggleLanguage } = useContext(LanguageContext);
   const { handleDeactivatePushToken } = useNotification();
+
+  // On tablets/iPad the percentage-sized grid buttons balloon and push the admin,
+  // instructor, and profile sections far apart. On wide screens use fixed compact
+  // buttons and tighter section spacing so the layout stays dense.
+  const { width } = useWindowDimensions();
+  const isWideScreen = width >= 768;
 
   useEffect(() => {
     navigation.setOptions({
@@ -332,14 +339,14 @@ export default function ProfilePage() {
         </View>
 
         {user?.admin && (
-          <View style={styles.adminContainer}>
-            <Text style={styles.subHeader}>{i18n.t("adminControls")}</Text>
+          <View style={[styles.adminContainer, isWideScreen && styles.adminContainerWide]}>
+            <Text style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>{i18n.t("adminControls")}</Text>
             <View style={{ flexShrink: 1 }}>
-              <View style={styles.gridContainer}>
+              <View style={[styles.gridContainer, isWideScreen && styles.gridContainerWide]}>
                 {options.map((option, index) => (
                   <TouchableOpacity
                     key={index}
-                    style={styles.optionButton}
+                    style={[styles.optionButton, isWideScreen && styles.optionButtonWide]}
                     onPress={() => navigation.navigate(option.screen)}
                   >
                     <MaterialIcons name={option.icon} size={40} color="white" />
@@ -354,14 +361,14 @@ export default function ProfilePage() {
         )}
 
         {(user?.admin || user?.instructor) && (
-          <View style={styles.adminContainer}>
-            <Text style={styles.subHeader}>{i18n.t("instructorControls")}</Text>
+          <View style={[styles.adminContainer, isWideScreen && styles.adminContainerWide]}>
+            <Text style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>{i18n.t("instructorControls")}</Text>
             <View style={{ flexShrink: 1 }}>
-              <View style={[styles.gridContainer, styles.instructorGrid]}>
+              <View style={[styles.gridContainer, styles.instructorGrid, isWideScreen && styles.gridContainerWide]}>
                 {instructorOptions.map((option, index) => (
                   <TouchableOpacity
                     key={index}
-                    style={styles.optionButton}
+                    style={[styles.optionButton, isWideScreen && styles.optionButtonWide]}
                     onPress={() => navigation.navigate(option.screen)}
                   >
                     <MaterialIcons name={option.icon} size={40} color="white" />
@@ -376,7 +383,7 @@ export default function ProfilePage() {
         )}
 
         <View style={styles.profileContainer}>
-          <Text style={styles.subHeader}>{i18n.t("profile")}</Text>
+          <Text style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>{i18n.t("profile")}</Text>
           {userDetails.map((detail, index) => (
             <View key={index} style={styles.detailContainer}>
               <MaterialIcons
@@ -667,6 +674,24 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     paddingBottom: 0,
     alignItems: "stretch",
+  },
+  // Wide-screen (tablet/iPad) overrides: tighten the vertical rhythm so the admin,
+  // instructor, and profile sections sit close together instead of spreading out.
+  adminContainerWide: {
+    paddingTop: 4,
+  },
+  subHeaderWide: {
+    marginVertical: 4,
+  },
+  gridContainerWide: {
+    marginTop: 6,
+  },
+  // Fixed compact squares instead of ~31% of a wide screen (which balloons to
+  // ~240px buttons, only 3 per row); ~140px fits 5–6 per row and keeps rows short.
+  optionButtonWide: {
+    width: 140,
+    flexBasis: 140,
+    marginBottom: 8,
   },
   profileContainer: {
     padding: 10,
