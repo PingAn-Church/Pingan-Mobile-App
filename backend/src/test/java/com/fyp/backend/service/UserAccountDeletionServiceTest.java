@@ -50,9 +50,10 @@ import com.fyp.backend.repository.UserVideoProgressRepository;
 
 /**
  * Behaviour tests for irreversible account deletion. Pure unit tests — every
- * repository and OSS are mocked, so no DB/OSS calls happen. The guards (only an
- * inactive, non-admin account may be wiped) and the foreign-key sweeps that let
- * the {@code users} row be deleted are the safety-critical invariants here.
+ * repository and OSS are mocked, so no DB/OSS calls happen. Both the admin
+ * hard-delete and the user self-delete run the same complete sweep: the guards
+ * and the foreign-key sweeps that let the {@code users} row be deleted are the
+ * safety-critical invariants here.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -62,7 +63,6 @@ class UserAccountDeletionServiceTest {
     @Mock private OSSService ossService;
     @Mock private RedisService redisService;
     @Mock private ReviewService reviewService;
-    @Mock private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Mock private PrivateConversationRepository privateConversationRepository;
     @Mock private GroupConversationRepository groupConversationRepository;
     @Mock private MessageRepository messageRepository;
@@ -117,8 +117,6 @@ class UserAccountDeletionServiceTest {
         when(eventRepository.findByCheckedInUserId(ID)).thenReturn(List.of());
         when(messageReportRepository.findBySenderIdOrReporterIdOrResolvedById(ID, ID, ID))
                 .thenReturn(List.of());
-        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -145,50 +143,34 @@ class UserAccountDeletionServiceTest {
     }
 
     @Test
-    void selfDeleteAnonymizesTheUserButKeepsSharedContentReferences() {
-        User user = user(true, false);
-        when(userRepository.findById(ID)).thenReturn(Optional.of(user));
+    void selfDeleteRemovesTheUserRowAndAllData() {
+        // An active, non-admin user deleting themselves is now a complete hard delete
+        // (no more anonymized "Deleted Account" tombstone).
+        when(userRepository.findById(ID)).thenReturn(Optional.of(user(true, false)));
 
         service.deleteOwnAccount(ID);
 
-        verify(userRepository, never()).deleteById(anyLong());
-        verify(threadReplyRepository, never()).deleteByAuthorId(anyLong());
-        verify(threadRepository, never()).delete(any());
+        // The user row is deleted, not anonymized/saved.
+        verify(userRepository).deleteById(ID);
+        verify(userRepository, never()).save(any(User.class));
+        // Shared UGC is now removed too (previously kept under the tombstone).
+        verify(threadReplyRepository).deleteByAuthorId(ID);
+        verify(messageRepository).deleteReadReceiptsByUserId(ID);
+        // Private data / auth / avatar swept.
         verify(pushTokenRepository).deleteByUserId(ID);
         verify(refreshTokenRepository).deleteByUserEmail(EMAIL);
         verify(redisService).clearUserOnlineStatus(EMAIL);
-        verify(userRepository).save(user);
-
-        org.junit.jupiter.api.Assertions.assertTrue(user.isDeletedAccount());
-        org.junit.jupiter.api.Assertions.assertFalse(user.isActive());
-        org.junit.jupiter.api.Assertions.assertEquals("Deleted", user.getFirstName());
-        org.junit.jupiter.api.Assertions.assertEquals("Account", user.getLastName());
-        org.junit.jupiter.api.Assertions.assertNull(user.getProfileImage());
-        org.junit.jupiter.api.Assertions.assertTrue(user.getEmail().endsWith("@deleted.account"));
+        verify(ossService).deleteObjectByUrl(AVATAR);
     }
 
     @Test
-    void purgeDeletedAccountDeletesOnlyWhenNoReferencesRemain() {
-        User user = user(false, false);
-        user.setDeletedAccount(true);
-        when(userRepository.findById(ID)).thenReturn(Optional.of(user));
+    void selfDeleteRefusesForAdmin() {
+        when(userRepository.findById(ID)).thenReturn(Optional.of(user(true, true)));
 
-        service.purgeDeletedAccount(ID);
+        assertThrows(RuntimeException.class, () -> service.deleteOwnAccount(ID));
 
-        verify(userRepository).delete(user);
-    }
-
-    @Test
-    void purgeDeletedAccountRefusesWhenReferencesRemain() {
-        User user = user(false, false);
-        user.setDeletedAccount(true);
-        when(userRepository.findById(ID)).thenReturn(Optional.of(user));
-        when(privateConversationRepository.countByUserId(ID)).thenReturn(1L);
-
-        assertThrows(UserAccountDeletionService.DeletedAccountStillReferencedException.class,
-                () -> service.purgeDeletedAccount(ID));
-
-        verify(userRepository, never()).delete(any(User.class));
+        verify(userRepository, never()).deleteById(anyLong());
+        verify(ossService, never()).deleteObjectByUrl(anyString());
     }
 
     @Test

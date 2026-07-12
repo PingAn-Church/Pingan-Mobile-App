@@ -1,32 +1,19 @@
 package com.fyp.backend.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import com.fyp.backend.dto.DeletedAccountDto;
 import com.fyp.backend.model.Certificate;
-import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseEnrollment;
 import com.fyp.backend.model.CourseRating;
 import com.fyp.backend.model.Event;
@@ -60,31 +47,25 @@ import com.fyp.backend.repository.UserBlockRepository;
 import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserPreferencesRepository;
 import com.fyp.backend.repository.UserRepository;
-
-import jakarta.persistence.criteria.Predicate;
 import com.fyp.backend.repository.UserVideoProgressRepository;
 
 /**
- * Account lifecycle cleanup. There are two intentionally different paths:
- *
- * <p>Admin hard-delete removes an inactive, non-admin account and every FK row
- * that blocks deleting the {@code users} row.
- *
- * <p>Self-delete anonymizes the original {@code users} row into an immutable
- * Deleted Account tombstone. Shared UGC such as chat messages and forum posts
- * stays readable, while personal profile/device/learning data is removed.
+ * Account deletion. Both the self-delete ({@code DELETE /api/users/me}) and the
+ * admin hard-delete ({@code DELETE /api/users/{id}}) run the same irreversible
+ * {@link #hardDeleteUser} sweep: every user-generated item and the {@code users}
+ * row itself are removed, along with the related OSS objects (avatar, chat media,
+ * certificate files). Authored courses are detached (kept for enrolled students)
+ * and moderation reports are anonymized (the record stays, this user's PII does
+ * not) — shared content other users depend on is preserved, not destroyed.
  */
 @Service
 public class UserAccountDeletionService {
 
     private static final Logger LOGGER = Logger.getLogger(UserAccountDeletionService.class.getName());
-    private static final String DELETED_FIRST_NAME = "Deleted";
-    private static final String DELETED_LAST_NAME = "Account";
     private static final String DELETED_DISPLAY_NAME = "Deleted Account";
     private static final int MEDIA_URL_PAGE_SIZE = 500;
 
     @Autowired private UserRepository userRepository;
-    @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private OSSService ossService;
     @Autowired private RedisService redisService;
     @Autowired private ReviewService reviewService;
@@ -127,19 +108,16 @@ public class UserAccountDeletionService {
     @Autowired private UserPreferencesRepository userPreferencesRepository;
 
     /**
-     * Permanently delete a deactivated user and all associated data.
+     * Admin-triggered permanent deletion. Only a deactivated, non-admin account may
+     * be removed this way (downgrade/deactivate first).
      *
-     * @throws RuntimeException if the user is missing, still active, an admin, or
-     *         already an anonymized Deleted Account tombstone.
+     * @throws RuntimeException if the user is missing, still active, or an admin.
      */
     @Transactional
     public void deleteUserCompletely(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user.isDeletedAccount()) {
-            throw new RuntimeException("Deleted accounts must be purged from the Deleted Accounts section.");
-        }
         if (user.isAdmin()) {
             throw new RuntimeException("Cannot delete an admin account. Downgrade it first.");
         }
@@ -147,6 +125,39 @@ public class UserAccountDeletionService {
             throw new RuntimeException("Only deactivated (inactive) users can be permanently deleted.");
         }
 
+        hardDeleteUser(user);
+        LOGGER.info("Permanently deleted user " + userId + " and all associated data.");
+    }
+
+    /**
+     * User-requested permanent deletion. Removes the account and everything the user
+     * generated; an admin must downgrade first (an admin cannot delete themselves
+     * while still an admin).
+     *
+     * @throws RuntimeException if the user is missing or is an admin.
+     */
+    @Transactional
+    public void deleteOwnAccount(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.isAdmin()) {
+            throw new RuntimeException("Admin accounts must be downgraded before they can be deleted.");
+        }
+
+        hardDeleteUser(user);
+        LOGGER.info("Permanently deleted own account " + userId + " and all associated data.");
+    }
+
+    /**
+     * Irreversibly remove a user and every row/object that references them: their
+     * conversations and messages (with media), forum threads/replies, device and
+     * auth tokens, blocks, applications, event check-ins, learning records, avatar,
+     * and finally the {@code users} row. Reports are anonymized and authored courses
+     * detached so shared content survives.
+     */
+    private void hardDeleteUser(User user) {
+        Long userId = user.getId();
         String email = user.getEmail();
         String profileImage = user.getProfileImage();
         Set<Long> affectedCourseIds = collectLearningCourseIds(userId);
@@ -189,120 +200,6 @@ public class UserAccountDeletionService {
         ossService.deleteObjectByUrl(profileImage);
         userRepository.deleteById(userId);
         recomputeAffectedCourses(affectedCourseIds);
-
-        LOGGER.info("Permanently deleted user " + userId + " and all associated data.");
-    }
-
-    /**
-     * User-requested deletion: clear private data, keep shared UGC reachable via
-     * the same users row, and invalidate all future auth for the old email.
-     */
-    @Transactional
-    public void deleteOwnAccount(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        if (user.isDeletedAccount()) {
-            throw new RuntimeException("This account has already been deleted.");
-        }
-        if (user.isAdmin()) {
-            throw new RuntimeException("Admin accounts must be downgraded before they can be deleted.");
-        }
-
-        String oldEmail = user.getEmail();
-        String profileImage = user.getProfileImage();
-        Set<Long> affectedCourseIds = collectLearningCourseIds(userId);
-        deleteCertificateAssets(userId, affectedCourseIds);
-
-        removeFromGroupConversations(userId);
-        messageRepository.deleteReadReceiptsByUserId(userId);
-        messageDeliveryStatusRepository.deleteByUserId(userId);
-
-        pushTokenRepository.deleteByUserId(userId);
-        refreshTokenRepository.deleteByUserEmail(oldEmail);
-        redisService.clearUserOnlineStatus(oldEmail);
-        userBlockRepository.deleteByBlockerIdOrBlockedId(userId, userId);
-        formApplicationRepository.deleteByContactIgnoreCase(oldEmail);
-        scrubEventCheckins(userId);
-        anonymizeReports(userId);
-        detachAuthoredCourses(userId);
-        deleteLearningRows(userId);
-        ossService.deleteObjectByUrl(profileImage);
-
-        User managedUser = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        anonymizeUser(managedUser);
-        recomputeAffectedCourses(affectedCourseIds);
-
-        LOGGER.info("Anonymized deleted account " + userId + " and removed associated private data.");
-    }
-
-    @Transactional(readOnly = true)
-    public List<DeletedAccountDto> listDeletedAccounts() {
-        return userRepository.findByDeletedAccountTrueOrderByDeletedAtDescIdAsc().stream()
-                .map(user -> DeletedAccountDto.from(user, referenceSummary(user)))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public Page<DeletedAccountDto> listDeletedAccounts(String q, Pageable pageable) {
-        return userRepository.findAll(deletedAccountFilter(q), pageable)
-                .map(user -> DeletedAccountDto.from(user, referenceSummary(user)));
-    }
-
-    @Transactional
-    public void purgeDeletedAccount(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        if (!user.isDeletedAccount()) {
-            throw new RuntimeException("Only Deleted Account tombstones can be purged here.");
-        }
-
-        Map<String, Long> references = referenceSummary(user);
-        long referenceCount = references.values().stream().mapToLong(Long::longValue).sum();
-        if (referenceCount > 0) {
-            throw new DeletedAccountStillReferencedException(references);
-        }
-
-        userRepository.delete(user);
-        LOGGER.info("Purged unreferenced Deleted Account tombstone " + userId + ".");
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Long> referenceSummary(User user) {
-        Long userId = user.getId();
-        Map<String, Long> refs = new LinkedHashMap<>();
-        putIfNonZero(refs, "privateConversations", privateConversationRepository.countByUserId(userId));
-        putIfNonZero(refs, "groupMemberships", groupConversationRepository.countByParticipantId(userId));
-        putIfNonZero(refs, "groupAdminRoles", groupConversationRepository.countByAdminId(userId));
-        putIfNonZero(refs, "messages", messageRepository.countBySenderId(userId));
-        putIfNonZero(refs, "messageReadReceipts", messageRepository.countReadReceiptsByUserId(userId));
-        putIfNonZero(refs, "messageDeliveryStatuses", messageDeliveryStatusRepository.countByUserId(userId));
-        putIfNonZero(refs, "threads", threadRepository.countByCreatedById(userId));
-        putIfNonZero(refs, "threadReplies", threadReplyRepository.countByAuthorId(userId));
-        putIfNonZero(refs, "eventCheckIns", eventRepository.countByCheckedInUserId(userId));
-        putIfNonZero(refs, "blocks", userBlockRepository.countByBlockerIdOrBlockedId(userId, userId));
-        putIfNonZero(refs, "messageReports",
-                messageReportRepository.countBySenderIdOrReporterIdOrResolvedById(userId, userId, userId));
-        putIfNonZero(refs, "pushTokens", pushTokenRepository.countByUserId(userId));
-        putIfNonZero(refs, "refreshTokens", refreshTokenRepository.countByUserEmail(user.getEmail()));
-        putIfNonZero(refs, "formApplications", formApplicationRepository.countByContactIgnoreCase(user.getEmail()));
-        putIfNonZero(refs, "authoredCourses", courseRepository.countByInstructorId(userId));
-        putIfNonZero(refs, "learningRecords", countLearningRows(userId));
-        return refs;
-    }
-
-    private void removeFromGroupConversations(Long userId) {
-        Set<Long> handledGroups = new HashSet<>();
-        for (GroupConversation g : groupConversationRepository.findByParticipantId(userId)) {
-            purgeUserFromGroup(g, userId, false);
-            handledGroups.add(g.getId());
-        }
-        for (GroupConversation g : groupConversationRepository.findByAdminId(userId)) {
-            if (handledGroups.add(g.getId())) {
-                purgeUserFromGroup(g, userId, false);
-            }
-        }
     }
 
     private Set<Long> collectLearningCourseIds(Long userId) {
@@ -338,21 +235,6 @@ public class UserAccountDeletionService {
         userAchievementRepository.deleteByUserId(userId);
         courseRatingRepository.deleteByUserId(userId);
         userPreferencesRepository.deleteByUserId(userId);
-    }
-
-    private long countLearningRows(Long userId) {
-        return quizAttemptRepository.countByUserId(userId)
-                + courseEnrollmentRepository.countByUserId(userId)
-                + courseWishlistRepository.countByUserId(userId)
-                + certificateRepository.countByUserId(userId)
-                + learningGoalRepository.countByUserId(userId)
-                + userAnalyticsRepository.countByUserId(userId)
-                + userModuleProgressRepository.countByUserId(userId)
-                + userVideoProgressRepository.countByUserId(userId)
-                + resourceProgressRepository.countByUserId(userId)
-                + userAchievementRepository.countByUserId(userId)
-                + courseRatingRepository.countByUserId(userId)
-                + userPreferencesRepository.countByUserId(userId);
     }
 
     private void scrubEventCheckins(Long userId) {
@@ -409,8 +291,9 @@ public class UserAccountDeletionService {
     }
 
     /**
-     * Remove a user from a group. For admin hard-delete, their own messages are
-     * also removed. For self-delete, messages stay and point at the tombstone.
+     * Remove a user from a group. Their own messages are always deleted (accounts
+     * are now removed completely); if the group ends up empty it is deleted too,
+     * otherwise an admin is promoted so the group keeps a manager.
      */
     private void purgeUserFromGroup(GroupConversation g, Long userId, boolean deleteOwnMessages) {
         if (deleteOwnMessages) {
@@ -503,89 +386,6 @@ public class UserAccountDeletionService {
             });
         } else {
             delete.run();
-        }
-    }
-
-    private void anonymizeUser(User user) {
-        user.setFirstName(DELETED_FIRST_NAME);
-        user.setLastName(DELETED_LAST_NAME);
-        user.setEmail(uniqueDeletedEmail(user.getId()));
-        user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
-        user.setProfileImage(null);
-        user.setVerifiedUser(false);
-        user.setAdmin(false);
-        user.setInstructor(false);
-        user.setActive(false);
-        user.setPoints(0);
-        user.setBirthday(null);
-        user.setBio(null);
-        user.setLocation(null);
-        user.setPhone(null);
-        user.setDeletedAccount(true);
-        user.setDeletedAt(Instant.now());
-        userRepository.save(user);
-    }
-
-    private String uniqueDeletedEmail(Long userId) {
-        for (int i = 0; i < 5; i++) {
-            String candidate = sha256Hex(userId + ":" + UUID.randomUUID()).substring(0, 40) + "@deleted.account";
-            if (userRepository.findByEmail(candidate).isEmpty()) {
-                return candidate;
-            }
-        }
-        return userId + "-" + UUID.randomUUID().toString().replace("-", "") + "@deleted.account";
-    }
-
-    private String sha256Hex(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder out = new StringBuilder(hash.length * 2);
-            for (byte b : hash) {
-                out.append(String.format("%02x", b));
-            }
-            return out.toString();
-        } catch (NoSuchAlgorithmException e) {
-            return UUID.randomUUID().toString().replace("-", "");
-        }
-    }
-
-    private void putIfNonZero(Map<String, Long> references, String key, long count) {
-        if (count > 0) {
-            references.put(key, count);
-        }
-    }
-
-    private Specification<User> deletedAccountFilter(String q) {
-        return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("deletedAccount"), true));
-
-            String term = q == null ? "" : q.trim().toLowerCase();
-            if (!term.isEmpty()) {
-                Predicate textMatch = cb.like(cb.lower(root.get("email")), "%" + term + "%");
-                try {
-                    Long id = Long.parseLong(term);
-                    predicates.add(cb.or(textMatch, cb.equal(root.get("id"), id)));
-                } catch (NumberFormatException ignored) {
-                    predicates.add(textMatch);
-                }
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-    }
-
-    public static class DeletedAccountStillReferencedException extends RuntimeException {
-        private final Map<String, Long> references;
-
-        public DeletedAccountStillReferencedException(Map<String, Long> references) {
-            super("Deleted Account still has retained content references.");
-            this.references = references;
-        }
-
-        public Map<String, Long> getReferences() {
-            return references;
         }
     }
 }

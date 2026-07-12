@@ -141,30 +141,6 @@ class WebSecurityRulesTest {
                 .andExpect(status().isOk());
     }
 
-    @Test
-    @WithMockUser(roles = "USER")
-    void deletedAccountsListIsForbiddenForNonAdmin() throws Exception {
-        mockMvc.perform(get("/api/users/deleted"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    void deletedAccountsListIsAllowedForAdmin() throws Exception {
-        when(userAccountDeletionService.listDeletedAccounts(anyString(), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-
-        mockMvc.perform(get("/api/users/deleted"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    @WithMockUser(roles = "ADMIN")
-    void deletedAccountPurgeIsAllowedForAdmin() throws Exception {
-        mockMvc.perform(delete("/api/users/deleted/7/purge"))
-                .andExpect(status().isOk());
-    }
-
     // ---- directory search: authenticated, no email, clamped ---------------
 
     @Test

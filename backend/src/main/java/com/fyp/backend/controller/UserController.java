@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.fyp.backend.dto.DeletedAccountDto;
 import com.fyp.backend.dto.UserDto;
 import com.fyp.backend.dto.UserProfileDto;
 import com.fyp.backend.dto.UserSummaryDto;
@@ -33,7 +32,6 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserAccountDeletionService;
-import com.fyp.backend.service.UserAccountDeletionService.DeletedAccountStillReferencedException;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.Pagination;
@@ -245,20 +243,6 @@ public class UserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping("/deleted")
-    public ResponseEntity<Map<String, Object>> getDeletedAccounts(
-            @RequestParam(required = false, defaultValue = "") String q,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(
-                Pagination.clampPage(page),
-                Pagination.clampSize(size),
-                Sort.by(Sort.Direction.DESC, "deletedAt").and(Sort.by(Sort.Direction.ASC, "id")));
-        Page<DeletedAccountDto> result = userAccountDeletionService.listDeletedAccounts(q, pageable);
-        return ResponseEntity.ok(Pagination.envelope(result.getContent(), result));
-    }
-
-    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/update-active/{id}")
     public ResponseEntity<String> updateUserActiveStatus(
             @PathVariable Long id,
@@ -280,22 +264,6 @@ public class UserController {
         try {
             userAccountDeletionService.deleteUserCompletely(id);
             return ResponseEntity.ok("User and associated data permanently deleted.");
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(400).body(e.getMessage());
-        }
-    }
-
-    @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/deleted/{id}/purge")
-    public ResponseEntity<?> purgeDeletedAccount(@PathVariable Long id) {
-        try {
-            userAccountDeletionService.purgeDeletedAccount(id);
-            return ResponseEntity.ok("Deleted Account tombstone purged.");
-        } catch (DeletedAccountStillReferencedException e) {
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("message", e.getMessage());
-            body.put("references", e.getReferences());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
         } catch (RuntimeException e) {
             return ResponseEntity.status(400).body(e.getMessage());
         }
