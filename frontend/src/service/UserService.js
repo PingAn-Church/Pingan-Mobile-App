@@ -333,22 +333,6 @@ export const getInactiveUsers = async ({ q = "", page = 0, size = 20 } = {}) => 
   }
 };
 
-export const getDeletedAccounts = async ({ q = "", page = 0, size = 20 } = {}) => {
-  const token = await getAuthToken();
-  if (!token) throw new Error("No authentication token found.");
-
-  try {
-    const response = await axios.get(apiUrl(`/api/users/deleted`), {
-      params: { q, page, size },
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching deleted accounts:", error);
-    throw error;
-  }
-};
-
 // Hard delete: permanently remove a deactivated user and ALL their associated
 // data (chat, quiz attempts, OSS media, etc.). Irreversible; admin-only.
 export const deleteUser = async (userId) => {
@@ -362,21 +346,6 @@ export const deleteUser = async (userId) => {
     return response.data;
   } catch (error) {
     console.error("Error deleting user:", error);
-    throw error;
-  }
-};
-
-export const purgeDeletedAccount = async (userId) => {
-  const token = await getAuthToken();
-  if (!token) throw new Error("No authentication token found.");
-
-  try {
-    const response = await axios.delete(apiUrl(`/api/users/deleted/${userId}/purge`), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return response.data;
-  } catch (error) {
-    console.error("Error purging deleted account:", error);
     throw error;
   }
 };
