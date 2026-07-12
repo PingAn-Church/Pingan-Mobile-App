@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Linking, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -7,6 +7,9 @@ import { Colors } from "@/constants";
 import { markResourceComplete } from "@/services/enrollmentService";
 import { notify } from "@/utils/alerts";
 import PlatformWebView from "../../components/PlatformWebView";
+import { useAuth } from "@/context/AuthContext";
+import { LanguageContext } from "../../context/LanguageContext";
+import i18n from "../../../i18n";
 
 /**
  * Google Docs/Drive share links point at the editor page, which the gview
@@ -40,7 +43,9 @@ export default function DocumentScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const queryClient = useQueryClient();
-  const title = String(route.params?.title ?? "Document");
+  const { isAuthenticated } = useAuth();
+  useContext(LanguageContext);
+  const title = String(route.params?.title ?? i18n.t("document"));
   const rawUrl: string | undefined = route.params?.resourceUrl;
   const resourceId = route.params?.resourceId ? String(route.params.resourceId) : null;
   const courseId = route.params?.courseId ? String(route.params.courseId) : null;
@@ -63,9 +68,9 @@ export default function DocumentScreen() {
         queryClient.invalidateQueries({ queryKey: ["learning", "course", courseId] });
         queryClient.invalidateQueries({ queryKey: ["learning", "my-courses"] });
       }
-      notify("Marked complete", "Your progress has been updated.", () => navigation.goBack());
+      notify(i18n.t("markedComplete"), i18n.t("progressUpdated"), () => navigation.goBack());
     } catch (e: any) {
-      notify("Error", e?.message || "Could not update progress.");
+      notify(i18n.t("error"), e?.message || i18n.t("progressUpdateFailed"));
     } finally {
       setMarking(false);
     }
@@ -80,7 +85,7 @@ export default function DocumentScreen() {
         {!!rawUrl && (
           <TouchableOpacity style={styles.openBtn} onPress={() => Linking.openURL(rawUrl)}>
             <Ionicons name="open-outline" size={18} color={Colors.white} />
-            <Text style={styles.openBtnText}>Open</Text>
+            <Text style={styles.openBtnText}>{i18n.t("open")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -92,18 +97,20 @@ export default function DocumentScreen() {
           domStorageEnabled
         />
       ) : (
-        <Text style={styles.muted}>This resource is unavailable.</Text>
+        <Text style={styles.muted}>{i18n.t("resourceUnavailable")}</Text>
       )}
-      {resourceId &&
+      {isAuthenticated && resourceId &&
         (completed ? (
           <View style={[styles.completeBtn, styles.completedBtn]}>
             <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
-            <Text style={styles.completeText}>Completed</Text>
+            <Text style={styles.completeText}>{i18n.t("completed")}</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
             <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
-            <Text style={styles.completeText}>{marking ? "Saving..." : "Mark as complete"}</Text>
+            <Text style={styles.completeText}>
+              {marking ? i18n.t("saving") : i18n.t("markAsComplete")}
+            </Text>
           </TouchableOpacity>
         ))}
     </View>

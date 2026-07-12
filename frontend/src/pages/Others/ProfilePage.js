@@ -319,6 +319,65 @@ export default function ProfilePage() {
     }
   };
 
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.guestContent}>
+          <View style={styles.profileHeader}>
+            <View style={styles.profileCircle}>
+              <Ionicons name="person-circle" size={100} color="#6e6e6e" />
+            </View>
+          </View>
+
+          <View style={styles.profileContainer}>
+            <TouchableOpacity style={styles.detailContainer} onPress={toggleLanguage}>
+              <MaterialIcons
+                name="language"
+                size={24}
+                color="#007AFF"
+                style={styles.detailIcon}
+              />
+              <View style={styles.detailTextContainer}>
+                <Text style={styles.detailLabel}>{i18n.t("changeLanguage")}</Text>
+                <Text style={styles.detailValue}>
+                  {i18n.t("language")}: {i18n.t(language === "en" ? "english" : "chinese")}
+                </Text>
+              </View>
+              <Ionicons name="repeat-outline" size={25} color="#aaa" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.detailContainer}
+              onPress={() => navigation.navigate("StorageSettings")}
+            >
+              <MaterialIcons
+                name="storage"
+                size={24}
+                color="#007AFF"
+                style={styles.detailIcon}
+              />
+              <View style={styles.detailTextContainer}>
+                <Text style={styles.detailLabel}>{i18n.t("storage")}</Text>
+                <Text style={styles.detailValue}>{i18n.t("manageStorage")}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={30} color="#aaa" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.guestPrompt}>
+            <Text style={styles.guestPromptText}>{i18n.t("guestUnlockMessage")}</Text>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => navigation.navigate("Login")}
+            >
+              <Text style={styles.buttonText}>{i18n.t("loginToUnlock")}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -830,6 +889,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
+  },
+  guestContent: {
+    flexGrow: 1,
+    paddingTop: 20,
+  },
+  guestPrompt: {
+    marginTop: 4,
+    paddingHorizontal: 10,
+  },
+  guestPromptText: {
+    color: "#666",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    marginHorizontal: 12,
+    marginBottom: 8,
   },
   appCard: {
     padding: 15,

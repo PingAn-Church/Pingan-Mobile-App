@@ -12,6 +12,8 @@ export const getAllEvents = async ({
   to,
 } = {}) => {
   try {
+    const token = await getAuthToken();
+    if (!token) throw new Error("No auth token found");
     const response = await axios.get(apiUrl(`/api/events`), {
       params: {
         status,
@@ -21,6 +23,7 @@ export const getAllEvents = async ({
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
       },
+      headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
   } catch (error) {
@@ -32,8 +35,11 @@ export const getAllEvents = async ({
 // Get details of a specific event
 export const getEventById = async (eventId) => {
   try {
+    const token = await getAuthToken();
+    if (!token) throw new Error("No auth token found");
     const response = await axios.get(
-      apiUrl(`/api/events/${eventId}`)
+      apiUrl(`/api/events/${eventId}`),
+      { headers: { Authorization: `Bearer ${token}` } }
     );
     return response.data;
   } catch (error) {

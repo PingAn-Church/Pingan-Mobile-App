@@ -43,8 +43,10 @@ public class CourseController {
     }
 
     @GetMapping("/categoryHandler")
-    public ApiResponse<List<Map<String, Object>>> categoryHandler() {
-        return ApiResponse.ok(courseService.listCategories());
+    public ApiResponse<List<Map<String, Object>>> categoryHandler(
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        boolean anonymous = userService.getUserIdFromToken(auth) == null;
+        return ApiResponse.ok(courseService.listCategories(anonymous));
     }
 
     /** Management list (published + drafts) for the authoring portal. */
@@ -72,7 +74,7 @@ public class CourseController {
             @RequestHeader(value = "Authorization", required = false) String auth,
             @PathVariable Long courseId) {
         Long userId = userService.getUserIdFromToken(auth);
-        return courseService.getModuleDetail(courseId, userId);
+        return courseService.getModuleDetail(courseId, userId, userId == null);
     }
 
     @GetMapping("/getVideoDetail/{videoId}")

@@ -119,6 +119,7 @@ const Tab = createBottomTabNavigator();
 // survives rotation.
 function HomeTabsNavigator() {
   const { language } = useContext(LanguageContext); // to listen to language change
+  const { user } = useContext(UserContext);
   const { width, height } = useWindowDimensions();
   const sidebar = width >= 768 && width > height;
 
@@ -180,25 +181,29 @@ function HomeTabsNavigator() {
         component={HomePage}
         options={{ headerTitle: i18n.t("Home") }}
       />
-      <Tab.Screen
-        name="Events"
-        component={MyActivityPage}
-        options={{ headerTitle: i18n.t("Events") }}
-      />
-      <Tab.Screen
-        name="Social"
-        component={SocialPage}
-        options={{
-          headerTitle: i18n.t("Social"),
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons
-              name={focused ? "chatbubbles" : "chatbubbles-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
+      {user && (
+        <Tab.Screen
+          name="Events"
+          component={MyActivityPage}
+          options={{ headerTitle: i18n.t("Events") }}
+        />
+      )}
+      {user && (
+        <Tab.Screen
+          name="Social"
+          component={SocialPage}
+          options={{
+            headerTitle: i18n.t("Social"),
+            tabBarIcon: ({ focused, color, size }) => (
+              <Ionicons
+                name={focused ? "chatbubbles" : "chatbubbles-outline"}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+      )}
       <Tab.Screen
         name="Settings"
         component={ProfilePage}
@@ -296,6 +301,19 @@ const PUBLIC_ROUTES = new Set([
   "ForgotPassword",
 ]);
 
+const GUEST_ROUTES = new Set([
+  ...PUBLIC_ROUTES,
+  "HomeTabs",
+  "Home",
+  "Settings",
+  "Learning",
+  "LearningCourseDetail",
+  "LearningVideo",
+  "LearningDocument",
+  "VideosPage",
+  "StorageSettings",
+]);
+
 const ROOT_BACK_FALLBACKS = {
   Login: "Welcome",
   Register: "Welcome",
@@ -368,7 +386,7 @@ const rootStackScreenOptions = ({ navigation, route }) => {
 // user and the active route isn't public, send the user back to Welcome. This covers
 // every screen (not just the homepage) — important on web where routes are URL-reachable.
 function AuthGuard({ navigationRef }) {
-  const { user, loading } = useContext(UserContext);
+  const { user, isGuest, loading } = useContext(UserContext);
 
   useEffect(() => {
     if (loading) return; // wait until the session check settles (handled by EntryGate)
@@ -377,7 +395,12 @@ function AuthGuard({ navigationRef }) {
       if (!navigationRef.isReady()) return;
       const route = navigationRef.getCurrentRoute();
       if (!route) return;
-      if (!user && !PUBLIC_ROUTES.has(route.name)) {
+      if (user) return;
+      if (isGuest && !GUEST_ROUTES.has(route.name)) {
+        navigationRef.reset({ index: 0, routes: [{ name: "Login" }] });
+        return;
+      }
+      if (!isGuest && !PUBLIC_ROUTES.has(route.name)) {
         navigationRef.reset({ index: 0, routes: [{ name: "Welcome" }] });
       }
     };
@@ -385,7 +408,27 @@ function AuthGuard({ navigationRef }) {
     enforce(); // run immediately (covers logout/expiry and the current route)
     const unsubscribe = navigationRef.addListener("state", enforce); // and on every navigation
     return unsubscribe;
-  }, [user, loading, navigationRef]);
+  }, [user, isGuest, loading, navigationRef]);
+
+  return null;
+}
+
+function SessionQueryBoundary() {
+  const { user, isGuest, loading } = useContext(UserContext);
+  const previousIdentity = useRef(null);
+
+  useEffect(() => {
+    if (loading) return;
+    const identity = user?.id != null
+      ? `user:${user.id}`
+      : isGuest
+        ? "guest"
+        : "anonymous";
+    if (previousIdentity.current && previousIdentity.current !== identity) {
+      queryClient.clear();
+    }
+    previousIdentity.current = identity;
+  }, [user?.id, isGuest, loading]);
 
   return null;
 }
@@ -437,6 +480,7 @@ export default function App() {
             <ChatProvider>
               <WebSocketProvider>
                 <EntryGate>
+                <SessionQueryBoundary />
                 <AuthGuard navigationRef={navigationRef} />
                 <Stack.Navigator initialRouteName="Welcome" screenOptions={rootStackScreenOptions}>
                   <Stack.Screen

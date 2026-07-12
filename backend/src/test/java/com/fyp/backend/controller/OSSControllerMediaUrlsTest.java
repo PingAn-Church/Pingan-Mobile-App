@@ -105,4 +105,33 @@ class OSSControllerMediaUrlsTest {
         String firstUrl = com.jayway.jsonpath.JsonPath.read(json, "$.data[0]");
         assertValidGatewayUrl(firstUrl, "eventPictures/a.jpg");
     }
+
+    @Test
+    void publicCourseDownloadUrlDoesNotRequireLogin() throws Exception {
+        when(ossService.getFolderPath("course")).thenReturn("coursePictures/");
+
+        String body = mockMvc.perform(get("/oss/public-download-url")
+                        .param("fileName", "cover.jpg")
+                        .param("fileType", "course"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertValidGatewayUrl(body, "coursePictures/cover.jpg");
+    }
+
+    @Test
+    void publicDownloadUrlRejectsPrivateMediaTypes() throws Exception {
+        mockMvc.perform(get("/oss/public-download-url")
+                        .param("fileName", "avatar.jpg")
+                        .param("fileType", "profile"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void anonymousUploadOnlyAllowsRegistrationProfilePictures() throws Exception {
+        mockMvc.perform(get("/oss/presigned-upload-url")
+                        .param("fileName", "event.jpg")
+                        .param("fileType", "event"))
+                .andExpect(status().isForbidden());
+    }
 }

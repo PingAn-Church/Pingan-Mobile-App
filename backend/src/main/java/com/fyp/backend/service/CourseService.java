@@ -66,9 +66,13 @@ public class CourseService {
     @Autowired private QuizAttemptRepository quizAttemptRepository;
 
     public List<Map<String, Object>> listCategories() {
+        return listCategories(false);
+    }
+
+    public List<Map<String, Object>> listCategories(boolean publishedOnly) {
         return categoryRepository.findAll().stream()
                 .sorted(Comparator.comparing(Category::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(this::categoryMap)
+                .map(category -> categoryMap(category, publishedOnly))
                 .collect(Collectors.toList());
     }
 
@@ -107,8 +111,7 @@ public class CourseService {
             result = courseRepository.findByIsPublishedTrue(pageable);
         }
 
-        List<Map<String, Object>> data = result.getContent().stream()
-                .map(c -> courseSummaryMap(c, false)).collect(Collectors.toList());
+        List<Map<String, Object>> data = courseSummaryMaps(result.getContent(), false);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("success", true);
@@ -165,7 +168,13 @@ public class CourseService {
     }
 
     public Map<String, Object> getModuleDetail(Long courseId, Long userId) {
-        Course course = courseRepository.findById(courseId)
+        return getModuleDetail(courseId, userId, false);
+    }
+
+    public Map<String, Object> getModuleDetail(Long courseId, Long userId, boolean anonymous) {
+        Course course = (anonymous
+                ? courseRepository.findByIdAndIsPublishedTrue(courseId)
+                : courseRepository.findById(courseId))
                 .orElseThrow(() -> ApiException.notFound("Course not found"));
 
         Map<String, Object> data = courseSummaryMap(course);
@@ -195,11 +204,20 @@ public class CourseService {
                     .findBySectionIdOrderByOrderIndexAsc(section.getId()).stream()
                     .map(this::quizLessonMap).collect(Collectors.toList());
 
-            // Per-user completion flags so the app can show "Completed" instead of
-            // an always-on "Mark as complete" button (lessons share these refs).
-            markVideoCompletion(videos, userId);
-            markResourceCompletion(resources, userId);
-            markQuizResults(quizzes, userId);
+            if (anonymous) {
+                videos.stream()
+                        .filter(video -> !Boolean.TRUE.equals(video.get("is_preview")))
+                        .forEach(video -> video.put("video_url", null));
+                resources.stream()
+                        .filter(resource -> !Boolean.TRUE.equals(resource.get("is_preview")))
+                        .forEach(resource -> resource.put("resource_url", null));
+            } else {
+                // Per-user completion flags so the app can show "Completed" instead of
+                // an always-on "Mark as complete" button (lessons share these refs).
+                markVideoCompletion(videos, userId);
+                markResourceCompletion(resources, userId);
+                markQuizResults(quizzes, userId);
+            }
 
             List<Map<String, Object>> lessons = new ArrayList<>();
             lessons.addAll(videos);
@@ -292,12 +310,14 @@ public class CourseService {
 
     // ---- mappers --------------------------------------------------------
 
-    private Map<String, Object> categoryMap(Category c) {
+    private Map<String, Object> categoryMap(Category c, boolean publishedOnly) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", String.valueOf(c.getId()));
         m.put("name", c.getName());
         m.put("color", c.getColor());
-        m.put("course_count", courseRepository.countByCategoryId(c.getId()));
+        m.put("course_count", publishedOnly
+                ? courseRepository.countByCategoryIdAndIsPublishedTrue(c.getId())
+                : courseRepository.countByCategoryId(c.getId()));
         m.put("created_at", c.getCreatedAt());
         return m;
     }

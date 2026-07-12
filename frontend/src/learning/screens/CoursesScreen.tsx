@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getPublishedCourses } from "@/services/courseService";
 import type { LearningCourse } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { LanguageContext } from "../../context/LanguageContext";
+import i18n from "../../../i18n";
 
 export function CourseCard({
   course,
@@ -45,7 +48,7 @@ export function CourseCard({
         <View style={styles.cardMetaRow}>
           <Ionicons name="star" size={14} color={Colors.starGold} />
           <Text style={styles.cardMetaText}>
-            {course.rating ? course.rating.toFixed(1) : "New"}
+            {course.rating ? course.rating.toFixed(1) : i18n.t("courseNew")}
           </Text>
           <Text style={styles.cardMetaDot}>•</Text>
           <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
@@ -63,6 +66,8 @@ const COURSES_PAGE_SIZE = 20;
 
 export default function CoursesScreen() {
   const navigation = useNavigation<any>();
+  const { isAuthenticated } = useAuth();
+  const { language } = useContext(LanguageContext);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const categoriesQuery = useQuery({
@@ -87,23 +92,23 @@ export default function CoursesScreen() {
   const courses = coursesQuery.data?.pages.flatMap((p) => p.courses) ?? [];
 
   const chips = useMemo(
-    () => [{ id: "all", name: "All" }, ...categories.map((c) => ({ id: c.name, name: c.name }))],
-    [categories]
+    () => [{ id: "all", name: i18n.t("all") }, ...categories.map((c) => ({ id: c.name, name: c.name }))],
+    [categories, language]
   );
 
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
-        <Text style={styles.heading}>Courses</Text>
-        <View style={styles.quickLinks}>
+        <Text style={styles.heading}>{i18n.t("courses")}</Text>
+        {isAuthenticated && <View style={styles.quickLinks}>
           <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate("MyCourses")}>
             <Ionicons name="school-outline" size={16} color={Colors.white} />
-            <Text style={styles.quickText}>My Learning</Text>
+            <Text style={styles.quickText}>{i18n.t("myLearning")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickBtnGhost} onPress={() => navigation.navigate("Wishlist")}>
             <Ionicons name="heart-outline" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
-        </View>
+        </View>}
       </View>
 
       <ScrollView
@@ -130,9 +135,9 @@ export default function CoursesScreen() {
       {coursesQuery.isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : coursesQuery.isError ? (
-        <Text style={styles.empty}>Could not load courses.</Text>
+        <Text style={styles.empty}>{i18n.t("coursesLoadFailed")}</Text>
       ) : courses.length === 0 ? (
-        <Text style={styles.empty}>No courses available yet.</Text>
+        <Text style={styles.empty}>{i18n.t("noCoursesAvailable")}</Text>
       ) : (
         <FlatList
           data={courses}

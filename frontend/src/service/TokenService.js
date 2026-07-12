@@ -45,6 +45,13 @@ export const getAuthToken = async () => {
     return accessToken;
   }
 
+  // A genuine guest has no credentials. Public GET requests must not trigger a
+  // refresh attempt (and the logout/cache-clearing side effects that follow it).
+  const storedRefreshToken = await AsyncStorage.getItem("refreshToken");
+  if (!accessToken && !storedRefreshToken) {
+    return null;
+  }
+
   if (!refreshPromise) {
     refreshPromise = refreshAccessToken().finally(() => {
       refreshPromise = null;

@@ -23,12 +23,14 @@ import { getPublishedCourses } from "../../learning/services/courseService";
 import CourseCoverImage from "../../learning/components/CourseCoverImage";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import { UserContext } from "../../context/UserContext";
 
 // ==========================================
 // COMPONENT: HOME PAGE
 // ==========================================
 export default function HomePage() {
   const navigation = useNavigation();
+  const { user } = useContext(UserContext);
   const { width } = useWindowDimensions();
 
   // Breakpoint for Desktop vs Mobile
@@ -69,9 +71,10 @@ export default function HomePage() {
     useCallback(() => {
       loadVideos();
       loadAnnouncements();
-      loadEvents();
+      if (user) loadEvents();
+      else setEvents([]);
       loadCourses();
-    }, [isDesktop])
+    }, [isDesktop, user?.id])
   );
 
   const loadCourses = async () => {
@@ -163,7 +166,7 @@ export default function HomePage() {
               { icon: "place", color: "#2196F3", label: "location", url: "https://maps.app.goo.gl/87euaduDeRSA5JMN6" },
               { icon: "phone", color: "#FFC107", label: "phoneNumber", url: "tel:+6580390059" },
               { icon: "email", color: "#673AB7", label: "email", url: "mailto:pinganchurchsingapore@gmail.com" },
-            ].map((item, idx) => (
+            ].filter((item) => user || item.screen !== "FormApplication").map((item, idx) => (
               <RoundedSquare
                 key={idx}
                 iconName={item.icon}
@@ -221,7 +224,7 @@ export default function HomePage() {
         </View>
 
         {/* Section 3: Events */}
-        <View style={styles.section}>
+        {user && <View style={styles.section}>
           <View style={styles.headerRow}>
             <Text style={styles.sectionTitle}>{i18n.t("upcoming")} {i18n.t("Events")}</Text>
             <TouchableOpacity onPress={() => navigation.navigate("Events")}>
@@ -264,7 +267,7 @@ export default function HomePage() {
           ) : (
             <Text style={styles.noData}>{i18n.t("noUpcomingEvents")}</Text>
           )}
-        </View>
+        </View>}
 
         {/* Section 4: Videos */}
         <View style={styles.section}>

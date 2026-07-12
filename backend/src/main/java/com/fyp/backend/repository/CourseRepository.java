@@ -1,5 +1,7 @@
 package com.fyp.backend.repository;
 
+import java.util.Optional;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,9 +20,13 @@ public interface CourseRepository extends JpaRepository<Course, Long>, JpaSpecif
 
     Page<Course> findByIsPublishedTrueAndCategoryId(Long categoryId, Pageable pageable);
 
+    Optional<Course> findByIdAndIsPublishedTrue(Long id);
+
     long countByInstructorId(Long instructorId);
 
     long countByCategoryId(Long categoryId);
+
+    long countByCategoryIdAndIsPublishedTrue(Long categoryId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("UPDATE Course c SET c.categoryId = :targetCategoryId WHERE c.categoryId = :sourceCategoryId")

@@ -92,7 +92,10 @@ export default function VerificationCodePage() {
       if (result.success) {
         await fetchUserData();
         await handleLoginPushToken();
-        navigation.navigate("HomeTabs", { screen: "Home" });
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "HomeTabs", params: { screen: "Home" } }],
+        });
       } else {
         showAlert(i18n.t("error"), String(result.error || i18n.t("invalidCode")), [{ text: i18n.t("ok") }]);
       }

@@ -35,23 +35,34 @@ public class SpringSecurityConfig {
                 .cors(cors -> {
                 }) // ✅ NEW: enable CORS rules from WebConfig
                 .authorizeHttpRequests((authorize) -> authorize
-                        // Public read-only content (homepage works post-login)
-                        .requestMatchers(HttpMethod.GET, "/api/events/**", "/api/videos/**", "/api/announcements/**")
+                        // Public read-only homepage/catalog content.
+                        .requestMatchers(HttpMethod.GET, "/api/videos/**", "/api/announcements/**")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/fn/getAllPublishedCourse",
+                                "/api/fn/categoryHandler",
+                                "/api/fn/getModuleDetail/**",
+                                "/api/fn/getCourseReviews/**")
                         .permitAll()
                         // Media gateway: authorization is the HMAC-signed query on each URL
                         // (MediaTokenService) — image/audio loaders can't send JWT headers.
                         .requestMatchers(HttpMethod.GET, "/media/**").permitAll()
-                        // Minting temporary download URLs requires a login: every consumer is a
-                        // post-login screen, and leaving it open would let anyone who guesses a
-                        // filename mint a viewable URL. Deletes are admin-only; listing every
-                        // stored object stays login-gated.
+                        // Public course/announcement media has a narrow signing endpoint.
+                        // Private download signing, object listing and deletion stay login-gated.
+                        .requestMatchers(HttpMethod.GET, "/oss/public-download-url")
+                        .permitAll()
+                        // Registration may upload an optional profile image before login;
+                        // the controller rejects all other anonymous upload types.
+                        .requestMatchers(HttpMethod.GET, "/oss/presigned-upload-url")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/oss/presigned-download-url",
-                                "/oss/conversations/presigned-download-url")
+                                "/oss/conversations/presigned-download-url",
+                                "/oss/conversations/presigned-upload-url")
                         .authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/oss/delete").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/oss/list-pictures").authenticated()
-                        // Remaining /oss + /s3 stay open because registration uploads an avatar pre-auth
-                        .requestMatchers("/ws/**", "/auth/**", "/s3/**", "/oss/**")
+                        .requestMatchers("/oss/**").authenticated()
+                        .requestMatchers("/ws/**", "/auth/**")
                         .permitAll()
                         // Push-token registration happens at signup, before the user has a JWT;
                         // the token is stored inactive. Everything else under push-notifications

@@ -114,17 +114,17 @@ import logo from "../../../assets/logo.jpg";
 
 export default function WelcomePage() {
   const navigation = useNavigation();
-  const { user, loading } = useContext(UserContext);
+  const { user, isGuest, loading } = useContext(UserContext);
   const [logoUrl, setLogoUrl] = useState(null);
 
   // Redirect a signed-in user to the app once the session check resolves. The
   // App-level EntryGate overlay stays up over this transition and cross-fades
   // out to reveal HomeTabs, so the redirect happens unseen behind the splash.
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && (user || isGuest)) {
       navigation.replace("HomeTabs");
     }
-  }, [user, loading]);
+  }, [user, isGuest, loading]);
 
   if (loading) {
     return null;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -22,25 +22,31 @@ import {
 import { getCourseReviews } from "@/services/reviewService";
 import { notify } from "@/utils/alerts";
 import type { LearningLesson } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { showLoginRequiredAlert } from "../../utils/authGate";
+import { LanguageContext } from "../../context/LanguageContext";
+import i18n from "../../../i18n";
 
 export default function CourseDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
+  useContext(LanguageContext);
   const courseId = String(route.params?.courseId ?? "");
 
   const [enrolling, setEnrolling] = useState(false);
   const [wishlisted, setWishlisted] = useState(false);
 
   const detailQuery = useQuery({
-    queryKey: ["learning", "course", courseId],
+    queryKey: ["learning", "course", courseId, isAuthenticated ? "user" : "guest"],
     queryFn: () => getCourseDetail(courseId),
     enabled: !!courseId,
   });
   const enrolledQuery = useQuery({
     queryKey: ["learning", "enrolled", courseId],
     queryFn: () => checkEnrolled(courseId),
-    enabled: !!courseId,
+    enabled: !!courseId && isAuthenticated,
   });
   const reviewsQuery = useInfiniteQuery({
     queryKey: ["learning", "reviews", courseId],
@@ -62,20 +68,28 @@ export default function CourseDetailScreen() {
   }, [detailQuery.data]);
 
   const handleEnroll = async () => {
+    if (!isAuthenticated) {
+      showLoginRequiredAlert(navigation);
+      return;
+    }
     setEnrolling(true);
     try {
       await enrollCourse(courseId);
       await queryClient.invalidateQueries({ queryKey: ["learning", "enrolled", courseId] });
       await queryClient.invalidateQueries({ queryKey: ["learning", "my-courses"] });
-      notify("Enrolled", "You're enrolled. Start learning!");
+      notify(i18n.t("courseEnrolledTitle"), i18n.t("courseEnrolledMessage"));
     } catch (e: any) {
-      notify("Error", e?.message || "Could not enrol.");
+      notify(i18n.t("error"), e?.message || i18n.t("courseEnrollFailed"));
     } finally {
       setEnrolling(false);
     }
   };
 
   const toggleWishlist = async () => {
+    if (!isAuthenticated) {
+      showLoginRequiredAlert(navigation);
+      return;
+    }
     const next = !wishlisted;
     setWishlisted(next); // optimistic; server truth re-syncs via the effect below
     try {
@@ -85,22 +99,26 @@ export default function CourseDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["learning", "wishlist"] });
     } catch (e: any) {
       setWishlisted(!next); // revert on failure
-      notify("Error", e?.message || "Could not update wishlist.");
+      notify(i18n.t("error"), e?.message || i18n.t("wishlistUpdateFailed"));
     }
   };
 
   const openLesson = (lesson: LearningLesson) => {
+    if (!isAuthenticated && (!lesson.isPreview || lesson.type === "quiz")) {
+      showLoginRequiredAlert(navigation);
+      return;
+    }
     if (!enrolled && !lesson.isPreview) {
-      notify("Enrol required", "Enrol in this course to access this lesson.");
+      notify(i18n.t("enrolRequiredTitle"), i18n.t("enrolRequiredMessage"));
       return;
     }
     if (lesson.type === "video") {
       navigation.navigate("LearningVideo", {
         title: lesson.title,
         videoUrl: lesson.videoUrl,
-        videoId: lesson.id,
+        videoId: isAuthenticated ? lesson.id : null,
         isCompleted: !!lesson.isCompleted,
-        courseId,
+        courseId: isAuthenticated ? courseId : null,
       });
     } else if (lesson.type === "quiz") {
       // Already attempted → show results/feedback; otherwise start the attempt.
@@ -114,9 +132,9 @@ export default function CourseDetailScreen() {
         title: lesson.title,
         resourceUrl: lesson.resourceUrl,
         resourceType: lesson.resourceType,
-        resourceId: lesson.id,
+        resourceId: isAuthenticated ? lesson.id : null,
         isCompleted: !!lesson.isCompleted,
-        courseId,
+        courseId: isAuthenticated ? courseId : null,
       });
     }
   };
@@ -134,7 +152,7 @@ export default function CourseDetailScreen() {
   if (detailQuery.isError || !data) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Text style={styles.muted}>Could not load this course.</Text>
+        <Text style={styles.muted}>{i18n.t("courseLoadFailed")}</Text>
       </View>
     );
   }
@@ -157,29 +175,31 @@ export default function CourseDetailScreen() {
           <Text style={styles.categoryPillText}>{data.categoryName}</Text>
         </View>
         <Text style={styles.title}>{data.title}</Text>
-        <Text style={styles.instructor}>By {data.instructorName}</Text>
+        <Text style={styles.instructor}>{i18n.t("byInstructor")} {data.instructorName}</Text>
 
         <View style={styles.metaRow}>
           <Ionicons name="star" size={16} color={Colors.starGold} />
           <Text style={styles.metaText}>
-            {data.rating ? data.rating.toFixed(1) : "New"} ({data.totalRatings})
+            {data.rating ? data.rating.toFixed(1) : i18n.t("courseNew")} ({data.totalRatings})
           </Text>
           <Text style={styles.dot}>•</Text>
           <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
           <Text style={styles.metaText}>{data.durationHours}h</Text>
           <Text style={styles.dot}>•</Text>
           <Ionicons name="albums-outline" size={16} color={Colors.textSecondary} />
-          <Text style={styles.metaText}>{data.modules.length} modules</Text>
+          <Text style={styles.metaText}>{data.modules.length} {i18n.t("modules")}</Text>
         </View>
 
         {enrolled ? (
           <View style={styles.enrolledPill}>
             <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
-            <Text style={styles.enrolledText}>You're enrolled</Text>
+            <Text style={styles.enrolledText}>{i18n.t("youAreEnrolled")}</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.enrollBtn} onPress={handleEnroll} disabled={enrolling}>
-            <Text style={styles.enrollBtnText}>{enrolling ? "Enrolling..." : "Enrol — Free"}</Text>
+            <Text style={styles.enrollBtnText}>
+              {enrolling ? i18n.t("enrolling") : i18n.t("enrolFree")}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -187,7 +207,7 @@ export default function CourseDetailScreen() {
 
         {data.outcomes.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>What you'll learn</Text>
+            <Text style={styles.sectionTitle}>{i18n.t("whatYouWillLearn")}</Text>
             {data.outcomes.map((o, i) => (
               <View key={i} style={styles.outcomeRow}>
                 <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
@@ -198,9 +218,9 @@ export default function CourseDetailScreen() {
         )}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Course content</Text>
+          <Text style={styles.sectionTitle}>{i18n.t("courseContent")}</Text>
           {data.modules.length === 0 ? (
-            <Text style={styles.muted}>No content yet.</Text>
+            <Text style={styles.muted}>{i18n.t("noCourseContent")}</Text>
           ) : (
             data.modules.map((m, idx) => (
               <View key={m.id} style={styles.module}>
@@ -217,7 +237,7 @@ export default function CourseDetailScreen() {
                     <Text style={styles.lessonText} numberOfLines={1}>
                       {lesson.title}
                     </Text>
-                    {lesson.isPreview && <Text style={styles.previewTag}>Preview</Text>}
+                    {lesson.isPreview && <Text style={styles.previewTag}>{i18n.t("preview")}</Text>}
                     {enrolled && lesson.type !== "quiz" && lesson.isCompleted && (
                       <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
                     )}
@@ -228,12 +248,12 @@ export default function CourseDetailScreen() {
                             {lesson.quizScore}%
                           </Text>
                         ) : (
-                          <Text style={styles.quizPending}>Pending review</Text>
+                          <Text style={styles.quizPending}>{i18n.t("pendingReview")}</Text>
                         )
                       ) : (
-                        <Text style={styles.quizNotAttempted}>Not attempted</Text>
+                        <Text style={styles.quizNotAttempted}>{i18n.t("notAttempted")}</Text>
                       ))}
-                    {!enrolled && !lesson.isPreview && (
+                    {!enrolled && (!lesson.isPreview || (!isAuthenticated && lesson.type === "quiz")) && (
                       <Ionicons name="lock-closed" size={14} color={Colors.textMuted} />
                     )}
                   </TouchableOpacity>
@@ -245,19 +265,23 @@ export default function CourseDetailScreen() {
 
         <View style={styles.section}>
           <View style={styles.reviewHeader}>
-            <Text style={styles.sectionTitle}>Reviews</Text>
-            {enrolled && (
-              <TouchableOpacity onPress={() => navigation.navigate("LeaveReview", { courseId })}>
-                <Text style={styles.leaveReview}>Leave a review</Text>
+            <Text style={styles.sectionTitle}>{i18n.t("reviews")}</Text>
+            {(enrolled || !isAuthenticated) && (
+              <TouchableOpacity
+                onPress={() => isAuthenticated
+                  ? navigation.navigate("LeaveReview", { courseId })
+                  : showLoginRequiredAlert(navigation)}
+              >
+                <Text style={styles.leaveReview}>{i18n.t("leaveReview")}</Text>
               </TouchableOpacity>
             )}
           </View>
           {reviewsQuery.isLoading ? (
             <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} />
           ) : reviewsQuery.isError ? (
-            <Text style={styles.muted}>Could not load reviews.</Text>
+            <Text style={styles.muted}>{i18n.t("reviewsLoadFailed")}</Text>
           ) : reviews.length === 0 ? (
-            <Text style={styles.muted}>No reviews yet.</Text>
+            <Text style={styles.muted}>{i18n.t("noReviews")}</Text>
           ) : null}
         </View>
       </View>
@@ -281,7 +305,7 @@ export default function CourseDetailScreen() {
       </View>
       <Text style={styles.reviewText}>{r.review}</Text>
       {!!r.instructorReply && (
-        <Text style={styles.reply}>Instructor: {r.instructorReply}</Text>
+        <Text style={styles.reply}>{i18n.t("instructorReply")}: {r.instructorReply}</Text>
       )}
     </View>
   );

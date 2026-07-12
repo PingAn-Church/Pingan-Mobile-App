@@ -7,6 +7,7 @@ import { logoutUser as logoutService } from "../service/AuthService";
 import uuid from 'react-native-uuid';
 
 export const UserContext = createContext();
+const GUEST_MODE_KEY = "guestMode";
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -14,6 +15,7 @@ export const UserProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [userStatus, setUserStatus] = useState({});
   const [deviceId, setDeviceId] = useState(null);  
+  const [isGuest, setIsGuest] = useState(false);
 
   // Fetch the device ID or generate one if not found
   const getDeviceId = async () => {
@@ -26,21 +28,23 @@ export const UserProvider = ({ children }) => {
   };
 
   const fetchUserData = async () => {
-    if (userReady) return;
+    if (userReady && user) return user;
   
     try {
       let token = await getAuthToken();
-      if (!token) return;
+      if (!token) return null;
   
       const userInfo = await fetchUserProfile();
       setUser(userInfo);
       setUserReady(true);
+      setIsGuest(false);
+      await AsyncStorage.removeItem(GUEST_MODE_KEY);
+      return userInfo;
     } catch (error) {
       console.error("❌ Error fetching user info:", error);
       setUser(null);
       setUserReady(false);
-    } finally {
-      setLoading(false);
+      return null;
     }
   };
   
@@ -57,9 +61,23 @@ export const UserProvider = ({ children }) => {
 
   const logout = async () => {
     await logoutService(); // Clears accessToken/refreshToken/user + disconnects WebSocket
+    await AsyncStorage.removeItem(GUEST_MODE_KEY);
+    setUser(null);
+    setUserReady(false);
+    setIsGuest(false);
+    setUserStatus({});
+  };
+
+  const enterGuestMode = async () => {
+    // Remove only identity credentials. Guest mode keeps language, device id,
+    // storage preferences and downloaded media intact.
+    await AsyncStorage.multiRemove(["accessToken", "refreshToken", "user"]);
+    await AsyncStorage.setItem(GUEST_MODE_KEY, "true");
     setUser(null);
     setUserReady(false);
     setUserStatus({});
+    setIsGuest(true);
+    setLoading(false);
   };
 
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -69,8 +87,15 @@ export const UserProvider = ({ children }) => {
       if (hasInitialized) return; // ⛔ Prevent rerun
       setHasInitialized(true);
 
-      await getDeviceId(); 
-      await fetchUserData();
+      try {
+        await getDeviceId();
+        const restoredUser = await fetchUserData();
+        if (!restoredUser) {
+          setIsGuest((await AsyncStorage.getItem(GUEST_MODE_KEY)) === "true");
+        }
+      } finally {
+        setLoading(false);
+      }
     };
 
     initialize();
@@ -88,12 +113,14 @@ export const UserProvider = ({ children }) => {
     <UserContext.Provider
       value={{
         user,
+        isGuest,
         userReady,
         loading,
         setUser,
         setUserReady,
         fetchUserData,
         logout, // ✅ exposed
+        enterGuestMode,
         userStatus,
         setUserStatus,
         fetchOnlineUsers,

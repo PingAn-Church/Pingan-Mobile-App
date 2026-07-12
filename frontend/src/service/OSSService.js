@@ -235,6 +235,18 @@ export const getPresignedDownloadUrl = async (fileName, fileType) => {
   }
 };
 
+export const getPublicDownloadUrl = async (fileName, fileType) => {
+  try {
+    const response = await axios.get(apiUrl(`/oss/public-download-url`), {
+      params: { fileName, fileType },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching public download URL:", error);
+    return null;
+  }
+};
+
 export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
   try {
     const rawUrl = String(assetUrl || "").trim();
@@ -243,7 +255,9 @@ export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
     const fileName = rawUrl.split("?")[0].split("#")[0].split("/").pop();
     if (!fileName) return null;
 
-    return await getPresignedDownloadUrl(fileName, fileType);
+    return ["course", "announcement"].includes(fileType)
+      ? await getPublicDownloadUrl(fileName, fileType)
+      : await getPresignedDownloadUrl(fileName, fileType);
   } catch (error) {
     console.error(`Error resolving presigned asset URL for ${fileType}:`, error);
     return null;

@@ -25,6 +25,7 @@ import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert"
+import GuestContinueLink from "../../components/GuestContinueLink";
 
 const TERMS_COPY = {
   en: {
@@ -404,6 +405,7 @@ export default function RegisterPage() {
             )}
           </TouchableOpacity>
         </View>
+        <GuestContinueLink />
       </KeyboardAwareScrollView>
 
       <Modal

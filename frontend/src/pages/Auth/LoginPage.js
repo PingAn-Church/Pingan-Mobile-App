@@ -18,6 +18,7 @@ import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert";
+import GuestContinueLink from "../../components/GuestContinueLink";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -58,7 +59,10 @@ const LoginPage = () => {
           { text: i18n.t("ok") },
         ]);
         console.log("V2!");
-        navigation.navigate("HomeTabs", { screen: "Home" });
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "HomeTabs", params: { screen: "Home" } }],
+        });
       } else {
         showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
           { text: i18n.t("ok") },
@@ -121,6 +125,7 @@ const LoginPage = () => {
               )}
             </TouchableOpacity>
           </View>
+          <GuestContinueLink />
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAwareScrollView>

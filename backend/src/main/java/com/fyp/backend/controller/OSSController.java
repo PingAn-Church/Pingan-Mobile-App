@@ -7,6 +7,8 @@ import io.github.cdimascio.dotenv.Dotenv;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -37,6 +39,8 @@ public class OSSController {
     private final String mediaPublicBaseUrl;
 
     private static final Logger logger = Logger.getLogger(OSSController.class.getName());
+    private static final java.util.Set<String> PUBLIC_DOWNLOAD_TYPES =
+            java.util.Set.of("course", "announcement");
 
     public OSSController(OSSService ossService, MediaTokenService mediaTokenService,
             @Value("${MEDIA_GATEWAY_ENABLED:}") String mediaGatewayEnabledProperty,
@@ -111,8 +115,12 @@ public class OSSController {
     }
 
     @GetMapping("/presigned-upload-url")
-    public ResponseEntity<?> getPresignedUploadUrl(@RequestParam String fileName, @RequestParam String fileType) {
+    public ResponseEntity<?> getPresignedUploadUrl(@RequestParam String fileName, @RequestParam String fileType,
+            Authentication authentication) {
         try {
+            if (!isAuthenticated(authentication) && !"profile".equals(fileType)) {
+                return ResponseEntity.status(403).body("Login is required for this upload type.");
+            }
             String normalizedFileName = normalizeFileName(fileName);
             if (!isAllowedImageName(normalizedFileName)) {
                 return ResponseEntity.badRequest().body("Only image uploads are allowed.");
@@ -155,6 +163,32 @@ public class OSSController {
             logger.severe("Error generating OSS download URL: " + e.getMessage());
             return ResponseEntity.status(500).body("Error generating presigned URL");
         }
+    }
+
+    @GetMapping("/public-download-url")
+    public ResponseEntity<?> getPublicDownloadUrl(@RequestParam String fileName, @RequestParam String fileType) {
+        try {
+            if (!PUBLIC_DOWNLOAD_TYPES.contains(fileType)) {
+                return ResponseEntity.status(403).body("This media type is not public.");
+            }
+            if (fileName == null || fileName.isBlank() || fileName.contains("/")
+                    || fileName.contains("\\") || fileName.contains("..")) {
+                return ResponseEntity.badRequest().body("Invalid file name.");
+            }
+            String objectKey = ossService.getFolderPath(fileType) + fileName;
+            return ResponseEntity.ok(downloadUrlFor(objectKey));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Unsupported public file type.");
+        } catch (Exception e) {
+            logger.severe("Error generating public media URL: " + e.getMessage());
+            return ResponseEntity.status(500).body("Error generating download URL");
+        }
+    }
+
+    private boolean isAuthenticated(Authentication authentication) {
+        return authentication != null
+                && authentication.isAuthenticated()
+                && !(authentication instanceof AnonymousAuthenticationToken);
     }
 
     @GetMapping("/list-pictures")

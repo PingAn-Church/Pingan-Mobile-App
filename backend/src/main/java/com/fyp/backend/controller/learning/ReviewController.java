@@ -6,6 +6,8 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.ApiResponse;
 import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.service.ReviewService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.Pagination;
@@ -28,6 +31,7 @@ public class ReviewController {
 
     @Autowired private ReviewService reviewService;
     @Autowired private UserService userService;
+    @Autowired private CourseRepository courseRepository;
 
     private Long currentUserId(String auth) {
         Long userId = userService.getUserIdFromToken(auth);
@@ -60,9 +64,17 @@ public class ReviewController {
     @GetMapping("/getCourseReviews/{courseId}")
     @SuppressWarnings("unchecked")
     public ApiResponse<List<Map<String, Object>>> listReviews(
+            Authentication authentication,
             @PathVariable Long courseId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        boolean anonymous = authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken;
+        if (anonymous
+                && courseRepository.findByIdAndIsPublishedTrue(courseId).isEmpty()) {
+            throw ApiException.notFound("Course not found");
+        }
         Sort sort = Sort.by(
                 Sort.Order.desc("isPinned"),
                 Sort.Order.desc("createdAt"),
