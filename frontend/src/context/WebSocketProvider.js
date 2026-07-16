@@ -3,12 +3,18 @@ import { AppState } from "react-native";
 import { connectWebSocket, disconnectWebSocket } from "../service/WebSocketService";
 import { ChatContext } from "./ChatContext";
 import { UserContext } from "./UserContext";
+import { emitModerationEvent } from "../service/ModerationEventService";
 
 const WebSocketProvider = ({ children }) => {
   const { user, userReady } = useContext(UserContext);
   const chat = useContext(ChatContext);
   const appState = useRef(AppState.currentState);
   const isConnectedRef = useRef(false);
+
+  const handleModerationEvent = (event) => {
+    chat.handleModerationEvent(event);
+    emitModerationEvent(event);
+  };
 
   const buildHandlers = () => ({
     onMessageReceived: chat.handleWebSocketMessage,
@@ -18,6 +24,7 @@ const WebSocketProvider = ({ children }) => {
     onParticipantUpdate: chat.handleParticipantUpdate,
     onGroupAdminUpdate: chat.handleGroupAdminUpdate,
     onGroupIconUpdate: chat.handleGroupIconUpdate,
+    onModerationEvent: handleModerationEvent,
   });
 
   // Reconnect when the app returns to the foreground; drop the socket in background.

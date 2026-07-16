@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import com.fyp.backend.dto.ThreadReplyDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
+import com.fyp.backend.dto.ModerationEvent;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
@@ -12,6 +13,7 @@ import com.fyp.backend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -28,6 +30,7 @@ public class ThreadReplyService {
     private final ThreadRepository threadRepository;
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
+    private final ModerationEventPublisher moderationEventPublisher;
 
     public Map<String, Object> getRepliesPage(Long threadId, Long after, int size, String token) {
         User requester = requireUser(token);
@@ -51,6 +54,13 @@ public class ThreadReplyService {
         body.put("data", data);
         body.put("pagination", pagination);
         return body;
+    }
+
+    public ThreadReplyDto getReplyById(Long replyId, String token) {
+        User requester = requireUser(token);
+        ThreadReply reply = replyRepository.findById(replyId)
+                .orElseThrow(() -> new RuntimeException("Reply not found"));
+        return mapToDto(reply, requester);
     }
 
     public ThreadReplyDto addReply(ThreadReplyDto dto, String token) {
@@ -109,6 +119,7 @@ public class ThreadReplyService {
         return mapToDto(reply, user);
     }
 
+    @Transactional
     public void deleteReply(Long replyId, String token) {
         String rawToken = token.replace("Bearer ", "");
         String email = jwtUtil.extractEmail(rawToken);
@@ -123,7 +134,14 @@ public class ThreadReplyService {
             throw new RuntimeException("Unauthorized to delete this reply.");
         }
 
+        Long threadId = reply.getThread() != null ? reply.getThread().getId() : null;
         replyRepository.delete(reply);
+        moderationEventPublisher.publishAfterCommit(ModerationEvent.builder()
+                .contentType(com.fyp.backend.model.MessageReport.TYPE_THREAD_REPLY)
+                .contentId(replyId)
+                .threadId(threadId)
+                .state(ModerationEvent.STATE_DELETED)
+                .build());
     }
 
     private User requireUser(String token) {

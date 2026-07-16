@@ -46,6 +46,7 @@ import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.dto.ReportResolutionDto;
+import com.fyp.backend.dto.ModerationEvent;
 import com.fyp.backend.model.Course;
 
 /**
@@ -71,6 +72,7 @@ class MessageReportServiceTest {
     @Mock private ConversationService conversationService;
     @Mock private ChatService chatService;
     @Mock private ReviewService reviewService;
+    @Mock private ModerationEventPublisher moderationEventPublisher;
 
     @InjectMocks private MessageReportService service;
 
@@ -154,6 +156,11 @@ class MessageReportServiceTest {
         assertTrue(report.getContentFingerprint().startsWith("v1:"));
         assertTrue(Boolean.TRUE.equals(message.getReported()));
         verify(messageRepository).save(message);
+        verify(moderationEventPublisher).publishAfterCommit(
+                org.mockito.ArgumentMatchers.argThat(event ->
+                        ModerationEvent.STATE_PENDING.equals(event.getState())
+                                && MessageReport.TYPE_MESSAGE.equals(event.getContentType())
+                                && Long.valueOf(5L).equals(event.getContentId())));
     }
 
     @Test

@@ -1070,7 +1070,12 @@ export default function ChatPage({ route }) {
               : msg
           )
         );
-        showAlert("Error", "Could not edit message");
+        showAlert(
+          i18n.t("error"),
+          error?.response?.status === 409
+            ? i18n.t("contentUnderReview")
+            : i18n.t("editMessageFailed")
+        );
       }
 
       return;

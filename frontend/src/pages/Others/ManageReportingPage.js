@@ -377,7 +377,22 @@ export default function ManageReportingPage() {
 
     setResolvingId(report.id);
     try {
-      await resolveReport(report.id, action);
+      const result = await resolveReport(report.id, action);
+      const affectedIds = new Set(
+        (Array.isArray(result?.affectedReportIds)
+          ? result.affectedReportIds
+          : [report.id]
+        ).map(String)
+      );
+      setPendingReports((prev) => {
+        const items = prev.items.filter((item) => !affectedIds.has(String(item.id)));
+        const removed = prev.items.length - items.length;
+        return {
+          ...prev,
+          items,
+          totalCount: Math.max(0, prev.totalCount - removed),
+        };
+      });
       await reloadVisibleQueues();
     } catch (error) {
       const serverMessage =

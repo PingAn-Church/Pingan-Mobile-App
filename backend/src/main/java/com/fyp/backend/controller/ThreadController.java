@@ -85,6 +85,13 @@ public class ThreadController {
         return replyService.editReply(replyId, dto, token);
     }
 
+    @GetMapping("/replies/{replyId}")
+    public ThreadReplyDto getReply(
+            @PathVariable Long replyId,
+            @RequestHeader("Authorization") String token) {
+        return replyService.getReplyById(replyId, token);
+    }
+
     @DeleteMapping("/replies/{replyId}")
     public void deleteReply(
             @PathVariable Long replyId,

@@ -37,6 +37,7 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
     private static final Pattern USER_QUEUE = Pattern.compile("^/user/(\\d+)/queue/[\\w-]+$");
     private static final Pattern CONVERSATION_TOPIC = Pattern.compile("^/topic/conversation-(\\d+)$");
     private static final String STATUS_BROADCAST = "/user/queue/status";
+    private static final String MODERATION_TOPIC = "/topic/content-moderation";
 
     private final UserRepository userRepository;
     private final GroupConversationRepository groupConversationRepository;
@@ -79,6 +80,9 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
         Long userId = resolveUserId(email, accessor);
         if (userId == null) {
             return false;
+        }
+        if (MODERATION_TOPIC.equals(destination)) {
+            return true;
         }
 
         Matcher userQueue = USER_QUEUE.matcher(destination);

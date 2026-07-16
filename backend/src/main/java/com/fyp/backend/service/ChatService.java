@@ -179,6 +179,19 @@ public class ChatService {
         return destinations;
     }
 
+    public void broadcastMessageAfterCommit(Message message) {
+        MessageDto dto = new MessageDto(message);
+        List<String> destinations = getDestination(message.getConversationType(), dto);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                for (String destination : destinations) {
+                    messagingTemplate.convertAndSend(destination, dto);
+                }
+            }
+        });
+    }
+
     private String getPushNotificationTitle(String conversationType, User sender, Long conversationId) {
         if ("private".equals(conversationType)) {
             // For private messages, use the sender's full name

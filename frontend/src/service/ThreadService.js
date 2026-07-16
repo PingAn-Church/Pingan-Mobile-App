@@ -73,6 +73,18 @@ export const fetchReplies = async (threadId, { after, size = 20 } = {}) => {
   }
 };
 
+export const fetchReplyById = async (replyId) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No token found.");
+
+  const response = await axios.get(`${baseUrl()}/replies/${replyId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return response.data;
+};
+
 /**
  * Add a reply to a specific thread (requires auth)
  * @param {number} threadId

@@ -13,6 +13,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import { getMyReview, postReview, updateReview } from "@/services/reviewService";
 import { notify } from "@/utils/alerts";
+import i18n from "../../../i18n";
 
 export default function LeaveReviewScreen() {
   const navigation = useNavigation<any>();
@@ -59,7 +60,12 @@ export default function LeaveReviewScreen() {
       else await postReview(courseId, payload);
       notify("Thank you", "Your review has been saved.", () => navigation.goBack());
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to submit review.");
+      notify(
+        i18n.t("error"),
+        e?.status === 409 || e?.statusCode === 409
+          ? i18n.t("contentUnderReview")
+          : e?.message || "Failed to submit review."
+      );
     } finally {
       setSubmitting(false);
     }

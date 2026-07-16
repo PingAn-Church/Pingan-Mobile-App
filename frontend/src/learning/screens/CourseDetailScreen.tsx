@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
@@ -28,6 +28,7 @@ import { confirmAction } from "../../utils/confirmAction";
 import { reportContent, REPORT_TYPE_COURSE_REVIEW } from "../../service/ReportService";
 import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
+import { subscribeModerationEvents } from "../../service/ModerationEventService";
 
 export default function CourseDetailScreen() {
   const navigation = useNavigation<any>();
@@ -62,6 +63,24 @@ export default function CourseDetailScreen() {
   const data = detailQuery.data;
   const enrolled = enrolledQuery.data ?? false;
   const reviews = reviewsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+
+  useEffect(
+    () =>
+      subscribeModerationEvents((event) => {
+        if (event?.contentType !== "COURSE_REVIEW"
+            || String(event.courseId) !== courseId) {
+          return;
+        }
+        queryClient.invalidateQueries({ queryKey: ["learning", "reviews", courseId] });
+      }),
+    [courseId, queryClient]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      reviewsQuery.refetch();
+    }, [courseId])
+  );
 
   // Sync the heart from the server's wishlist status on load and after refetch,
   // so it stays filled when the screen is re-opened (not just within a session).

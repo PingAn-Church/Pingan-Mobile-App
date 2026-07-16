@@ -15,6 +15,8 @@ public class ReportDto {
     private Long contentId;
     private Long conversationId;
     private String conversationType;
+    private Long threadId;
+    private Long courseId;
     private String messageType;
     private String messageContent;
     private Long senderId;
@@ -35,6 +37,8 @@ public class ReportDto {
                 .contentId(report.getContentId())
                 .conversationId(report.getConversationId())
                 .conversationType(report.getConversationType())
+                .threadId(report.getThreadId())
+                .courseId(report.getCourseId())
                 .messageType(report.getMessageType())
                 .messageContent(report.getMessageContent())
                 .senderId(report.getSenderId())

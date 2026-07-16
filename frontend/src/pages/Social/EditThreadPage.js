@@ -50,9 +50,13 @@ const EditThreadPage = ({ route }) => {
       ]);
       navigation.navigate("ThreadDetail", { thread: updatedThread });
     } catch (error) {
-      showAlert(i18n.t("error"), i18n.t("updateThreadFailed"), [
-        { text: i18n.t("ok") },
-      ]);
+      showAlert(
+        i18n.t("error"),
+        error?.response?.status === 409
+          ? i18n.t("contentUnderReview")
+          : i18n.t("updateThreadFailed"),
+        [{ text: i18n.t("ok") }]
+      );
     } finally {
       setSubmitting(false);
     }

@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import com.fyp.backend.dto.ThreadDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
+import com.fyp.backend.dto.ModerationEvent;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.ThreadRepository;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -29,6 +31,7 @@ public class ThreadService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final JwtUtil jwtUtil;
+    private final ModerationEventPublisher moderationEventPublisher;
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size, String token) {
@@ -117,6 +120,7 @@ public class ThreadService {
         return mapToDto(thread, user);
     }
 
+    @Transactional
     public void deleteThread(Long threadId, String token) {
         String rawToken = token.replace("Bearer ", "");
         String email = jwtUtil.extractEmail(rawToken);
@@ -132,6 +136,12 @@ public class ThreadService {
         }
 
         threadRepository.delete(thread); // Optionally cascade delete replies via JPA
+        moderationEventPublisher.publishAfterCommit(ModerationEvent.builder()
+                .contentType(com.fyp.backend.model.MessageReport.TYPE_THREAD)
+                .contentId(threadId)
+                .threadId(threadId)
+                .state(ModerationEvent.STATE_DELETED)
+                .build());
     }
 
     private User requireUser(String token) {

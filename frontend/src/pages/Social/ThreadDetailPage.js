@@ -465,6 +465,7 @@ import {
   fetchReplies,
   postReply,
   fetchThreadById,
+  fetchReplyById,
   updateReply,
   deleteThread,
   deleteReply,
@@ -480,6 +481,7 @@ import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert";
+import { subscribeModerationEvents } from "../../service/ModerationEventService";
 
 
 const formatDateTime = (isoDate) => {
@@ -517,6 +519,77 @@ const ThreadDetailPage = ({ route }) => {
       loadThreadAndReplies(); // 👈 fetch updated replies
     }
   }, [route.params?.thread]);
+
+  useEffect(
+    () =>
+      subscribeModerationEvents((event) => {
+        if (event?.contentType === "THREAD"
+            && String(event.contentId) === String(thread.id)) {
+          if (event.state === "DELETED") {
+            showAlert(i18n.t("threadUnavailable"), i18n.t("moderatedContentDeleted"));
+            navigation.goBack();
+            return;
+          }
+          if (event.state === "PENDING") {
+            setThread((prev) => {
+              const canKeepContent =
+                String(prev.createdById) === String(user?.id) || user?.admin;
+              return {
+                ...prev,
+                reported: true,
+                title: canKeepContent ? prev.title : null,
+                content: canKeepContent ? prev.content : null,
+              };
+            });
+            return;
+          }
+          if (event.state === "RESTORED") {
+            fetchThreadById(thread.id).then(setThread).catch(() => {});
+          }
+          return;
+        }
+
+        if (event?.contentType !== "THREAD_REPLY"
+            || String(event.threadId) !== String(thread.id)) {
+          return;
+        }
+
+        const replyId = String(event.contentId);
+        if (event.state === "DELETED") {
+          setReplies((prev) =>
+            prev.filter((reply) => String(reply.id) !== replyId)
+          );
+          return;
+        }
+        if (event.state === "PENDING") {
+          setReplies((prev) =>
+            prev.map((reply) => {
+              if (String(reply.id) !== replyId) return reply;
+              const canKeepContent =
+                String(reply.authorId) === String(user?.id) || user?.admin;
+              return {
+                ...reply,
+                reported: true,
+                content: canKeepContent ? reply.content : null,
+              };
+            })
+          );
+          return;
+        }
+        if (event.state === "RESTORED") {
+          fetchReplyById(event.contentId)
+            .then((restored) =>
+              setReplies((prev) =>
+                prev.map((reply) =>
+                  String(reply.id) === replyId ? restored : reply
+                )
+              )
+            )
+            .catch(() => {});
+        }
+      }),
+    [navigation, thread.id, user?.admin, user?.id]
+  );
 
   const loadThreadAndReplies = async () => {
     try {
@@ -627,7 +700,7 @@ const ThreadDetailPage = ({ route }) => {
       showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
     } catch (error) {
       if (error?.response?.status === 409) {
-        setThread((prev) => ({ ...prev, reported: true }));
+        fetchThreadById(thread.id).then(setThread).catch(() => {});
         showAlert(i18n.t("error"), i18n.t("alreadyReported"));
       } else {
         showAlert(i18n.t("error"), i18n.t("reportFailed"));
@@ -656,7 +729,13 @@ const ThreadDetailPage = ({ route }) => {
       showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
     } catch (error) {
       if (error?.response?.status === 409) {
-        markReported();
+        fetchReplyById(reply.id)
+          .then((serverReply) =>
+            setReplies((prev) =>
+              prev.map((item) => item.id === reply.id ? serverReply : item)
+            )
+          )
+          .catch(() => {});
         showAlert(i18n.t("error"), i18n.t("alreadyReported"));
       } else {
         showAlert(i18n.t("error"), i18n.t("reportFailed"));
@@ -732,9 +811,9 @@ const ThreadDetailPage = ({ route }) => {
                     gap: 20,
                   }}
                 >
-                  {(user?.id === thread.createdById || user?.admin) &&
-                    !threadShadowHidden && (
-                      <>
+                  {!threadShadowHidden && (
+                    <>
+                      {user?.id === thread.createdById && (
                         <TouchableOpacity
                           onPress={() =>
                             navigation.navigate("EditThread", { thread })
@@ -742,12 +821,15 @@ const ThreadDetailPage = ({ route }) => {
                         >
                           <Text style={{ color: "#007bff" }}>{i18n.t("edit")}</Text>
                         </TouchableOpacity>
+                      )}
 
+                      {(user?.id === thread.createdById || user?.admin) && (
                         <TouchableOpacity onPress={handleDeleteThread}>
                           <Text style={{ color: "#e74c3c" }}>{i18n.t("delete")}</Text>
                         </TouchableOpacity>
-                      </>
-                    )}
+                      )}
+                    </>
+                  )}
 
                   {user?.id !== thread.createdById && !thread.reported && (
                     <TouchableOpacity onPress={handleReportThread}>
@@ -762,9 +844,11 @@ const ThreadDetailPage = ({ route }) => {
           );
         })()}
         renderItem={({ item }) => {
-          // Reported replies are shadow-hidden from everyone except their author.
+          // Authors and admins retain the original text while moderation is pending.
           const replyShadowHidden =
-            !!item.reported && user?.id !== item.authorId;
+            !!item.reported
+            && String(user?.id) !== String(item.authorId)
+            && !user?.admin;
           if (replyShadowHidden) {
             return (
               <View style={styles.replyItem}>
@@ -806,7 +890,9 @@ const ThreadDetailPage = ({ route }) => {
                       } catch (err) {
                         showAlert(
                           i18n.t("error"),
-                          i18n.t("updateReplyFailed"),
+                          err?.response?.status === 409
+                            ? i18n.t("contentUnderReview")
+                            : i18n.t("updateReplyFailed"),
                           [{ text: i18n.t("ok") }]
                         );
                       }
@@ -827,6 +913,7 @@ const ThreadDetailPage = ({ route }) => {
               <View style={{ flexDirection: "row", marginTop: 4 }}>
                 {(user?.id === item.authorId || user?.admin) && (
                   <>
+                    {user?.id === item.authorId && (
                     <TouchableOpacity
                       onPress={() => {
                         setEditingReplyId(item.id);
@@ -837,6 +924,7 @@ const ThreadDetailPage = ({ route }) => {
                         {i18n.t("edit")}
                       </Text>
                     </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                       onPress={async () => {

@@ -66,6 +66,8 @@ public class MessageReport {
     // --- snapshot of the reported content ---
     private Long conversationId; // messages only
     private String conversationType; // group / private (messages only)
+    private Long threadId; // threads/replies
+    private Long courseId; // course reviews
     private String messageType; // text / image / voice ("text" for non-chat content)
     @Column(columnDefinition = "TEXT")
     private String messageContent;

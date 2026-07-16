@@ -21,6 +21,15 @@ let subscribedConversationIds = new Set();
 
 export const getStompClient = () => stompClient;
 
+const dispatchConversationPayload = (payload, onMessageReceived = null) => {
+  if (payload?.eventType === "CONTENT_MODERATION") {
+    currentHandlers.onModerationEvent?.(payload);
+    return;
+  }
+  const handler = onMessageReceived || currentHandlers.onMessageReceived;
+  handler?.(payload);
+};
+
 // Reconnect strategy: stompjs' built-in reconnectDelay handles transient drops
 // (same credentials). If the socket stays down for several heartbeat ticks the
 // token may have expired mid-session, so we rebuild the client from scratch to
@@ -66,8 +75,7 @@ export const subscribeToConversation = (conversationId, onMessageReceived = null
   subscribedConversationIds.add(key);
 
   stompClient.subscribe(`/topic/conversation-${key}`, (msg) => {
-    const handler = onMessageReceived || currentHandlers.onMessageReceived;
-    handler?.(JSON.parse(msg.body));
+    dispatchConversationPayload(JSON.parse(msg.body), onMessageReceived);
   });
 };
 
@@ -134,6 +142,14 @@ export const connectWebSocket = async (handlers = {}, onConnected = null) => {
 
         stompClient.subscribe(`/user/${user.id}/queue/group-icon-updates`, (msg) =>
           currentHandlers.onGroupIconUpdate?.(JSON.parse(msg.body))
+        );
+
+        stompClient.subscribe(`/user/${user.id}/queue/moderation`, (msg) =>
+          currentHandlers.onModerationEvent?.(JSON.parse(msg.body))
+        );
+
+        stompClient.subscribe(`/topic/content-moderation`, (msg) =>
+          currentHandlers.onModerationEvent?.(JSON.parse(msg.body))
         );
 
         // Tell the server we are ready (presence + offline-queue drain). The user

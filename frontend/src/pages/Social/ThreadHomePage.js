@@ -119,11 +119,12 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import { fetchThreads } from "../../service/ThreadService";
+import { fetchThreadById, fetchThreads } from "../../service/ThreadService";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
+import { subscribeModerationEvents } from "../../service/ModerationEventService";
 
 // Helper to format ISO date to readable format
 const formatDateTime = (isoDate) => {
@@ -243,14 +244,53 @@ const ThreadHomePage = () => {
     });
   }, [language]);
 
-  useEffect(() => {
-    loadThreads();
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       loadThreads();
     }, [])
+  );
+
+  useEffect(
+    () =>
+      subscribeModerationEvents((event) => {
+        if (event?.contentType !== "THREAD") return;
+        const threadId = String(event.contentId);
+
+        if (event.state === "DELETED") {
+          setThreads((prev) => prev.filter((thread) => String(thread.id) !== threadId));
+          return;
+        }
+
+        if (event.state === "PENDING") {
+          setThreads((prev) =>
+            prev.map((thread) => {
+              if (String(thread.id) !== threadId) return thread;
+              const canKeepContent =
+                String(thread.createdById) === String(user?.id) || user?.admin;
+              return {
+                ...thread,
+                reported: true,
+                title: canKeepContent ? thread.title : null,
+                content: canKeepContent ? thread.content : null,
+              };
+            })
+          );
+          return;
+        }
+
+        if (event.state === "RESTORED") {
+          fetchThreadById(event.contentId)
+            .then((restored) =>
+              setThreads((prev) =>
+                prev.map((thread) =>
+                  String(thread.id) === threadId ? restored : thread
+                )
+              )
+            )
+            .catch(() => {});
+        }
+      }),
+    [user?.admin, user?.id]
   );
 
   if (loadingInitial) return <ActivityIndicator size="large" color="blue" />;

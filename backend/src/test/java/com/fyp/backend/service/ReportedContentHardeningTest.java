@@ -61,6 +61,7 @@ class ReportedContentHardeningTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private CourseRatingRepository courseRatingRepository;
     @Mock private CourseRepository courseRepository;
+    @Mock private ModerationEventPublisher moderationEventPublisher;
 
     @InjectMocks private ChatService chatService;
     @InjectMocks private ThreadService threadService;

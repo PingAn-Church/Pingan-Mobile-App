@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fyp.backend.dto.ReportDto;
 import com.fyp.backend.dto.ReportResolutionDto;
+import com.fyp.backend.dto.ModerationEvent;
 import com.fyp.backend.model.CourseRating;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageReport;
@@ -60,6 +61,7 @@ public class MessageReportService {
     private final ConversationService conversationService;
     private final ChatService chatService;
     private final ReviewService reviewService;
+    private final ModerationEventPublisher moderationEventPublisher;
 
     public MessageReportService(MessageReportRepository messageReportRepository,
             MessageRepository messageRepository,
@@ -71,7 +73,8 @@ public class MessageReportService {
             UserService userService,
             ConversationService conversationService,
             ChatService chatService,
-            ReviewService reviewService) {
+            ReviewService reviewService,
+            ModerationEventPublisher moderationEventPublisher) {
         this.messageReportRepository = messageReportRepository;
         this.messageRepository = messageRepository;
         this.threadRepository = threadRepository;
@@ -83,6 +86,7 @@ public class MessageReportService {
         this.conversationService = conversationService;
         this.chatService = chatService;
         this.reviewService = reviewService;
+        this.moderationEventPublisher = moderationEventPublisher;
     }
 
     /** Legacy entry point: report a chat message. */
@@ -133,6 +137,7 @@ public class MessageReportService {
                         .orElseThrow(() -> new IllegalArgumentException("Thread not found."));
                 applyAuthor(report, thread.getCreatedBy(), reporterId, "thread");
                 report.setMessageContent(joinTitleAndBody(thread.getTitle(), thread.getContent()));
+                report.setThreadId(thread.getId());
                 rejectDuplicate(type, contentId,
                         canonicalThread(thread),
                         report.getMessageType(),
@@ -149,6 +154,7 @@ public class MessageReportService {
                         .orElseThrow(() -> new IllegalArgumentException("Reply not found."));
                 applyAuthor(report, reply.getAuthor(), reporterId, "reply");
                 report.setMessageContent(reply.getContent());
+                report.setThreadId(reply.getThread() != null ? reply.getThread().getId() : null);
                 rejectDuplicate(type, contentId,
                         canonicalReply(reply),
                         report.getMessageType(),
@@ -171,6 +177,7 @@ public class MessageReportService {
                         : userRepository.findById(rating.getUserId()).orElse(null);
                 applyAuthor(report, author, reporterId, "review");
                 report.setMessageContent(rating.getRating() + "/5 - " + (rating.getReview() == null ? "" : rating.getReview()));
+                report.setCourseId(rating.getCourseId());
                 rejectDuplicate(type, contentId,
                         canonicalReview(rating),
                         report.getMessageType(),
@@ -191,7 +198,9 @@ public class MessageReportService {
         report.setReportedAt(new Timestamp(System.currentTimeMillis()));
         report.setStatus(MessageReport.STATUS_PENDING);
 
-        return messageReportRepository.save(report);
+        MessageReport saved = messageReportRepository.save(report);
+        moderationEventPublisher.publishAfterCommit(eventFor(saved, ModerationEvent.STATE_PENDING));
+        return saved;
     }
 
     private void rejectDuplicate(String type, Long contentId, String canonicalContent,
@@ -382,6 +391,8 @@ public class MessageReportService {
                 if (messageRepository.existsById(contentId)) {
                     chatService.deleteMessageAndBroadcast(contentId);
                 }
+                moderationEventPublisher.publishAfterCommit(
+                        eventFor(report, ModerationEvent.STATE_DELETED));
             }
             case MessageReport.TYPE_THREAD -> {
                 if (threadRepository.existsById(contentId)) {
@@ -395,11 +406,15 @@ public class MessageReportService {
                     }
                     threadRepository.deleteById(contentId); // cascades to replies
                 }
+                moderationEventPublisher.publishAfterCommit(
+                        eventFor(report, ModerationEvent.STATE_DELETED));
             }
             case MessageReport.TYPE_THREAD_REPLY -> {
                 if (threadReplyRepository.existsById(contentId)) {
                     threadReplyRepository.deleteById(contentId);
                 }
+                moderationEventPublisher.publishAfterCommit(
+                        eventFor(report, ModerationEvent.STATE_DELETED));
             }
             case MessageReport.TYPE_COURSE_REVIEW -> courseRatingRepository.findById(contentId)
                     .ifPresent(rating -> {
@@ -407,6 +422,10 @@ public class MessageReportService {
                         reviewService.recomputeCourseRating(rating.getCourseId());
                     });
             default -> throw new IllegalArgumentException("Unknown content type: " + report.getContentType());
+        }
+        if (MessageReport.TYPE_COURSE_REVIEW.equals(contentTypeOf(report))) {
+            moderationEventPublisher.publishAfterCommit(
+                    eventFor(report, ModerationEvent.STATE_DELETED));
         }
         return cascadeReportIds;
     }
@@ -418,20 +437,29 @@ public class MessageReportService {
             case MessageReport.TYPE_MESSAGE -> messageRepository.findById(contentId).ifPresent(message -> {
                 message.setReported(false);
                 messageRepository.save(message);
+                moderationEventPublisher.publishAfterCommit(
+                        eventFor(report, ModerationEvent.STATE_RESTORED));
+                chatService.broadcastMessageAfterCommit(message);
             });
             case MessageReport.TYPE_THREAD -> threadRepository.findById(contentId).ifPresent(thread -> {
                 thread.setReported(false);
                 threadRepository.save(thread);
+                moderationEventPublisher.publishAfterCommit(
+                        eventFor(report, ModerationEvent.STATE_RESTORED));
             });
             case MessageReport.TYPE_THREAD_REPLY -> threadReplyRepository.findById(contentId).ifPresent(reply -> {
                 reply.setReported(false);
                 threadReplyRepository.save(reply);
+                moderationEventPublisher.publishAfterCommit(
+                        eventFor(report, ModerationEvent.STATE_RESTORED));
             });
             case MessageReport.TYPE_COURSE_REVIEW -> courseRatingRepository.findById(contentId).ifPresent(rating -> {
                 if ("flagged".equals(rating.getReviewStatus())) {
                     rating.setReviewStatus("visible");
                     courseRatingRepository.save(rating);
                     reviewService.recomputeCourseRating(rating.getCourseId());
+                    moderationEventPublisher.publishAfterCommit(
+                            eventFor(report, ModerationEvent.STATE_RESTORED));
                 }
             });
             default -> throw new IllegalArgumentException("Unknown content type: " + report.getContentType());
@@ -481,5 +509,17 @@ public class MessageReportService {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private ModerationEvent eventFor(MessageReport report, String state) {
+        return ModerationEvent.builder()
+                .contentType(contentTypeOf(report))
+                .contentId(report.getContentId())
+                .state(state)
+                .conversationId(report.getConversationId())
+                .conversationType(report.getConversationType())
+                .threadId(report.getThreadId())
+                .courseId(report.getCourseId())
+                .build();
     }
 }

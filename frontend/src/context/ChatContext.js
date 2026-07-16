@@ -187,6 +187,44 @@ export const ChatProvider = ({ children }) => {
     });
   };
 
+  const handleModerationEvent = (event) => {
+    if (event?.contentType !== "MESSAGE") return;
+
+    setConversations((prev) =>
+      prev.map((conversation) => {
+        if (String(conversation.conversationId) !== String(event.conversationId)) {
+          return conversation;
+        }
+
+        let chatHistory = [...(conversation.chatHistory || [])];
+        if (event.state === "DELETED") {
+          chatHistory = chatHistory.filter(
+            (message) => String(message.messageId) !== String(event.contentId)
+          );
+        } else {
+          chatHistory = chatHistory.map((message) => {
+            if (String(message.messageId) !== String(event.contentId)) return message;
+            if (event.state === "PENDING") {
+              const canKeepContent =
+                String(message.senderId) === String(user?.id) || user?.admin;
+              return {
+                ...message,
+                reported: true,
+                content: canKeepContent ? message.content : null,
+              };
+            }
+            if (event.state === "RESTORED") {
+              return { ...message, reported: false };
+            }
+            return message;
+          });
+        }
+
+        return { ...conversation, chatHistory };
+      })
+    );
+  };
+
   const sendDeliveryStatusUpdate = (statusUpdate) => {
     const receiptKey = `${statusUpdate.messageId}:${JSON.stringify(statusUpdate.deliveryStatus)}`;
     if (sentDeliveryReceiptsRef.current.has(receiptKey)) return;
@@ -396,6 +434,7 @@ export const ChatProvider = ({ children }) => {
         handleParticipantUpdate,
         handleGroupAdminUpdate,
         handleGroupIconUpdate,
+        handleModerationEvent,
       }}
     >
       {children}
