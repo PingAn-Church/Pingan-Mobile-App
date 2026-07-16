@@ -20,8 +20,8 @@ import lombok.NoArgsConstructor;
  * The reported content's details are SNAPSHOTTED here (content, type, author)
  * rather than referenced with a foreign key, so admins can still review the
  * evidence after the content is deleted — whether by its author or by an admin
- * resolving the report. Each piece of content can only ever be reported once
- * (enforced per contentType + contentId in the service).
+ * resolving the report. A resolved piece of content may be reported again only
+ * after its reportable content changes.
  *
  * Legacy rows predate contentType and have it NULL; they are message reports
  * (backfilled to MESSAGE by ReportSchemaMigration on startup). The content id
@@ -69,6 +69,8 @@ public class MessageReport {
     private String messageType; // text / image / voice ("text" for non-chat content)
     @Column(columnDefinition = "TEXT")
     private String messageContent;
+    @Column(name = "content_fingerprint", length = 80)
+    private String contentFingerprint;
     private Long senderId; // the content's author
     private String senderName;
 

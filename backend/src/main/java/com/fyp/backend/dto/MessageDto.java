@@ -33,8 +33,16 @@ public class MessageDto {
     private Map<String, String> deliveryStatus;
 
     public MessageDto(Message message) {
+        this(message, null);
+    }
+
+    public MessageDto(Message message, User viewer) {
         this.messageId = message.getId();
-        this.content = message.getContent();
+        boolean canViewReportedContent = viewer == null
+                || !Boolean.TRUE.equals(message.getReported())
+                || (message.getSender() != null && viewer.getId().equals(message.getSender().getId()))
+                || viewer.isAdmin();
+        this.content = canViewReportedContent ? message.getContent() : null;
         this.type = message.getType();
         this.timestamp = message.getTimestamp().toString();
         this.conversationId = message.getConversation().getId();

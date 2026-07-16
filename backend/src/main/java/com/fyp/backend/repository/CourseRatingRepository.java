@@ -7,14 +7,20 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.fyp.backend.model.CourseRating;
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface CourseRatingRepository extends JpaRepository<CourseRating, Long> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM CourseRating r WHERE r.id = :id")
+    Optional<CourseRating> findByIdForUpdate(@Param("id") Long id);
+
     Page<CourseRating> findByCourseIdAndReviewStatus(Long courseId, String reviewStatus, Pageable pageable);
 
     Page<CourseRating> findByCourseIdAndReviewStatusIn(Long courseId, List<String> reviewStatuses, Pageable pageable);

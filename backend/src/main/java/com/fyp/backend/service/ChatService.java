@@ -1,6 +1,7 @@
 package com.fyp.backend.service;
 
 import com.fyp.backend.dto.MessageDto;
+import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.MessagePublisher;
 import com.fyp.backend.repository.*;
@@ -146,7 +147,10 @@ public class ChatService {
 
         List<Message> ascending = new ArrayList<>(desc);
         Collections.reverse(ascending);
-        List<MessageDto> messages = ascending.stream().map(MessageDto::new).collect(Collectors.toList());
+        User viewer = getUserById(userId);
+        List<MessageDto> messages = ascending.stream()
+                .map(message -> new MessageDto(message, viewer))
+                .collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("messages", messages);
@@ -344,6 +348,9 @@ public class ChatService {
 
         if ("image".equalsIgnoreCase(message.getType())) {
             throw new IllegalArgumentException("Image messages cannot be edited.");
+        }
+        if (Boolean.TRUE.equals(message.getReported())) {
+            throw new ContentUnderReviewException();
         }
 
         message.setContent(newContent);

@@ -31,6 +31,7 @@ import com.fyp.backend.config.security.JwtAuthenticationFilter;
 import com.fyp.backend.config.security.SpringSecurityConfig;
 import com.fyp.backend.dto.AppReleaseDto;
 import com.fyp.backend.model.MessageReport;
+import com.fyp.backend.dto.ReportResolutionDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.AppReleaseService;
@@ -252,14 +253,23 @@ class WebSecurityRulesTest {
     @WithMockUser(roles = "USER")
     void reportCreateIsAllowedForAuthenticated() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+        MessageReport report = new MessageReport();
+        report.setId(8L);
+        report.setContentType(MessageReport.TYPE_MESSAGE);
+        report.setContentId(5L);
+        report.setMessageContent("must not leak");
+        report.setSenderName("Private Sender");
         when(messageReportService.createReport(MessageReport.TYPE_MESSAGE, 5L, 7L))
-                .thenReturn(new MessageReport());
+                .thenReturn(report);
 
         mockMvc.perform(post("/api/reports")
                         .header("Authorization", "Bearer t")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"messageId\": 5}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(8))
+                .andExpect(jsonPath("$.messageContent").doesNotExist())
+                .andExpect(jsonPath("$.senderName").doesNotExist());
     }
 
     @Test
@@ -338,7 +348,8 @@ class WebSecurityRulesTest {
     @WithMockUser(roles = "ADMIN")
     void reportResolveIsAllowedForAdmin() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(1L);
-        when(messageReportService.resolveReport(1L, "NO_PROBLEM", 1L)).thenReturn(new MessageReport());
+        when(messageReportService.resolveReport(1L, "NO_PROBLEM", 1L))
+                .thenReturn(ReportResolutionDto.builder().affectedReportIds(List.of(1L)).build());
 
         mockMvc.perform(post("/api/reports/1/resolve")
                         .header("Authorization", "Bearer t")

@@ -9,10 +9,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.inOrder;
 
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +28,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.mockito.InOrder;
+import org.springframework.security.access.AccessDeniedException;
 
 import com.fyp.backend.model.CourseRating;
 import com.fyp.backend.model.GroupConversation;
@@ -35,16 +39,19 @@ import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CourseRatingRepository;
+import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.MessageReportRepository;
 import com.fyp.backend.repository.MessageRepository;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.dto.ReportResolutionDto;
+import com.fyp.backend.model.Course;
 
 /**
  * Behaviour tests for content reporting (chat messages, forum threads/replies,
  * course reviews). Pure unit tests — repositories and collaborating services
- * are mocked. The invariants: one report per content item (ever), no
+ * are mocked. The invariants: one report per unchanged content revision, no
  * self-reporting, snapshots survive content deletion, reporting shadow-hides
  * the content, and resolve actions run exactly once per report ("no problem"
  * restores visibility).
@@ -59,7 +66,9 @@ class MessageReportServiceTest {
     @Mock private ThreadReplyRepository threadReplyRepository;
     @Mock private CourseRatingRepository courseRatingRepository;
     @Mock private UserRepository userRepository;
+    @Mock private CourseRepository courseRepository;
     @Mock private UserService userService;
+    @Mock private ConversationService conversationService;
     @Mock private ChatService chatService;
     @Mock private ReviewService reviewService;
 
@@ -117,6 +126,8 @@ class MessageReportServiceTest {
     private void stubReporter() {
         when(userRepository.findById(2L)).thenReturn(Optional.of(user(2, "Good", "Citizen")));
         when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(conversationService.isUserPartOfConversation(any(), any())).thenReturn(true);
+        when(courseRepository.findByIdAndIsPublishedTrue(any())).thenReturn(Optional.of(new Course()));
     }
 
     // ---- creating reports --------------------------------------------------
@@ -125,7 +136,7 @@ class MessageReportServiceTest {
     void createSnapshotsMessageDetailsAndFlagsMessage() {
         User sender = user(1, "Bad", "Actor");
         Message message = message(5L, sender);
-        when(messageRepository.findById(5L)).thenReturn(Optional.of(message));
+        when(messageRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(message));
         stubReporter();
 
         MessageReport report = service.createReport(5L, 2L);
@@ -140,6 +151,7 @@ class MessageReportServiceTest {
         assertEquals(2L, report.getReporterId());
         assertEquals("Good Citizen", report.getReporterName());
         assertEquals(MessageReport.STATUS_PENDING, report.getStatus());
+        assertTrue(report.getContentFingerprint().startsWith("v1:"));
         assertTrue(Boolean.TRUE.equals(message.getReported()));
         verify(messageRepository).save(message);
     }
@@ -147,7 +159,7 @@ class MessageReportServiceTest {
     @Test
     void createThreadReportSnapshotsAndFlagsThread() {
         Thread thread = thread(7L, user(1, "Bad", "Actor"));
-        when(threadRepository.findById(7L)).thenReturn(Optional.of(thread));
+        when(threadRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(thread));
         stubReporter();
 
         MessageReport report = service.createReport(MessageReport.TYPE_THREAD, 7L, 2L);
@@ -164,7 +176,7 @@ class MessageReportServiceTest {
     @Test
     void createReplyReportFlagsReply() {
         ThreadReply reply = reply(8L, user(1, "Bad", "Actor"));
-        when(threadReplyRepository.findById(8L)).thenReturn(Optional.of(reply));
+        when(threadReplyRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(reply));
         stubReporter();
 
         MessageReport report = service.createReport(MessageReport.TYPE_THREAD_REPLY, 8L, 2L);
@@ -177,7 +189,7 @@ class MessageReportServiceTest {
     @Test
     void createReviewReportFlagsReviewAndRecomputesRating() {
         CourseRating rating = rating(9L, 1L, 33L);
-        when(courseRatingRepository.findById(9L)).thenReturn(Optional.of(rating));
+        when(courseRatingRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(rating));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1, "Bad", "Actor")));
         stubReporter();
 
@@ -191,8 +203,11 @@ class MessageReportServiceTest {
 
     @Test
     void createRejectsDuplicateReport() {
-        when(messageReportRepository.existsByContentTypeAndContentId(MessageReport.TYPE_MESSAGE, 5L))
-                .thenReturn(true);
+        Message message = message(5L, user(1, "Bad", "Actor"));
+        when(messageRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(message));
+        when(conversationService.isUserPartOfConversation(42L, 2L)).thenReturn(true);
+        when(messageReportRepository.existsByContentTypeAndContentIdAndContentFingerprintIn(
+                eq(MessageReport.TYPE_MESSAGE), eq(5L), any())).thenReturn(true);
 
         assertThrows(IllegalStateException.class, () -> service.createReport(5L, 2L));
         verify(messageReportRepository, never()).save(any());
@@ -200,9 +215,11 @@ class MessageReportServiceTest {
 
     @Test
     void createRejectsDuplicateLegacyReport() {
-        when(messageReportRepository.existsByContentTypeAndContentId(MessageReport.TYPE_MESSAGE, 5L))
-                .thenReturn(false);
-        when(messageReportRepository.existsByContentTypeIsNullAndContentId(5L)).thenReturn(true);
+        Message message = message(5L, user(1, "Bad", "Actor"));
+        when(messageRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(message));
+        when(conversationService.isUserPartOfConversation(42L, 2L)).thenReturn(true);
+        when(messageReportRepository.existsByContentTypeAndContentIdAndContentFingerprintIn(
+                eq(MessageReport.TYPE_MESSAGE), eq(5L), any())).thenReturn(true);
 
         assertThrows(IllegalStateException.class, () -> service.createReport(5L, 2L));
         verify(messageReportRepository, never()).save(any());
@@ -211,7 +228,8 @@ class MessageReportServiceTest {
     @Test
     void createRejectsOwnContent() {
         User sender = user(2, "Self", "Reporter");
-        when(messageRepository.findById(5L)).thenReturn(Optional.of(message(5L, sender)));
+        when(messageRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(message(5L, sender)));
+        when(conversationService.isUserPartOfConversation(42L, 2L)).thenReturn(true);
 
         assertThrows(IllegalArgumentException.class, () -> service.createReport(5L, 2L));
         verify(messageReportRepository, never()).save(any());
@@ -219,9 +237,43 @@ class MessageReportServiceTest {
 
     @Test
     void createRejectsMissingContent() {
-        when(messageRepository.findById(5L)).thenReturn(Optional.empty());
+        when(messageRepository.findByIdForUpdate(5L)).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> service.createReport(5L, 2L));
+    }
+
+    @Test
+    void createRejectsChatReportFromNonParticipant() {
+        when(messageRepository.findByIdForUpdate(5L))
+                .thenReturn(Optional.of(message(5L, user(1, "Bad", "Actor"))));
+        when(conversationService.isUserPartOfConversation(42L, 2L)).thenReturn(false);
+
+        assertThrows(AccessDeniedException.class, () -> service.createReport(5L, 2L));
+        verify(messageReportRepository, never()).save(any());
+    }
+
+    @Test
+    void createAllowsChangedContentAfterEarlierResolution() {
+        Message changed = message(5L, user(1, "Bad", "Actor"));
+        changed.setContent("changed offensive text");
+        when(messageRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(changed));
+        stubReporter();
+
+        MessageReport report = service.createReport(5L, 2L);
+
+        assertEquals("changed offensive text", report.getMessageContent());
+        assertTrue(report.getContentFingerprint().startsWith("v1:"));
+    }
+
+    @Test
+    void createRejectsReviewThatIsNotVisible() {
+        CourseRating hidden = rating(9L, 1L, 33L);
+        hidden.setReviewStatus("hidden");
+        when(courseRatingRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(hidden));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.createReport(MessageReport.TYPE_COURSE_REVIEW, 9L, 2L));
+        verify(messageReportRepository, never()).save(any());
     }
 
     @Test
@@ -294,12 +346,84 @@ class MessageReportServiceTest {
         when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
         when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MessageReport resolved = service.resolveReport(9L, MessageReport.ACTION_DEACTIVATE_USER, 3L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1, "Bad", "Actor")));
+        when(messageReportRepository.findBySenderIdAndStatus(1L, MessageReport.STATUS_PENDING))
+                .thenReturn(List.of(pendingReport(9L)));
+
+        ReportResolutionDto result = service.resolveReport(9L, MessageReport.ACTION_DEACTIVATE_USER, 3L);
 
         verify(userService).updateUserActiveStatus(1L, false);
-        assertEquals(MessageReport.STATUS_RESOLVED, resolved.getStatus());
-        assertEquals(MessageReport.ACTION_DEACTIVATE_USER, resolved.getResolution());
-        assertEquals(3L, resolved.getResolvedById());
+        assertEquals(MessageReport.STATUS_RESOLVED, result.getReport().getStatus());
+        assertEquals(MessageReport.ACTION_DEACTIVATE_USER, result.getReport().getResolution());
+        assertEquals(3L, result.getReport().getResolvedById());
+        assertEquals(1L, result.getDeactivatedUserId());
+    }
+
+    @Test
+    void resolveDeactivateDeletesAllPendingContentBeforeDeactivation() {
+        MessageReport messageReport = pendingReport(9L);
+        MessageReport replyReport = pendingReport(10L, MessageReport.TYPE_THREAD_REPLY, 8L);
+        replyReport.setSenderId(1L);
+        when(messageReportRepository.findById(9L)).thenReturn(Optional.of(messageReport));
+        when(messageReportRepository.findBySenderIdAndStatus(1L, MessageReport.STATUS_PENDING))
+                .thenReturn(List.of(messageReport, replyReport));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1, "Bad", "Actor")));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
+        when(messageRepository.existsById(5L)).thenReturn(true);
+        when(threadReplyRepository.existsById(8L)).thenReturn(true);
+        when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReportResolutionDto result = service.resolveReport(
+                9L, MessageReport.ACTION_DEACTIVATE_USER, 3L);
+
+        verify(threadReplyRepository).deleteById(8L);
+        InOrder messageOrder = inOrder(chatService, userService);
+        messageOrder.verify(chatService).deleteMessageAndBroadcast(5L);
+        messageOrder.verify(userService).updateUserActiveStatus(1L, false);
+        InOrder replyOrder = inOrder(threadReplyRepository, userService);
+        replyOrder.verify(threadReplyRepository).deleteById(8L);
+        replyOrder.verify(userService).updateUserActiveStatus(1L, false);
+        assertEquals(Set.of(9L, 10L), Set.copyOf(result.getAffectedReportIds()));
+        assertEquals(MessageReport.ACTION_DEACTIVATE_USER, replyReport.getResolution());
+    }
+
+    @Test
+    void resolveDeleteThreadClosesPendingReportsForCascadedReplies() {
+        MessageReport threadReport = pendingReport(9L, MessageReport.TYPE_THREAD, 7L);
+        MessageReport replyReport = pendingReport(10L, MessageReport.TYPE_THREAD_REPLY, 8L);
+        replyReport.setSenderId(4L);
+        when(messageReportRepository.findById(9L)).thenReturn(Optional.of(threadReport));
+        when(messageReportRepository.findById(10L)).thenReturn(Optional.of(replyReport));
+        when(threadRepository.existsById(7L)).thenReturn(true);
+        when(threadReplyRepository.findIdsByThreadId(7L)).thenReturn(List.of(8L));
+        when(messageReportRepository.findByContentTypeAndContentIdInAndStatus(
+                MessageReport.TYPE_THREAD_REPLY, List.of(8L), MessageReport.STATUS_PENDING))
+                .thenReturn(List.of(replyReport));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
+        when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ReportResolutionDto result = service.resolveReport(
+                9L, MessageReport.ACTION_DELETE_MESSAGE, 3L);
+
+        verify(threadRepository).deleteById(7L);
+        assertEquals(MessageReport.ACTION_DELETE_MESSAGE, replyReport.getResolution());
+        assertEquals(Set.of(9L, 10L), Set.copyOf(result.getAffectedReportIds()));
+    }
+
+    @Test
+    void resolveDeactivateRejectsAdminBeforeDeletingContent() {
+        MessageReport report = pendingReport(9L);
+        User target = user(1, "Admin", "Target");
+        target.setAdmin(true);
+        when(messageReportRepository.findById(9L)).thenReturn(Optional.of(report));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(target));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.resolveReport(9L, MessageReport.ACTION_DEACTIVATE_USER, 3L));
+
+        verify(chatService, never()).deleteMessageAndBroadcast(any());
+        verify(userService, never()).updateUserActiveStatus(any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     @Test
@@ -321,10 +445,10 @@ class MessageReportServiceTest {
         when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
         when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MessageReport resolved = service.resolveReport(9L, MessageReport.ACTION_DELETE_MESSAGE, 3L);
+        ReportResolutionDto result = service.resolveReport(9L, MessageReport.ACTION_DELETE_MESSAGE, 3L);
 
         verify(chatService, never()).deleteMessageAndBroadcast(any());
-        assertEquals(MessageReport.STATUS_RESOLVED, resolved.getStatus());
+        assertEquals(MessageReport.STATUS_RESOLVED, result.getReport().getStatus());
     }
 
     @Test
@@ -364,13 +488,13 @@ class MessageReportServiceTest {
         when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
         when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MessageReport resolved = service.resolveReport(9L, MessageReport.ACTION_NO_PROBLEM, 3L);
+        ReportResolutionDto result = service.resolveReport(9L, MessageReport.ACTION_NO_PROBLEM, 3L);
 
         verify(userService, never()).updateUserActiveStatus(any(), org.mockito.ArgumentMatchers.anyBoolean());
         verify(chatService, never()).deleteMessageAndBroadcast(any());
         assertFalse(Boolean.TRUE.equals(message.getReported()));
         verify(messageRepository).save(message);
-        assertEquals(MessageReport.ACTION_NO_PROBLEM, resolved.getResolution());
+        assertEquals(MessageReport.ACTION_NO_PROBLEM, result.getReport().getResolution());
     }
 
     @Test

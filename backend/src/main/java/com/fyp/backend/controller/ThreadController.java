@@ -22,14 +22,17 @@ public class ThreadController {
     @GetMapping
     public Map<String, Object> getThreads(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return threadService.getThreads(page, size);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestHeader("Authorization") String token) {
+        return threadService.getThreads(page, size, token);
     }
 
     // Get a single thread by ID
     @GetMapping("/{id}")
-    public ThreadDto getThreadById(@PathVariable Long id) {
-        return threadService.getThreadDtoById(id);
+    public ThreadDto getThreadById(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String token) {
+        return threadService.getThreadDtoById(id, token);
     }
 
     // Create new thread
@@ -57,8 +60,9 @@ public class ThreadController {
     public Map<String, Object> getReplies(
             @PathVariable Long id,
             @RequestParam(required = false) Long after,
-            @RequestParam(defaultValue = "20") int size) {
-        return replyService.getRepliesPage(id, after, size);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestHeader("Authorization") String token) {
+        return replyService.getRepliesPage(id, after, size, token);
     }
 
     // Add reply to a thread

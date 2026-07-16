@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fyp.backend.exception.ApiException;
+import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.Course;
 import com.fyp.backend.model.CourseRating;
 import com.fyp.backend.model.User;
@@ -30,7 +31,8 @@ public class ReviewService {
 
     public Map<String, Object> getUserReview(Long courseId, Long userId) {
         return ratingRepository.findByCourseIdAndUserId(courseId, userId)
-                .map(r -> reviewMap(r, null, userId)).orElse(null);
+                .map(r -> reviewMap(r, null, userRepository.findById(userId).orElse(null)))
+                .orElse(null);
     }
 
     /**
@@ -39,7 +41,7 @@ public class ReviewService {
      * pending review" placeholder — except to their own author (isOwn), who
      * keeps seeing the original. requesterId is null for guests.
      */
-    public Map<String, Object> listReviews(Long courseId, Long requesterId, Pageable pageable) {
+    public Map<String, Object> listReviews(Long courseId, User requester, Pageable pageable) {
         Page<CourseRating> result = ratingRepository.findByCourseIdAndReviewStatusIn(
                 courseId, List.of("visible", "flagged"), pageable);
         List<Long> userIds = result.getContent().stream()
@@ -51,7 +53,7 @@ public class ReviewService {
         Map<Long, User> users = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
         List<Map<String, Object>> data = result.getContent().stream()
-                .map(r -> reviewMap(r, users.get(r.getUserId()), requesterId))
+                .map(r -> reviewMap(r, users.get(r.getUserId()), requester))
                 .collect(Collectors.toList());
         return Pagination.envelope(data, result);
     }
@@ -71,7 +73,7 @@ public class ReviewService {
         r.setAnonymous(anonymous);
         r = ratingRepository.save(r);
         recomputeCourseRating(courseId);
-        return reviewMap(r, null, userId);
+        return reviewMap(r, null, userRepository.findById(userId).orElse(null));
     }
 
     @Transactional
@@ -79,13 +81,16 @@ public class ReviewService {
         validate(rating, review);
         CourseRating r = ratingRepository.findByCourseIdAndUserId(courseId, userId)
                 .orElseThrow(() -> ApiException.notFound("Review not found"));
+        if ("flagged".equals(r.getReviewStatus())) {
+            throw new ContentUnderReviewException();
+        }
         r.setRating(rating);
         r.setReview(review.trim());
         r.setAnonymous(anonymous);
         r.setUpdatedAt(Instant.now());
         ratingRepository.save(r);
         recomputeCourseRating(courseId);
-        return reviewMap(r, null, userId);
+        return reviewMap(r, null, userRepository.findById(userId).orElse(null));
     }
 
     public void recomputeCourseRating(Long courseId) {
@@ -110,7 +115,7 @@ public class ReviewService {
         if (review == null || review.isBlank()) throw ApiException.badRequest("review text is required");
     }
 
-    private Map<String, Object> reviewMap(CourseRating r, User providedUser, Long requesterId) {
+    private Map<String, Object> reviewMap(CourseRating r, User providedUser, User requester) {
         String name = "Anonymous";
         String avatar = null;
         if (!r.isAnonymous()) {
@@ -123,16 +128,20 @@ public class ReviewService {
             }
         }
         Map<String, Object> m = new LinkedHashMap<>();
+        boolean isOwn = requester != null && requester.getId().equals(r.getUserId());
+        boolean canView = !"flagged".equals(r.getReviewStatus())
+                || isOwn
+                || (requester != null && requester.isAdmin());
         m.put("id", String.valueOf(r.getId()));
-        m.put("rating", r.getRating());
-        m.put("review", r.getReview());
-        m.put("isAnonymous", r.isAnonymous());
+        m.put("rating", canView ? r.getRating() : null);
+        m.put("review", canView ? r.getReview() : null);
+        m.put("isAnonymous", canView && r.isAnonymous());
         m.put("reviewerName", name);
         m.put("reviewerAvatar", avatar);
         m.put("createdAt", r.getCreatedAt());
-        m.put("instructorReply", r.getInstructorReply());
+        m.put("instructorReply", canView ? r.getInstructorReply() : null);
         m.put("reported", "flagged".equals(r.getReviewStatus()));
-        m.put("isOwn", requesterId != null && requesterId.equals(r.getUserId()));
+        m.put("isOwn", isOwn);
         return m;
     }
 }

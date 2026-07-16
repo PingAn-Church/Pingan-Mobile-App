@@ -1,6 +1,7 @@
 package com.fyp.backend.service;
 
 import com.fyp.backend.dto.ThreadReplyDto;
+import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
@@ -28,21 +29,17 @@ public class ThreadReplyService {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
 
-    public List<ThreadReplyDto> getRepliesForThread(Long threadId) {
-        return replyRepository.findByThreadId(threadId)
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-    }
-
-    public Map<String, Object> getRepliesPage(Long threadId, Long after, int size) {
+    public Map<String, Object> getRepliesPage(Long threadId, Long after, int size, String token) {
+        User requester = requireUser(token);
         int safeSize = Pagination.clampSize(size);
         List<ThreadReply> fetched = after == null
                 ? replyRepository.findByThreadIdOrderByIdAsc(threadId, PageRequest.of(0, safeSize + 1))
                 : replyRepository.findByThreadIdAndIdGreaterThanOrderByIdAsc(threadId, after, PageRequest.of(0, safeSize + 1));
         boolean hasMore = fetched.size() > safeSize;
         List<ThreadReply> page = hasMore ? fetched.subList(0, safeSize) : fetched;
-        List<ThreadReplyDto> data = page.stream().map(this::mapToDto).collect(Collectors.toList());
+        List<ThreadReplyDto> data = page.stream()
+                .map(reply -> mapToDto(reply, requester))
+                .collect(Collectors.toList());
 
         Map<String, Object> pagination = new LinkedHashMap<>();
         pagination.put("nextCursor", page.isEmpty() ? after : page.get(page.size() - 1).getId());
@@ -73,13 +70,16 @@ public class ThreadReplyService {
                 .build();
 
         reply = replyRepository.save(reply);
-        return mapToDto(reply);
+        return mapToDto(reply, author);
     }
 
-    private ThreadReplyDto mapToDto(ThreadReply reply) {
+    private ThreadReplyDto mapToDto(ThreadReply reply, User requester) {
+        boolean canView = !Boolean.TRUE.equals(reply.getReported())
+                || reply.getAuthor().getId().equals(requester.getId())
+                || requester.isAdmin();
         return ThreadReplyDto.builder()
                 .id(reply.getId())
-                .content(reply.getContent())
+                .content(canView ? reply.getContent() : null)
                 .createdAt(reply.getCreatedAt())
                 .threadId(reply.getThread().getId())
                 .authorId(reply.getAuthor().getId())
@@ -99,11 +99,14 @@ public class ThreadReplyService {
         if (!reply.getAuthor().getId().equals(user.getId())) {
             throw new RuntimeException("Unauthorized");
         }
+        if (Boolean.TRUE.equals(reply.getReported())) {
+            throw new ContentUnderReviewException();
+        }
 
         reply.setContent(updatedDto.getContent());
         reply = replyRepository.save(reply);
 
-        return mapToDto(reply);
+        return mapToDto(reply, user);
     }
 
     public void deleteReply(Long replyId, String token) {
@@ -121,5 +124,11 @@ public class ThreadReplyService {
         }
 
         replyRepository.delete(reply);
+    }
+
+    private User requireUser(String token) {
+        String email = jwtUtil.extractEmail(token.replace("Bearer ", ""));
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

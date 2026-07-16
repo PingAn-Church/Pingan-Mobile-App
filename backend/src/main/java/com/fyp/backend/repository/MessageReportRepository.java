@@ -8,11 +8,13 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import com.fyp.backend.model.MessageReport;
 
 public interface MessageReportRepository extends JpaRepository<MessageReport, Long>, JpaSpecificationExecutor<MessageReport> {
-    boolean existsByContentTypeAndContentId(String contentType, Long contentId);
+    boolean existsByContentTypeAndContentIdAndContentFingerprintIn(
+            String contentType, Long contentId, List<String> contentFingerprints);
 
-    // Legacy rows predate content_type (NULL = message report). ReportSchemaMigration
-    // backfills them on startup, but keep the check robust either way.
-    boolean existsByContentTypeIsNullAndContentId(Long contentId);
+    List<MessageReport> findBySenderIdAndStatus(Long senderId, String status);
+
+    List<MessageReport> findByContentTypeAndContentIdInAndStatus(
+            String contentType, List<Long> contentIds, String status);
 
     List<MessageReport> findBySenderIdOrReporterIdOrResolvedById(Long senderId, Long reporterId, Long resolvedById);
 

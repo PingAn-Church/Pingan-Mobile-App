@@ -1,6 +1,7 @@
 package com.fyp.backend.service;
 
 import com.fyp.backend.dto.ThreadDto;
+import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.ThreadRepository;
@@ -30,14 +31,17 @@ public class ThreadService {
     private final JwtUtil jwtUtil;
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
-    public Map<String, Object> getThreads(int page, int size) {
+    public Map<String, Object> getThreads(int page, int size, String token) {
+        User requester = requireUser(token);
         int safeSize = Pagination.clampSize(size);
         int safePage = Pagination.clampPage(page);
         Pageable pageable = PageRequest.of(safePage, safeSize,
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
 
         Page<Thread> result = threadRepository.findAll(pageable);
-        List<ThreadDto> data = result.getContent().stream().map(this::mapToDto).collect(Collectors.toList());
+        List<ThreadDto> data = result.getContent().stream()
+                .map(thread -> mapToDto(thread, requester))
+                .collect(Collectors.toList());
 
         Map<String, Object> pagination = new LinkedHashMap<>();
         pagination.put("page", safePage);
@@ -64,21 +68,25 @@ public class ThreadService {
                 .build();
 
         thread = threadRepository.save(thread);
-        return mapToDto(thread);
+        return mapToDto(thread, user);
     }
 
-    public ThreadDto getThreadDtoById(Long id) {
+    public ThreadDto getThreadDtoById(Long id, String token) {
+        User requester = requireUser(token);
         Thread thread = threadRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Thread not found"));
-        return mapToDto(thread);
+        return mapToDto(thread, requester);
     }
 
 
-    private ThreadDto mapToDto(Thread thread) {
+    private ThreadDto mapToDto(Thread thread, User requester) {
+        boolean canView = !Boolean.TRUE.equals(thread.getReported())
+                || thread.getCreatedBy().getId().equals(requester.getId())
+                || requester.isAdmin();
         return ThreadDto.builder()
                 .id(thread.getId())
-                .title(thread.getTitle())
-                .content(thread.getContent())
+                .title(canView ? thread.getTitle() : null)
+                .content(canView ? thread.getContent() : null)
                 .createdAt(thread.getCreatedAt())
                 .createdById(thread.getCreatedBy().getId())
                 .createdByName(thread.getCreatedBy().getFirstName() + " " + thread.getCreatedBy().getLastName())
@@ -97,13 +105,16 @@ public class ThreadService {
         if (!thread.getCreatedBy().getId().equals(user.getId())) {
             throw new RuntimeException("Unauthorized");
         }
+        if (Boolean.TRUE.equals(thread.getReported())) {
+            throw new ContentUnderReviewException();
+        }
 
         // Update fields
         thread.setTitle(updatedDto.getTitle());
         thread.setContent(updatedDto.getContent());
 
         thread = threadRepository.save(thread);
-        return mapToDto(thread);
+        return mapToDto(thread, user);
     }
 
     public void deleteThread(Long threadId, String token) {
@@ -121,5 +132,10 @@ public class ThreadService {
         }
 
         threadRepository.delete(thread); // Optionally cascade delete replies via JPA
+    }
+
+    private User requireUser(String token) {
+        return userService.getUserFromToken(token)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

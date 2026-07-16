@@ -78,13 +78,15 @@ public class ReviewController {
         }
         // Who is asking decides the isOwn flag on each review (null for guests),
         // so reported reviews can stay visible to their own author.
-        Long requesterId = anonymous || auth == null ? null : userService.getUserIdFromToken(auth);
+        com.fyp.backend.model.User requester = anonymous || auth == null
+                ? null
+                : userService.getUserFromToken(auth).orElse(null);
         Sort sort = Sort.by(
                 Sort.Order.desc("isPinned"),
                 Sort.Order.desc("createdAt"),
                 Sort.Order.desc("id"));
         Map<String, Object> result = reviewService.listReviews(
-                courseId, requesterId,
+                courseId, requester,
                 PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size), sort));
         return ApiResponse.ok((List<Map<String, Object>>) result.get("data"), result.get("pagination"));
     }

@@ -2,7 +2,11 @@ package com.fyp.backend.service;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -10,6 +14,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fyp.backend.dto.ReportDto;
+import com.fyp.backend.dto.ReportResolutionDto;
 import com.fyp.backend.model.CourseRating;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageReport;
@@ -17,17 +23,19 @@ import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CourseRatingRepository;
+import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.MessageReportRepository;
 import com.fyp.backend.repository.MessageRepository;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.util.ContentFingerprint;
 
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
 /**
- * Content reporting: any user can flag another user's content once — a chat
+ * Content reporting: any user can flag another user's current content — a chat
  * message, forum thread, thread reply, or course review. Reporting shadow-hides
  * the content ("Reported, pending review" for everyone except its author) until
  * an admin reviews the queue in "Manage Reporting" and resolves each report
@@ -47,7 +55,9 @@ public class MessageReportService {
     private final ThreadReplyRepository threadReplyRepository;
     private final CourseRatingRepository courseRatingRepository;
     private final UserRepository userRepository;
+    private final CourseRepository courseRepository;
     private final UserService userService;
+    private final ConversationService conversationService;
     private final ChatService chatService;
     private final ReviewService reviewService;
 
@@ -57,7 +67,9 @@ public class MessageReportService {
             ThreadReplyRepository threadReplyRepository,
             CourseRatingRepository courseRatingRepository,
             UserRepository userRepository,
+            CourseRepository courseRepository,
             UserService userService,
+            ConversationService conversationService,
             ChatService chatService,
             ReviewService reviewService) {
         this.messageReportRepository = messageReportRepository;
@@ -66,7 +78,9 @@ public class MessageReportService {
         this.threadReplyRepository = threadReplyRepository;
         this.courseRatingRepository = courseRatingRepository;
         this.userRepository = userRepository;
+        this.courseRepository = courseRepository;
         this.userService = userService;
+        this.conversationService = conversationService;
         this.chatService = chatService;
         this.reviewService = reviewService;
     }
@@ -81,12 +95,6 @@ public class MessageReportService {
     public MessageReport createReport(String contentType, Long contentId, Long reporterId) {
         String type = normalizeContentType(contentType);
 
-        if (messageReportRepository.existsByContentTypeAndContentId(type, contentId)
-                || (MessageReport.TYPE_MESSAGE.equals(type)
-                        && messageReportRepository.existsByContentTypeIsNullAndContentId(contentId))) {
-            throw new IllegalStateException("This content has already been reported.");
-        }
-
         MessageReport report = new MessageReport();
         report.setContentType(type);
         report.setContentId(contentId);
@@ -96,39 +104,78 @@ public class MessageReportService {
         // content (its author keeps seeing the original) until an admin resolves.
         switch (type) {
             case MessageReport.TYPE_MESSAGE -> {
-                Message message = messageRepository.findById(contentId)
+                Message message = messageRepository.findByIdForUpdate(contentId)
                         .orElseThrow(() -> new IllegalArgumentException("Message not found."));
+                Long conversationId = message.getConversation() != null ? message.getConversation().getId() : null;
+                if (conversationId == null
+                        || !conversationService.isUserPartOfConversation(conversationId, reporterId)) {
+                    throw new org.springframework.security.access.AccessDeniedException(
+                            "You are not a participant in this conversation.");
+                }
                 applyAuthor(report, message.getSender(), reporterId, "message");
-                report.setConversationId(message.getConversation() != null ? message.getConversation().getId() : null);
+                report.setConversationId(conversationId);
                 report.setConversationType(message.getConversationType());
                 report.setMessageType(message.getType());
                 report.setMessageContent(message.getContent());
+                rejectDuplicate(type, contentId,
+                        canonicalMessage(message),
+                        report.getMessageType(),
+                        report.getMessageContent());
+                if (Boolean.TRUE.equals(message.getReported())) {
+                    throw new IllegalStateException("This content is already pending review.");
+                }
+                report.setContentFingerprint(ContentFingerprint.current(type, canonicalMessage(message)));
                 message.setReported(true);
                 messageRepository.save(message);
             }
             case MessageReport.TYPE_THREAD -> {
-                Thread thread = threadRepository.findById(contentId)
+                Thread thread = threadRepository.findByIdForUpdate(contentId)
                         .orElseThrow(() -> new IllegalArgumentException("Thread not found."));
                 applyAuthor(report, thread.getCreatedBy(), reporterId, "thread");
                 report.setMessageContent(joinTitleAndBody(thread.getTitle(), thread.getContent()));
+                rejectDuplicate(type, contentId,
+                        canonicalThread(thread),
+                        report.getMessageType(),
+                        report.getMessageContent());
+                if (Boolean.TRUE.equals(thread.getReported())) {
+                    throw new IllegalStateException("This content is already pending review.");
+                }
+                report.setContentFingerprint(ContentFingerprint.current(type, canonicalThread(thread)));
                 thread.setReported(true);
                 threadRepository.save(thread);
             }
             case MessageReport.TYPE_THREAD_REPLY -> {
-                ThreadReply reply = threadReplyRepository.findById(contentId)
+                ThreadReply reply = threadReplyRepository.findByIdForUpdate(contentId)
                         .orElseThrow(() -> new IllegalArgumentException("Reply not found."));
                 applyAuthor(report, reply.getAuthor(), reporterId, "reply");
                 report.setMessageContent(reply.getContent());
+                rejectDuplicate(type, contentId,
+                        canonicalReply(reply),
+                        report.getMessageType(),
+                        report.getMessageContent());
+                if (Boolean.TRUE.equals(reply.getReported())) {
+                    throw new IllegalStateException("This content is already pending review.");
+                }
+                report.setContentFingerprint(ContentFingerprint.current(type, canonicalReply(reply)));
                 reply.setReported(true);
                 threadReplyRepository.save(reply);
             }
             case MessageReport.TYPE_COURSE_REVIEW -> {
-                CourseRating rating = courseRatingRepository.findById(contentId)
+                CourseRating rating = courseRatingRepository.findByIdForUpdate(contentId)
                         .orElseThrow(() -> new IllegalArgumentException("Review not found."));
+                if (!"visible".equals(rating.getReviewStatus())
+                        || courseRepository.findByIdAndIsPublishedTrue(rating.getCourseId()).isEmpty()) {
+                    throw new IllegalArgumentException("Review is not available for reporting.");
+                }
                 User author = rating.getUserId() == null ? null
                         : userRepository.findById(rating.getUserId()).orElse(null);
                 applyAuthor(report, author, reporterId, "review");
                 report.setMessageContent(rating.getRating() + "/5 - " + (rating.getReview() == null ? "" : rating.getReview()));
+                rejectDuplicate(type, contentId,
+                        canonicalReview(rating),
+                        report.getMessageType(),
+                        report.getMessageContent());
+                report.setContentFingerprint(ContentFingerprint.current(type, canonicalReview(rating)));
                 rating.setReviewStatus("flagged");
                 courseRatingRepository.save(rating);
                 // Flagged reviews drop out of the visible rating summary.
@@ -145,6 +192,33 @@ public class MessageReportService {
         report.setStatus(MessageReport.STATUS_PENDING);
 
         return messageReportRepository.save(report);
+    }
+
+    private void rejectDuplicate(String type, Long contentId, String canonicalContent,
+            String messageType, String snapshot) {
+        List<String> fingerprints = List.of(
+                ContentFingerprint.current(type, canonicalContent),
+                ContentFingerprint.legacy(type, messageType, snapshot));
+        if (messageReportRepository.existsByContentTypeAndContentIdAndContentFingerprintIn(
+                type, contentId, fingerprints)) {
+            throw new IllegalStateException("This version of the content has already been reported.");
+        }
+    }
+
+    private String canonicalMessage(Message message) {
+        return safe(message.getType()) + "\n" + safe(message.getContent());
+    }
+
+    private String canonicalThread(Thread thread) {
+        return safe(thread.getTitle()) + "\n" + safe(thread.getContent());
+    }
+
+    private String canonicalReply(ThreadReply reply) {
+        return safe(reply.getContent());
+    }
+
+    private String canonicalReview(CourseRating rating) {
+        return rating.getRating() + "\n" + safe(rating.getReview()) + "\n" + rating.isAnonymous();
     }
 
     private void applyAuthor(MessageReport report, User author, Long reporterId, String noun) {
@@ -199,7 +273,7 @@ public class MessageReportService {
     }
 
     @Transactional
-    public MessageReport resolveReport(Long reportId, String action, Long adminId) {
+    public ReportResolutionDto resolveReport(Long reportId, String action, Long adminId) {
         MessageReport report = messageReportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found."));
 
@@ -207,28 +281,92 @@ public class MessageReportService {
             throw new IllegalStateException("This report has already been resolved.");
         }
 
+        User admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new IllegalArgumentException("Admin not found."));
+        Timestamp resolvedAt = new Timestamp(System.currentTimeMillis());
+        Set<Long> affectedReportIds = new LinkedHashSet<>();
+        Long deactivatedUserId = null;
+
         switch (action) {
             case MessageReport.ACTION_DEACTIVATE_USER -> {
                 if (report.getSenderId() == null) {
                     throw new IllegalArgumentException("The author of this content no longer exists.");
                 }
-                // Refuses to deactivate admins — surfaces as a 400 with its message.
-                userService.updateUserActiveStatus(report.getSenderId(), false);
+                Long targetUserId = report.getSenderId();
+                User target = userRepository.findById(targetUserId)
+                        .orElseThrow(() -> new IllegalArgumentException("The author of this content no longer exists."));
+                if (target.isAdmin()) {
+                    throw new IllegalArgumentException("Downgrade this admin before deactivating the account.");
+                }
+
+                List<MessageReport> targetReports = new ArrayList<>(
+                        messageReportRepository.findBySenderIdAndStatus(
+                                targetUserId, MessageReport.STATUS_PENDING));
+                targetReports.removeIf(pending -> pending.getId().equals(report.getId()));
+                targetReports.add(report);
+                Map<String, MessageReport> uniqueContent = new LinkedHashMap<>();
+                for (MessageReport pending : targetReports) {
+                    uniqueContent.putIfAbsent(contentKey(pending), pending);
+                }
+
+                Set<Long> cascadeReportIds = new LinkedHashSet<>();
+                for (MessageReport pending : uniqueContent.values()) {
+                    cascadeReportIds.addAll(deleteReportedContent(pending));
+                }
+
+                for (MessageReport pending : targetReports) {
+                    resolveRecord(pending, MessageReport.ACTION_DEACTIVATE_USER, admin, resolvedAt);
+                    affectedReportIds.add(pending.getId());
+                }
+                resolveCascadeReports(cascadeReportIds, targetUserId, admin, resolvedAt, affectedReportIds);
+
+                userService.updateUserActiveStatus(targetUserId, false);
+                deactivatedUserId = targetUserId;
             }
-            case MessageReport.ACTION_DELETE_MESSAGE -> deleteReportedContent(report);
+            case MessageReport.ACTION_DELETE_MESSAGE -> {
+                Set<Long> cascadeReportIds = deleteReportedContent(report);
+                resolveRecord(report, action, admin, resolvedAt);
+                affectedReportIds.add(report.getId());
+                resolveCascadeReports(cascadeReportIds, null, admin, resolvedAt, affectedReportIds);
+            }
             case MessageReport.ACTION_NO_PROBLEM -> restoreReportedContent(report);
             default -> throw new IllegalArgumentException("Unknown resolve action: " + action);
         }
 
-        User admin = userRepository.findById(adminId)
-                .orElseThrow(() -> new IllegalArgumentException("Admin not found."));
+        if (MessageReport.ACTION_NO_PROBLEM.equals(action)) {
+            resolveRecord(report, action, admin, resolvedAt);
+            affectedReportIds.add(report.getId());
+        }
 
+        return ReportResolutionDto.builder()
+                .report(ReportDto.from(report))
+                .affectedReportIds(List.copyOf(affectedReportIds))
+                .deactivatedUserId(deactivatedUserId)
+                .build();
+    }
+
+    private void resolveCascadeReports(Set<Long> reportIds, Long deactivatedUserId,
+            User admin, Timestamp resolvedAt, Set<Long> affectedReportIds) {
+        for (Long id : reportIds) {
+            MessageReport cascade = messageReportRepository.findById(id).orElse(null);
+            if (cascade == null || !MessageReport.STATUS_PENDING.equals(cascade.getStatus())) {
+                continue;
+            }
+            String resolution = deactivatedUserId != null && deactivatedUserId.equals(cascade.getSenderId())
+                    ? MessageReport.ACTION_DEACTIVATE_USER
+                    : MessageReport.ACTION_DELETE_MESSAGE;
+            resolveRecord(cascade, resolution, admin, resolvedAt);
+            affectedReportIds.add(cascade.getId());
+        }
+    }
+
+    private void resolveRecord(MessageReport report, String resolution, User admin, Timestamp resolvedAt) {
         report.setStatus(MessageReport.STATUS_RESOLVED);
-        report.setResolution(action);
-        report.setResolvedById(adminId);
+        report.setResolution(resolution);
+        report.setResolvedById(admin.getId());
         report.setResolvedByName(fullName(admin));
-        report.setResolvedAt(new Timestamp(System.currentTimeMillis()));
-        return messageReportRepository.save(report);
+        report.setResolvedAt(resolvedAt);
+        messageReportRepository.save(report);
     }
 
     /**
@@ -236,8 +374,9 @@ public class MessageReportService {
      * the report is still resolvable — the offending content no longer exists
      * either way.
      */
-    private void deleteReportedContent(MessageReport report) {
+    private Set<Long> deleteReportedContent(MessageReport report) {
         Long contentId = report.getContentId();
+        Set<Long> cascadeReportIds = new LinkedHashSet<>();
         switch (contentTypeOf(report)) {
             case MessageReport.TYPE_MESSAGE -> {
                 if (messageRepository.existsById(contentId)) {
@@ -246,6 +385,14 @@ public class MessageReportService {
             }
             case MessageReport.TYPE_THREAD -> {
                 if (threadRepository.existsById(contentId)) {
+                    List<Long> replyIds = threadReplyRepository.findIdsByThreadId(contentId);
+                    if (!replyIds.isEmpty()) {
+                        messageReportRepository.findByContentTypeAndContentIdInAndStatus(
+                                MessageReport.TYPE_THREAD_REPLY,
+                                replyIds,
+                                MessageReport.STATUS_PENDING)
+                                .forEach(pending -> cascadeReportIds.add(pending.getId()));
+                    }
                     threadRepository.deleteById(contentId); // cascades to replies
                 }
             }
@@ -261,6 +408,7 @@ public class MessageReportService {
                     });
             default -> throw new IllegalArgumentException("Unknown content type: " + report.getContentType());
         }
+        return cascadeReportIds;
     }
 
     /** "No problem": lift the pending-review shadow so the content shows again. */
@@ -325,5 +473,13 @@ public class MessageReportService {
             return normalized;
         }
         throw new IllegalArgumentException("status must be PENDING or RESOLVED.");
+    }
+
+    private String contentKey(MessageReport report) {
+        return contentTypeOf(report) + ":" + report.getContentId();
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

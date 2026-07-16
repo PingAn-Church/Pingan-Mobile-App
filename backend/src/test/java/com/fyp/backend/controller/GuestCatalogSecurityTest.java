@@ -68,7 +68,9 @@ class GuestCatalogSecurityTest {
         when(courseService.listCategories(true)).thenReturn(List.of());
         when(courseService.getModuleDetail(anyLong(), isNull(), org.mockito.ArgumentMatchers.eq(true)))
                 .thenReturn(Map.of("success", true, "data", Map.of("id", "1")));
-        when(reviewService.listReviews(anyLong(), org.mockito.ArgumentMatchers.nullable(Long.class), any(Pageable.class)))
+        when(reviewService.listReviews(anyLong(),
+                org.mockito.ArgumentMatchers.nullable(com.fyp.backend.model.User.class),
+                any(Pageable.class)))
                 .thenReturn(Map.of("data", List.of(), "pagination", Map.of()));
         when(courseRepository.findByIdAndIsPublishedTrue(1L))
                 .thenReturn(Optional.of(new Course()));

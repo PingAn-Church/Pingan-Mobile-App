@@ -1,6 +1,7 @@
 package com.fyp.backend.config.app;
 
 import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +9,9 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.fyp.backend.model.MessageReport;
+import com.fyp.backend.util.ContentFingerprint;
 
 /**
  * One-time migration for generalizing message_reports to all content types
@@ -18,7 +22,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *
  * 1. The UNIQUE constraint on message_id: the column now holds ids from four
  *    different tables, which can collide numerically (thread 5 vs message 5),
- *    so uniqueness is enforced per contentType+contentId in the service instead.
+ *    so report duplication is enforced against the locked content row and its
+ *    content fingerprint.
  * 2. Legacy rows have content_type NULL; backfill them to MESSAGE so repository
  *    queries can match on the type directly.
  *
@@ -67,9 +72,42 @@ public class ReportSchemaMigration {
                 if (backfilled > 0) {
                     log.info("Backfilled content_type=MESSAGE on {} legacy report rows", backfilled);
                 }
+
+                List<Map<String, Object>> rows = jdbc.queryForList("""
+                        SELECT id, content_type, message_type, message_content
+                        FROM message_reports
+                        WHERE content_fingerprint IS NULL
+                        """);
+                int fingerprinted = 0;
+                for (Map<String, Object> row : rows) {
+                    String contentType = stringValue(row.get("content_type"));
+                    if (contentType == null || contentType.isBlank()) {
+                        contentType = MessageReport.TYPE_MESSAGE;
+                    }
+                    String fingerprint = ContentFingerprint.legacy(
+                            contentType,
+                            stringValue(row.get("message_type")),
+                            stringValue(row.get("message_content")));
+                    fingerprinted += jdbc.update(
+                            "UPDATE message_reports SET content_fingerprint = ? WHERE id = ?",
+                            fingerprint,
+                            row.get("id"));
+                }
+                if (fingerprinted > 0) {
+                    log.info("Backfilled content fingerprints on {} legacy report rows", fingerprinted);
+                }
+
+                jdbc.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_message_reports_content_fingerprint
+                        ON message_reports(content_type, message_id, content_fingerprint)
+                        """);
             } catch (Exception e) {
                 log.warn("Skipping message_reports schema migration: {}", e.getMessage());
             }
         };
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 }

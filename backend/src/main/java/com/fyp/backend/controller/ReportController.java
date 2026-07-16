@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fyp.backend.dto.ReportDto;
+import com.fyp.backend.dto.ReportSummaryDto;
 import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.service.MessageReportService;
 import com.fyp.backend.service.UserService;
@@ -65,7 +68,10 @@ public class ReportController {
             return ResponseEntity.badRequest().body("contentId (or messageId) is required");
         }
         try {
-            return ResponseEntity.ok(messageReportService.createReport(contentType, contentId, reporterId));
+            return ResponseEntity.ok(ReportSummaryDto.from(
+                    messageReportService.createReport(contentType, contentId, reporterId)));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -113,7 +119,7 @@ public class ReportController {
 
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("success", true);
-            body.put("data", result.getContent());
+            body.put("data", result.getContent().stream().map(ReportDto::from).toList());
             body.put("pagination", pagination);
             return ResponseEntity.ok(body);
         } catch (IllegalArgumentException e) {

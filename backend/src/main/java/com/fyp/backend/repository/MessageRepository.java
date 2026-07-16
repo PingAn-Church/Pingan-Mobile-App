@@ -4,13 +4,20 @@ import com.fyp.backend.model.Message;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
+import java.util.Optional;
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface MessageRepository extends JpaRepository<Message, Long> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM Message m WHERE m.id = :id")
+    Optional<Message> findByIdForUpdate(@Param("id") Long id);
+
     long countBySenderId(Long senderId);
 
     // Cursor (keyset) pagination, newest-first. The first page omits `before`;
