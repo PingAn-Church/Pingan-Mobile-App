@@ -35,6 +35,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { showAlert } from "../../utils/showAlert";
 import AppUpdateStatusIcon from "../../components/AppUpdateStatusIcon";
+import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
 
 export default function ProfilePage() {
   const { user, setUser, logout } = useContext(UserContext);
@@ -42,8 +43,10 @@ export default function ProfilePage() {
   const [userDetails, setUserDetails] = useState([]);
   const [profileImage, setProfileImage] = useState(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [termsVisible, setTermsVisible] = useState(false);
   const { language, toggleLanguage } = useContext(LanguageContext);
   const { handleDeactivatePushToken } = useNotification();
+  const termsCopy = TERMS_COPY[language] || TERMS_COPY.en;
 
   // On tablets/iPad the percentage-sized grid buttons balloon and push the admin,
   // instructor, and profile sections far apart. On wide screens use fixed compact
@@ -528,6 +531,13 @@ export default function ProfilePage() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.termsEntry}
+          onPress={() => setTermsVisible(true)}
+        >
+          <Text style={styles.termsEntryText}>{termsCopy.linkText}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.deleteAccountButton, deletingAccount && styles.disabledButton]}
           onPress={confirmDeleteOwnAccount}
           disabled={deletingAccount}
@@ -541,6 +551,8 @@ export default function ProfilePage() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      <TermsModal visible={termsVisible} onClose={() => setTermsVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -860,6 +872,17 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 20,
     marginHorizontal: 10,
+  },
+  termsEntry: {
+    alignItems: "center",
+    paddingVertical: 6,
+    marginTop: 4,
+    marginHorizontal: 10,
+  },
+  termsEntryText: {
+    color: "#007AFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
   deleteAccountButton: {
     alignItems: "center",
