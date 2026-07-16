@@ -14,13 +14,18 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * A user report against a chat message.
+ * A user report against a piece of user-generated content: a chat message, a
+ * forum thread, a thread reply, or a course review.
  *
- * The reported message's details are SNAPSHOTTED here (content, type, sender,
- * conversation) rather than referenced with a foreign key, so admins can still
- * review the evidence after the message is deleted — whether by the sender or
- * by an admin resolving the report. message_id is unique: a message can only
- * ever be reported once.
+ * The reported content's details are SNAPSHOTTED here (content, type, author)
+ * rather than referenced with a foreign key, so admins can still review the
+ * evidence after the content is deleted — whether by its author or by an admin
+ * resolving the report. Each piece of content can only ever be reported once
+ * (enforced per contentType + contentId in the service).
+ *
+ * Legacy rows predate contentType and have it NULL; they are message reports
+ * (backfilled to MESSAGE by ReportSchemaMigration on startup). The content id
+ * lives in the historical message_id column.
  */
 @Entity
 @Data
@@ -34,24 +39,37 @@ public class MessageReport {
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_RESOLVED = "RESOLVED";
 
+    // DELETE_MESSAGE is kept as the wire value for "delete the reported content"
+    // so existing clients keep working; it deletes whatever content type the
+    // report points at.
     public static final String ACTION_DEACTIVATE_USER = "DEACTIVATE_USER";
     public static final String ACTION_DELETE_MESSAGE = "DELETE_MESSAGE";
     public static final String ACTION_NO_PROBLEM = "NO_PROBLEM";
+
+    public static final String TYPE_MESSAGE = "MESSAGE";
+    public static final String TYPE_THREAD = "THREAD";
+    public static final String TYPE_THREAD_REPLY = "THREAD_REPLY";
+    public static final String TYPE_COURSE_REVIEW = "COURSE_REVIEW";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "message_id", nullable = false, unique = true)
-    private Long messageId;
+    /** What kind of content this report targets; NULL in legacy rows = MESSAGE. */
+    @Column(name = "content_type")
+    private String contentType = TYPE_MESSAGE;
 
-    // --- snapshot of the reported message ---
-    private Long conversationId;
-    private String conversationType; // group / private
-    private String messageType; // text / image / voice
+    /** Id of the reported content (message/thread/reply/review) in its own table. */
+    @Column(name = "message_id", nullable = false)
+    private Long contentId;
+
+    // --- snapshot of the reported content ---
+    private Long conversationId; // messages only
+    private String conversationType; // group / private (messages only)
+    private String messageType; // text / image / voice ("text" for non-chat content)
     @Column(columnDefinition = "TEXT")
     private String messageContent;
-    private Long senderId;
+    private Long senderId; // the content's author
     private String senderName;
 
     // --- who reported it ---
@@ -74,6 +92,9 @@ public class MessageReport {
         }
         if (status == null || status.isBlank()) {
             status = STATUS_PENDING;
+        }
+        if (contentType == null || contentType.isBlank()) {
+            contentType = TYPE_MESSAGE;
         }
     }
 }

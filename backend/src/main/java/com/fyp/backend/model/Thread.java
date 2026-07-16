@@ -23,6 +23,10 @@ public class Thread {
     @Column(length = 5000)
     private String content;
 
+    // Pending-review shadow flag (see Message.reported). NULL in legacy rows = false.
+    @org.hibernate.annotations.ColumnDefault("false")
+    private Boolean reported = false;
+
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @ManyToOne(fetch = FetchType.LAZY)

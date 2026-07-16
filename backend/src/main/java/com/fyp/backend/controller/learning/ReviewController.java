@@ -60,11 +60,12 @@ public class ReviewController {
                 reviewService.updateReview(courseId, currentUserId(auth), rating(body), review(body), anonymous(body)));
     }
 
-    /** All visible reviews for a course. */
+    /** All visible (and reported-pending) reviews for a course. */
     @GetMapping("/getCourseReviews/{courseId}")
     @SuppressWarnings("unchecked")
     public ApiResponse<List<Map<String, Object>>> listReviews(
             Authentication authentication,
+            @RequestHeader(value = "Authorization", required = false) String auth,
             @PathVariable Long courseId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -75,12 +76,16 @@ public class ReviewController {
                 && courseRepository.findByIdAndIsPublishedTrue(courseId).isEmpty()) {
             throw ApiException.notFound("Course not found");
         }
+        // Who is asking decides the isOwn flag on each review (null for guests),
+        // so reported reviews can stay visible to their own author.
+        Long requesterId = anonymous || auth == null ? null : userService.getUserIdFromToken(auth);
         Sort sort = Sort.by(
                 Sort.Order.desc("isPinned"),
                 Sort.Order.desc("createdAt"),
                 Sort.Order.desc("id"));
         Map<String, Object> result = reviewService.listReviews(
-                courseId, PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size), sort));
+                courseId, requesterId,
+                PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size), sort));
         return ApiResponse.ok((List<Map<String, Object>>) result.get("data"), result.get("pagination"));
     }
 

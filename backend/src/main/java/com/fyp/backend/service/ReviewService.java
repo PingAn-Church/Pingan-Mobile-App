@@ -30,11 +30,18 @@ public class ReviewService {
 
     public Map<String, Object> getUserReview(Long courseId, Long userId) {
         return ratingRepository.findByCourseIdAndUserId(courseId, userId)
-                .map(this::reviewMap).orElse(null);
+                .map(r -> reviewMap(r, null, userId)).orElse(null);
     }
 
-    public Map<String, Object> listReviews(Long courseId, Pageable pageable) {
-        Page<CourseRating> result = ratingRepository.findByCourseIdAndReviewStatus(courseId, "visible", pageable);
+    /**
+     * Visible + flagged reviews for a course. Flagged (reported, pending admin
+     * review) reviews stay in the list so clients can render a "Reported,
+     * pending review" placeholder — except to their own author (isOwn), who
+     * keeps seeing the original. requesterId is null for guests.
+     */
+    public Map<String, Object> listReviews(Long courseId, Long requesterId, Pageable pageable) {
+        Page<CourseRating> result = ratingRepository.findByCourseIdAndReviewStatusIn(
+                courseId, List.of("visible", "flagged"), pageable);
         List<Long> userIds = result.getContent().stream()
                 .filter(r -> !r.isAnonymous())
                 .map(CourseRating::getUserId)
@@ -44,7 +51,7 @@ public class ReviewService {
         Map<Long, User> users = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
         List<Map<String, Object>> data = result.getContent().stream()
-                .map(r -> reviewMap(r, users.get(r.getUserId())))
+                .map(r -> reviewMap(r, users.get(r.getUserId()), requesterId))
                 .collect(Collectors.toList());
         return Pagination.envelope(data, result);
     }
@@ -64,7 +71,7 @@ public class ReviewService {
         r.setAnonymous(anonymous);
         r = ratingRepository.save(r);
         recomputeCourseRating(courseId);
-        return reviewMap(r);
+        return reviewMap(r, null, userId);
     }
 
     @Transactional
@@ -78,7 +85,7 @@ public class ReviewService {
         r.setUpdatedAt(Instant.now());
         ratingRepository.save(r);
         recomputeCourseRating(courseId);
-        return reviewMap(r);
+        return reviewMap(r, null, userId);
     }
 
     public void recomputeCourseRating(Long courseId) {
@@ -103,11 +110,7 @@ public class ReviewService {
         if (review == null || review.isBlank()) throw ApiException.badRequest("review text is required");
     }
 
-    private Map<String, Object> reviewMap(CourseRating r) {
-        return reviewMap(r, null);
-    }
-
-    private Map<String, Object> reviewMap(CourseRating r, User providedUser) {
+    private Map<String, Object> reviewMap(CourseRating r, User providedUser, Long requesterId) {
         String name = "Anonymous";
         String avatar = null;
         if (!r.isAnonymous()) {
@@ -128,6 +131,8 @@ public class ReviewService {
         m.put("reviewerAvatar", avatar);
         m.put("createdAt", r.getCreatedAt());
         m.put("instructorReply", r.getInstructorReply());
+        m.put("reported", "flagged".equals(r.getReviewStatus()));
+        m.put("isOwn", requesterId != null && requesterId.equals(r.getUserId()));
         return m;
     }
 }

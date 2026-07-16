@@ -27,6 +27,7 @@ public class MessageDto {
     private List<Long> recipientIds = new ArrayList<>();
     private boolean edited = false;
     private boolean deleted = false;
+    private boolean reported = false;
 
     // ✅ Change from Map<Long, String> to Map<String, String> to ensure proper JSON conversion
     private Map<String, String> deliveryStatus;
@@ -41,6 +42,7 @@ public class MessageDto {
         this.senderId = message.getSender().getId();
         this.senderFirstName = displayFirstName(message.getSender());
         this.senderLastName = displayLastName(message.getSender());
+        this.reported = Boolean.TRUE.equals(message.getReported());
 
         // ✅ Extract recipient IDs (excluding sender)
         this.recipientIds = message.getConversation().getParticipants().stream()

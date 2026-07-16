@@ -28,6 +28,13 @@ public class Message {
 
     private String conversationType;  // ✅ New column (group/private)
 
+    // Pending-review shadow flag: set when the message is reported, cleared when
+    // an admin resolves the report as "no problem". Everyone except the sender
+    // sees a "Reported, pending review" placeholder while it is true.
+    // Wrapper type: rows created before the column existed are NULL (= false).
+    @org.hibernate.annotations.ColumnDefault("false")
+    private Boolean reported = false;
+
     private Timestamp timestamp;
 
     @ManyToOne

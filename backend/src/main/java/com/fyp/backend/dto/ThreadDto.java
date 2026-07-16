@@ -14,4 +14,5 @@ public class ThreadDto {
     private LocalDateTime createdAt;
     private Long createdById;
     private String createdByName;
+    private boolean reported;
 }

@@ -31,9 +31,10 @@ import com.fyp.backend.util.Pagination;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Chat-message reporting. Any logged-in user can report a message (once per
- * message); the review queue and resolve actions are admin-only and power the
- * "Manage Reporting" screen.
+ * Content reporting (chat messages, forum threads/replies, course reviews).
+ * Any logged-in user can report a piece of content (once per item); the review
+ * queue and resolve actions are admin-only and power the "Manage Reporting"
+ * screen.
  */
 @RestController
 @RequestMapping("/api/reports")
@@ -48,22 +49,42 @@ public class ReportController {
     }
 
     @PostMapping
-    public ResponseEntity<?> reportMessage(@RequestBody Map<String, Long> body, HttpServletRequest request) {
+    public ResponseEntity<?> reportContent(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         Long reporterId = userService.getUserIdFromToken(request.getHeader("Authorization"));
         if (reporterId == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Unauthorized");
         }
-        Long messageId = body.get("messageId");
-        if (messageId == null) {
-            return ResponseEntity.badRequest().body("messageId is required");
+        // New clients send {contentType, contentId}; older ones send {messageId}.
+        Long contentId = asLong(body.get("contentId"));
+        String contentType = body.get("contentType") == null ? null : String.valueOf(body.get("contentType"));
+        if (contentId == null) {
+            contentId = asLong(body.get("messageId"));
+            contentType = MessageReport.TYPE_MESSAGE;
+        }
+        if (contentId == null) {
+            return ResponseEntity.badRequest().body("contentId (or messageId) is required");
         }
         try {
-            return ResponseEntity.ok(messageReportService.createReport(messageId, reporterId));
+            return ResponseEntity.ok(messageReportService.createReport(contentType, contentId, reporterId));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String s && !s.isBlank()) {
+            try {
+                return Long.valueOf(s.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     @PreAuthorize("hasRole('ADMIN')")

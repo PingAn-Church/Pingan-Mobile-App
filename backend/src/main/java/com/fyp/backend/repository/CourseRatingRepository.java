@@ -17,6 +17,8 @@ import com.fyp.backend.model.CourseRating;
 public interface CourseRatingRepository extends JpaRepository<CourseRating, Long> {
     Page<CourseRating> findByCourseIdAndReviewStatus(Long courseId, String reviewStatus, Pageable pageable);
 
+    Page<CourseRating> findByCourseIdAndReviewStatusIn(Long courseId, List<String> reviewStatuses, Pageable pageable);
+
     // Declared as List<Object[]> on purpose: a bare Object[] return is treated as a
     // collection query by Spring Data and comes back as a nested single-element array.
     @Query("select avg(r.rating), count(r) from CourseRating r "

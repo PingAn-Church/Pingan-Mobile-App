@@ -84,6 +84,7 @@ public class ThreadReplyService {
                 .threadId(reply.getThread().getId())
                 .authorId(reply.getAuthor().getId())
                 .authorName(reply.getAuthor().getFirstName() + " " + reply.getAuthor().getLastName())
+                .reported(Boolean.TRUE.equals(reply.getReported()))
                 .build();
     }
 
@@ -114,7 +115,8 @@ public class ThreadReplyService {
         ThreadReply reply = replyRepository.findById(replyId)
                 .orElseThrow(() -> new RuntimeException("Reply not found"));
 
-        if (!reply.getAuthor().getId().equals(user.getId())) {
+        // Author or admin (content moderation) may delete.
+        if (!reply.getAuthor().getId().equals(user.getId()) && !user.isAdmin()) {
             throw new RuntimeException("Unauthorized to delete this reply.");
         }
 

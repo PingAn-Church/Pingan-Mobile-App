@@ -252,7 +252,8 @@ class WebSecurityRulesTest {
     @WithMockUser(roles = "USER")
     void reportCreateIsAllowedForAuthenticated() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
-        when(messageReportService.createReport(5L, 7L)).thenReturn(new MessageReport());
+        when(messageReportService.createReport(MessageReport.TYPE_MESSAGE, 5L, 7L))
+                .thenReturn(new MessageReport());
 
         mockMvc.perform(post("/api/reports")
                         .header("Authorization", "Bearer t")
@@ -263,10 +264,23 @@ class WebSecurityRulesTest {
 
     @Test
     @WithMockUser(roles = "USER")
+    void reportCreateAcceptsContentTypeBody() throws Exception {
+        when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
+        when(messageReportService.createReport("THREAD", 9L, 7L)).thenReturn(new MessageReport());
+
+        mockMvc.perform(post("/api/reports")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contentType\": \"THREAD\", \"contentId\": 9}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
     void duplicateReportReturnsConflict() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
-        when(messageReportService.createReport(5L, 7L))
-                .thenThrow(new IllegalStateException("This message has already been reported."));
+        when(messageReportService.createReport(MessageReport.TYPE_MESSAGE, 5L, 7L))
+                .thenThrow(new IllegalStateException("This content has already been reported."));
 
         mockMvc.perform(post("/api/reports")
                         .header("Authorization", "Bearer t")

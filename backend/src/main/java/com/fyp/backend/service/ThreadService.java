@@ -82,6 +82,7 @@ public class ThreadService {
                 .createdAt(thread.getCreatedAt())
                 .createdById(thread.getCreatedBy().getId())
                 .createdByName(thread.getCreatedBy().getFirstName() + " " + thread.getCreatedBy().getLastName())
+                .reported(Boolean.TRUE.equals(thread.getReported()))
                 .build();
     }
 
@@ -114,7 +115,8 @@ public class ThreadService {
         Thread thread = threadRepository.findById(threadId)
                 .orElseThrow(() -> new RuntimeException("Thread not found"));
 
-        if (!thread.getCreatedBy().getId().equals(user.getId())) {
+        // Author or admin (content moderation) may delete.
+        if (!thread.getCreatedBy().getId().equals(user.getId()) && !user.isAdmin()) {
             throw new RuntimeException("Unauthorized to delete this thread.");
         }
 

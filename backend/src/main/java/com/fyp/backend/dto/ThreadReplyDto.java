@@ -14,4 +14,5 @@ public class ThreadReplyDto {
     private Long threadId;
     private Long authorId;
     private String authorName;
+    private boolean reported;
 }
