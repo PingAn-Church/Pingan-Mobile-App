@@ -19,6 +19,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert";
 import GuestContinueLink from "../../components/GuestContinueLink";
+import AuthSwitchLink from "../../components/AuthSwitchLink";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -125,6 +126,11 @@ const LoginPage = () => {
               )}
             </TouchableOpacity>
           </View>
+          <AuthSwitchLink
+            promptKey="newToUs"
+            actionKey="registerHere"
+            routeName="Register"
+          />
           <GuestContinueLink />
         </View>
       </TouchableWithoutFeedback>
@@ -258,7 +264,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginTop: 15,
-    marginBottom: 60,
+    marginBottom: 12,
     width: "100%",
   },
   forgotPasswordText: {

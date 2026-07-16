@@ -24,6 +24,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert"
 import GuestContinueLink from "../../components/GuestContinueLink";
+import AuthSwitchLink from "../../components/AuthSwitchLink";
 import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
 
 export default function RegisterPage() {
@@ -280,6 +281,11 @@ export default function RegisterPage() {
             )}
           </TouchableOpacity>
         </View>
+        <AuthSwitchLink
+          promptKey="alreadyHaveAccount"
+          actionKey="loginHere"
+          routeName="Login"
+        />
         <GuestContinueLink />
       </KeyboardAwareScrollView>
 
@@ -332,7 +338,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginTop: 8,
-    marginBottom: 60,
+    marginBottom: 12,
     width: "100%",
   },
   imageText: {
