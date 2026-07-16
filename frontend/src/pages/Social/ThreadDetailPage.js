@@ -469,6 +469,11 @@ import {
   deleteThread,
   deleteReply,
 } from "../../service/ThreadService";
+import {
+  reportContent,
+  REPORT_TYPE_THREAD,
+  REPORT_TYPE_THREAD_REPLY,
+} from "../../service/ReportService";
 import { UserContext } from "../../context/UserContext";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { confirmAction } from "../../utils/confirmAction";
@@ -605,6 +610,60 @@ const ThreadDetailPage = ({ route }) => {
     }
   };
 
+  const handleReportThread = async () => {
+    const confirmed = await confirmAction({
+      title: i18n.t("reportConfirmTitle"),
+      message: i18n.t("reportConfirmMessage"),
+      confirmText: i18n.t("report"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await reportContent(REPORT_TYPE_THREAD, thread.id);
+      // Shadow-hide immediately for the reporter; others pick the flag up on fetch.
+      setThread((prev) => ({ ...prev, reported: true }));
+      showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
+    } catch (error) {
+      if (error?.response?.status === 409) {
+        setThread((prev) => ({ ...prev, reported: true }));
+        showAlert(i18n.t("error"), i18n.t("alreadyReported"));
+      } else {
+        showAlert(i18n.t("error"), i18n.t("reportFailed"));
+      }
+    }
+  };
+
+  const handleReportReply = async (reply) => {
+    const confirmed = await confirmAction({
+      title: i18n.t("reportConfirmTitle"),
+      message: i18n.t("reportConfirmMessage"),
+      confirmText: i18n.t("report"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    const markReported = () =>
+      setReplies((prev) =>
+        prev.map((r) => (r.id === reply.id ? { ...r, reported: true } : r))
+      );
+
+    try {
+      await reportContent(REPORT_TYPE_THREAD_REPLY, reply.id);
+      markReported();
+      showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
+    } catch (error) {
+      if (error?.response?.status === 409) {
+        markReported();
+        showAlert(i18n.t("error"), i18n.t("alreadyReported"));
+      } else {
+        showAlert(i18n.t("error"), i18n.t("reportFailed"));
+      }
+    }
+  };
+
   const replyComposer = (
     <View style={styles.replyBox}>
       <TextInput
@@ -641,18 +700,30 @@ const ThreadDetailPage = ({ route }) => {
         ListFooterComponent={
           repliesLoading ? <Text style={styles.loadingMore}>{i18n.t("loading")}</Text> : null
         }
-        ListHeaderComponent={
-          <View>
-            <View style={styles.threadBox}>
-              <Text style={styles.threadTitle}>{thread.title}</Text>
-              <Text style={styles.threadMeta}>
-                {i18n.t("by")} {thread.createdByName} •{" "}
-                {formatDateTime(thread.createdAt)}
-              </Text>
+        ListHeaderComponent={(() => {
+          // Reported threads are shadow-hidden from everyone except their author
+          // until an admin resolves the report.
+          const threadShadowHidden =
+            !!thread.reported && user?.id !== thread.createdById;
+          return (
+            <View>
+              <View style={styles.threadBox}>
+                {threadShadowHidden ? (
+                  <Text style={styles.reportedPlaceholder}>
+                    {i18n.t("reportedPendingReview")}
+                  </Text>
+                ) : (
+                  <Text style={styles.threadTitle}>{thread.title}</Text>
+                )}
+                <Text style={styles.threadMeta}>
+                  {i18n.t("by")} {thread.createdByName} •{" "}
+                  {formatDateTime(thread.createdAt)}
+                </Text>
 
-              <Text style={styles.threadContent}>{thread.content}</Text>
+                {!threadShadowHidden && (
+                  <Text style={styles.threadContent}>{thread.content}</Text>
+                )}
 
-              {(user?.id === thread.createdById || user?.admin) && (
                 <View
                   style={{
                     marginTop: 10,
@@ -661,25 +732,52 @@ const ThreadDetailPage = ({ route }) => {
                     gap: 20,
                   }}
                 >
-                  <TouchableOpacity
-                    onPress={() =>
-                      navigation.navigate("EditThread", { thread })
-                    }
-                  >
-                    <Text style={{ color: "#007bff" }}>{i18n.t("edit")}</Text>
-                  </TouchableOpacity>
+                  {(user?.id === thread.createdById || user?.admin) &&
+                    !threadShadowHidden && (
+                      <>
+                        <TouchableOpacity
+                          onPress={() =>
+                            navigation.navigate("EditThread", { thread })
+                          }
+                        >
+                          <Text style={{ color: "#007bff" }}>{i18n.t("edit")}</Text>
+                        </TouchableOpacity>
 
-                  <TouchableOpacity onPress={handleDeleteThread}>
-                    <Text style={{ color: "#e74c3c" }}>{i18n.t("delete")}</Text>
-                  </TouchableOpacity>
+                        <TouchableOpacity onPress={handleDeleteThread}>
+                          <Text style={{ color: "#e74c3c" }}>{i18n.t("delete")}</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+
+                  {user?.id !== thread.createdById && !thread.reported && (
+                    <TouchableOpacity onPress={handleReportThread}>
+                      <Text style={{ color: "#e67e22" }}>{i18n.t("report")}</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              )}
-            </View>
+              </View>
 
-            <Text style={styles.repliesHeader}>{i18n.t("replies")}</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
+              <Text style={styles.repliesHeader}>{i18n.t("replies")}</Text>
+            </View>
+          );
+        })()}
+        renderItem={({ item }) => {
+          // Reported replies are shadow-hidden from everyone except their author.
+          const replyShadowHidden =
+            !!item.reported && user?.id !== item.authorId;
+          if (replyShadowHidden) {
+            return (
+              <View style={styles.replyItem}>
+                <Text style={styles.replyAuthor}>
+                  {item.authorName} • {formatDateTime(item.createdAt)}
+                </Text>
+                <Text style={styles.reportedPlaceholder}>
+                  {i18n.t("reportedPendingReview")}
+                </Text>
+              </View>
+            );
+          }
+          return (
           <View style={styles.replyItem}>
             <Text style={styles.replyAuthor}>
               {item.authorName} • {formatDateTime(item.createdAt)}
@@ -725,47 +823,60 @@ const ThreadDetailPage = ({ route }) => {
             ) : (
               <Text style={styles.replyText}>{item.content}</Text>
             )}
-            {(user?.id === item.authorId || user?.admin) && (
+            {(user?.id === item.authorId || user?.admin || !item.reported) && (
               <View style={{ flexDirection: "row", marginTop: 4 }}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setEditingReplyId(item.id);
-                    setEditContent(item.content);
-                  }}
-                >
-                  <Text style={{ color: "#007bff", marginRight: 16 }}>
-                    {i18n.t("edit")}
-                  </Text>
-                </TouchableOpacity>
+                {(user?.id === item.authorId || user?.admin) && (
+                  <>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setEditingReplyId(item.id);
+                        setEditContent(item.content);
+                      }}
+                    >
+                      <Text style={{ color: "#007bff", marginRight: 16 }}>
+                        {i18n.t("edit")}
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={async () => {
-                    const confirmed = await confirmAction({
-                      title: i18n.t("deleteReply"),
-                      message: i18n.t("areYouSure"),
-                      confirmText: i18n.t("delete"),
-                      cancelText: i18n.t("cancel"),
-                      destructive: true,
-                    });
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const confirmed = await confirmAction({
+                          title: i18n.t("deleteReply"),
+                          message: i18n.t("areYouSure"),
+                          confirmText: i18n.t("delete"),
+                          cancelText: i18n.t("cancel"),
+                          destructive: true,
+                        });
 
-                    if (!confirmed) return;
+                        if (!confirmed) return;
 
-                    try {
-                      await deleteReply(item.id);
-                      setReplies((prev) => prev.filter((reply) => reply.id !== item.id));
-                    } catch (err) {
-                      showAlert(i18n.t("error"), i18n.t("deleteReplyFailed"), [
-                        { text: i18n.t("ok") },
-                      ]);
-                    }
-                  }}
-                >
-                  <Text style={{ color: "#e74c3c" }}>{i18n.t("delete")}</Text>
-                </TouchableOpacity>
+                        try {
+                          await deleteReply(item.id);
+                          setReplies((prev) => prev.filter((reply) => reply.id !== item.id));
+                        } catch (err) {
+                          showAlert(i18n.t("error"), i18n.t("deleteReplyFailed"), [
+                            { text: i18n.t("ok") },
+                          ]);
+                        }
+                      }}
+                    >
+                      <Text style={{ color: "#e74c3c", marginRight: 16 }}>
+                        {i18n.t("delete")}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {user?.id !== item.authorId && !item.reported && (
+                  <TouchableOpacity onPress={() => handleReportReply(item)}>
+                    <Text style={{ color: "#e67e22" }}>{i18n.t("report")}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </View>
-        )}
+          );
+        }}
       />
 
       {Platform.OS === "android" ? (
@@ -829,6 +940,12 @@ const styles = StyleSheet.create({
   replyText: {
     fontSize: 15,
     color: "#333",
+    lineHeight: 23,
+  },
+  reportedPlaceholder: {
+    fontSize: 15,
+    fontStyle: "italic",
+    color: "#999",
     lineHeight: 23,
   },
   loadingMore: {

@@ -123,6 +123,7 @@ import { fetchThreads } from "../../service/ThreadService";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import { UserContext } from "../../context/UserContext";
 
 // Helper to format ISO date to readable format
 const formatDateTime = (isoDate) => {
@@ -140,6 +141,7 @@ const ThreadHomePage = () => {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const { language } = useContext(LanguageContext);
+  const { user } = useContext(UserContext);
 
   // useEffect(() => {
   //   const loadThreads = async () => {
@@ -299,27 +301,40 @@ const ThreadHomePage = () => {
               <ActivityIndicator color="blue" style={{ marginVertical: 16 }} />
             ) : null
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.threadItem}
-              onPress={() => handleThreadPress(item)}
-            >
-              <Text style={styles.threadTitle}>{item.title}</Text>
-              <Text style={styles.threadContent}>
-                {item.content.length > 80
-                  ? item.content.slice(0, 80) + "..."
-                  : item.content}
-              </Text>
-              <View style={styles.metaRow}>
-                <Text style={styles.threadMeta}>
-                  {i18n.t("by")} {item.createdByName}
-                </Text>
-                <Text style={styles.threadMeta}>
-                  {formatDateTime(item.createdAt)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            // Reported threads are shadow-hidden from everyone except their author
+            // until an admin resolves the report.
+            const shadowHidden = !!item.reported && user?.id !== item.createdById;
+            return (
+              <TouchableOpacity
+                style={styles.threadItem}
+                onPress={() => handleThreadPress(item)}
+              >
+                {shadowHidden ? (
+                  <Text style={styles.reportedPlaceholder}>
+                    {i18n.t("reportedPendingReview")}
+                  </Text>
+                ) : (
+                  <>
+                    <Text style={styles.threadTitle}>{item.title}</Text>
+                    <Text style={styles.threadContent}>
+                      {item.content.length > 80
+                        ? item.content.slice(0, 80) + "..."
+                        : item.content}
+                    </Text>
+                  </>
+                )}
+                <View style={styles.metaRow}>
+                  <Text style={styles.threadMeta}>
+                    {i18n.t("by")} {item.createdByName}
+                  </Text>
+                  <Text style={styles.threadMeta}>
+                    {formatDateTime(item.createdAt)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
 
@@ -352,6 +367,13 @@ const styles = StyleSheet.create({
   threadContent: {
     fontSize: 15,
     color: "#333",
+    marginBottom: 8,
+    lineHeight: 23,
+  },
+  reportedPlaceholder: {
+    fontSize: 15,
+    fontStyle: "italic",
+    color: "#999",
     marginBottom: 8,
     lineHeight: 23,
   },

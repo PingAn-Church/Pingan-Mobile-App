@@ -1856,9 +1856,12 @@ export default function ChatPage({ route }) {
           const isMe = item.senderId === currentUser?.id;
           const isFailed = item.failed;
           const isPending = item.pending;
+          // Reported messages are shadow-hidden: everyone except the sender sees
+          // a muted placeholder until an admin resolves the report.
+          const isShadowHidden = !!item.reported && !isMe;
           const messageType = (item.type || "").toLowerCase();
-          const isVoice = messageType === "voice";
-          const isImage = messageType === "image";
+          const isVoice = !isShadowHidden && messageType === "voice";
+          const isImage = !isShadowHidden && messageType === "image";
           const messageIdKey = String(item.messageId || "");
           const translationEntry = messageIdKey ? translations[messageIdKey] : null;
           const expectedTargetLanguage = resolveTargetTranslationLanguage(
@@ -1878,10 +1881,14 @@ export default function ChatPage({ route }) {
           return (
             <TouchableOpacity
               onLongPress={
-                Platform.OS === "web" || isImage ? undefined : (event) => openContextMenu(item, event)
+                Platform.OS === "web" || isImage || isShadowHidden
+                  ? undefined
+                  : (event) => openContextMenu(item, event)
               }
               onPress={
-                Platform.OS === "web" && !isImage ? (event) => openContextMenu(item, event) : undefined
+                Platform.OS === "web" && !isImage && !isShadowHidden
+                  ? (event) => openContextMenu(item, event)
+                  : undefined
               }
               activeOpacity={0.7}
               style={[
@@ -1895,7 +1902,13 @@ export default function ChatPage({ route }) {
                 isFailed ? styles.failedMessage : null,
               ]}
             >
-              {isImage ? (
+              {isShadowHidden ? (
+                <View style={styles.messageContentContainer}>
+                  <Text style={styles.reportedPlaceholder}>
+                    {i18n.t("reportedPendingReview")}
+                  </Text>
+                </View>
+              ) : isImage ? (
                 <ChatImage
                   message={item}
                   isMe={isMe}
@@ -2112,6 +2125,22 @@ export default function ChatPage({ route }) {
 
                   try {
                     await reportMessage(selected.messageId);
+                    // Shadow-hide immediately for the reporter; other viewers pick
+                    // the flag up from the server on their next history fetch.
+                    setConversations((prev) =>
+                      prev.map((conv) =>
+                        conv.conversationId === conversationId
+                          ? {
+                              ...conv,
+                              chatHistory: (conv.chatHistory || []).map((msg) =>
+                                msg.messageId === selected.messageId
+                                  ? { ...msg, reported: true }
+                                  : msg
+                              ),
+                            }
+                          : conv
+                      )
+                    );
                     showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
                   } catch (error) {
                     if (error?.response?.status === 409) {
@@ -2965,6 +2994,12 @@ const styles = StyleSheet.create({
   },
   contentReceived: {
     color: "#111113",
+  },
+  reportedPlaceholder: {
+    fontSize: webFontSize(15),
+    lineHeight: Platform.OS === "web" ? 22 : 20,
+    fontStyle: "italic",
+    color: "#8A8A8E",
   },
   timestamp: {
     fontSize: webFontSize(10),

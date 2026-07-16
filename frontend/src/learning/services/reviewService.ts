@@ -9,6 +9,10 @@ export interface CourseReview {
   reviewerAvatar: string | null;
   createdAt: string | null;
   instructorReply?: string | null;
+  /** Reported and pending admin review — shadow-hidden from everyone but its author. */
+  reported: boolean;
+  /** Whether the requesting user wrote this review (authors keep seeing the original). */
+  isOwn: boolean;
 }
 
 export interface PagedReviews {
@@ -35,6 +39,8 @@ const mapReview = (r: any): CourseReview => ({
   reviewerAvatar: r.reviewerAvatar ?? null,
   createdAt: r.createdAt ?? null,
   instructorReply: r.instructorReply ?? null,
+  reported: !!r.reported,
+  isOwn: !!r.isOwn,
 });
 
 export const getMyReview = async (courseId: string): Promise<CourseReview | null> => {

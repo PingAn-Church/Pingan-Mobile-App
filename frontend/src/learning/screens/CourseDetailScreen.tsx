@@ -24,6 +24,8 @@ import { notify } from "@/utils/alerts";
 import type { LearningLesson } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { showLoginRequiredAlert } from "../../utils/authGate";
+import { confirmAction } from "../../utils/confirmAction";
+import { reportContent, REPORT_TYPE_COURSE_REVIEW } from "../../service/ReportService";
 import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
 
@@ -100,6 +102,35 @@ export default function CourseDetailScreen() {
     } catch (e: any) {
       setWishlisted(!next); // revert on failure
       notify(i18n.t("error"), e?.message || i18n.t("wishlistUpdateFailed"));
+    }
+  };
+
+  const reportReview = async (reviewId: string) => {
+    if (!isAuthenticated) {
+      showLoginRequiredAlert(navigation);
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: i18n.t("reportConfirmTitle"),
+      message: i18n.t("reportConfirmMessage"),
+      confirmText: i18n.t("report"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await reportContent(REPORT_TYPE_COURSE_REVIEW, reviewId);
+      // Refetch so the review shadow-hides for the reporter right away.
+      await queryClient.invalidateQueries({ queryKey: ["learning", "reviews", courseId] });
+      notify(i18n.t("success"), i18n.t("reportSuccessMessage"));
+    } catch (e: any) {
+      if (e?.response?.status === 409) {
+        await queryClient.invalidateQueries({ queryKey: ["learning", "reviews", courseId] });
+        notify(i18n.t("error"), i18n.t("alreadyReported"));
+      } else {
+        notify(i18n.t("error"), i18n.t("reportFailed"));
+      }
     }
   };
 
@@ -288,27 +319,47 @@ export default function CourseDetailScreen() {
     </>
   );
 
-  const renderReview = ({ item: r }: { item: (typeof reviews)[number] }) => (
-    <View style={[styles.review, styles.reviewListItem]}>
-      <View style={styles.reviewTop}>
-        <Text style={styles.reviewer}>{r.reviewerName}</Text>
-        <View style={{ flexDirection: "row" }}>
-          {[1, 2, 3, 4, 5].map((s) => (
-            <Ionicons
-              key={s}
-              name={s <= r.rating ? "star" : "star-outline"}
-              size={13}
-              color={Colors.starGold}
-            />
-          ))}
+  const renderReview = ({ item: r }: { item: (typeof reviews)[number] }) => {
+    // Reported reviews are shadow-hidden from everyone except their author
+    // until an admin resolves the report.
+    if (r.reported && !r.isOwn) {
+      return (
+        <View style={[styles.review, styles.reviewListItem]}>
+          <Text style={styles.reportedPlaceholder}>{i18n.t("reportedPendingReview")}</Text>
         </View>
+      );
+    }
+    return (
+      <View style={[styles.review, styles.reviewListItem]}>
+        <View style={styles.reviewTop}>
+          <Text style={styles.reviewer}>{r.reviewerName}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Ionicons
+                key={s}
+                name={s <= r.rating ? "star" : "star-outline"}
+                size={13}
+                color={Colors.starGold}
+              />
+            ))}
+            {!r.isOwn && !r.reported && (
+              <TouchableOpacity
+                style={styles.reportReviewBtn}
+                onPress={() => reportReview(r.id)}
+                accessibilityLabel={i18n.t("report")}
+              >
+                <Ionicons name="flag-outline" size={14} color={Colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        <Text style={styles.reviewText}>{r.review}</Text>
+        {!!r.instructorReply && (
+          <Text style={styles.reply}>{i18n.t("instructorReply")}: {r.instructorReply}</Text>
+        )}
       </View>
-      <Text style={styles.reviewText}>{r.review}</Text>
-      {!!r.instructorReply && (
-        <Text style={styles.reply}>{i18n.t("instructorReply")}: {r.instructorReply}</Text>
-      )}
-    </View>
-  );
+    );
+  };
 
   return (
     <FlatList
@@ -377,6 +428,8 @@ const styles = StyleSheet.create({
   reviewTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   reviewer: { color: Colors.textPrimary, fontWeight: "700" },
   reviewText: { color: Colors.textSecondary, fontSize: 14 },
+  reportReviewBtn: { marginLeft: 8, padding: 2 },
+  reportedPlaceholder: { color: Colors.textMuted, fontSize: 14, fontStyle: "italic" },
   reply: { color: Colors.textMuted, fontSize: 13, marginTop: 6, fontStyle: "italic" },
   muted: { color: Colors.textSecondary, fontSize: 14 },
 });

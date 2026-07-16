@@ -101,6 +101,33 @@ const typeIcon = (messageType) => {
   }
 };
 
+// Reports cover more than chat now; legacy rows have no contentType (= message).
+const contentTypeIcon = (report) => {
+  switch (String(report.contentType || "MESSAGE").toUpperCase()) {
+    case "THREAD":
+      return "reader-outline";
+    case "THREAD_REPLY":
+      return "return-down-forward-outline";
+    case "COURSE_REVIEW":
+      return "star-outline";
+    default:
+      return typeIcon(report.messageType);
+  }
+};
+
+const contentTypeLabel = (report) => {
+  switch (String(report.contentType || "MESSAGE").toUpperCase()) {
+    case "THREAD":
+      return i18n.t("reportTypeThread");
+    case "THREAD_REPLY":
+      return i18n.t("reportTypeReply");
+    case "COURSE_REVIEW":
+      return i18n.t("reportTypeReview");
+    default:
+      return i18n.t("reportTypeMessage");
+  }
+};
+
 const resolutionLabel = (resolution) => {
   switch (resolution) {
     case "DEACTIVATE_USER":
@@ -461,7 +488,7 @@ export default function ManageReportingPage() {
       <View style={[styles.card, pending ? styles.cardPending : styles.cardResolved]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
-            <Ionicons name={typeIcon(item.messageType)} size={20} color="#4B5563" />
+            <Ionicons name={contentTypeIcon(item)} size={20} color="#4B5563" />
             <Text style={styles.senderName}>
               {i18n.t("messageSender")}: {item.senderName || "-"}
             </Text>
@@ -470,6 +497,8 @@ export default function ManageReportingPage() {
             {pending ? i18n.t("pendingReports") : i18n.t("resolvedReports")}
           </Text>
         </View>
+
+        <Text style={styles.contentTypeText}>{contentTypeLabel(item)}</Text>
 
         <View style={styles.contentBox}>
           <ReportedContent report={item} />
@@ -706,6 +735,7 @@ const styles = StyleSheet.create({
   },
   cardHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
   senderName: { fontSize: 15, fontWeight: "600", color: "#111827", flexShrink: 1 },
+  contentTypeText: { fontSize: 12, fontWeight: "700", color: "#6B7280", marginBottom: 6 },
   statusChip: {
     fontSize: 12,
     fontWeight: "700",
