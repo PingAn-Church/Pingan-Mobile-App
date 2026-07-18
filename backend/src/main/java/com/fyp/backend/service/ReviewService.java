@@ -28,6 +28,7 @@ public class ReviewService {
     @Autowired private CourseRatingRepository ratingRepository;
     @Autowired private CourseRepository courseRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private ContentSanitizer contentSanitizer;
 
     public Map<String, Object> getUserReview(Long courseId, Long userId) {
         return ratingRepository.findByCourseIdAndUserId(courseId, userId)
@@ -69,7 +70,7 @@ public class ReviewService {
         r.setCourseId(courseId);
         r.setUserId(userId);
         r.setRating(rating);
-        r.setReview(review.trim());
+        r.setReview(contentSanitizer.mask(review.trim()));
         r.setAnonymous(anonymous);
         r = ratingRepository.save(r);
         recomputeCourseRating(courseId);
@@ -85,7 +86,7 @@ public class ReviewService {
             throw new ContentUnderReviewException();
         }
         r.setRating(rating);
-        r.setReview(review.trim());
+        r.setReview(contentSanitizer.mask(review.trim()));
         r.setAnonymous(anonymous);
         r.setUpdatedAt(Instant.now());
         ratingRepository.save(r);

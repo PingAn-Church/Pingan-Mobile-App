@@ -39,6 +39,7 @@ public class ChatService {
     private final MessagePublisher messagePublisher;
     private final PushNotificationService pushNotificationService;
     private final UserBlockService userBlockService;
+    private final ContentSanitizer contentSanitizer;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -50,7 +51,8 @@ public class ChatService {
                        RedisService redisService,
                        MessagePublisher messagePublisher,
                        PushNotificationService pushNotificationService,
-                       UserBlockService userBlockService) {
+                       UserBlockService userBlockService,
+                       ContentSanitizer contentSanitizer) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -62,6 +64,7 @@ public class ChatService {
         this.messagePublisher = messagePublisher;
         this.pushNotificationService = pushNotificationService;
         this.userBlockService = userBlockService;
+        this.contentSanitizer = contentSanitizer;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -241,6 +244,11 @@ public class ChatService {
             }
         }
 
+        // Objectionable-word filter — only text bodies; voice/image content is a media URL.
+        if (!"voice".equalsIgnoreCase(messageDto.getType()) && !"image".equalsIgnoreCase(messageDto.getType())) {
+            messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
+        }
+
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         Message message = new Message(messageDto, conversation, sender, timestamp.toString());
         message = messageRepository.save(message);
@@ -366,7 +374,7 @@ public class ChatService {
             throw new ContentUnderReviewException();
         }
 
-        message.setContent(newContent);
+        message.setContent(contentSanitizer.mask(newContent));
         message.setTimestamp(new Timestamp(System.currentTimeMillis()));
         message = messageRepository.save(message);
 

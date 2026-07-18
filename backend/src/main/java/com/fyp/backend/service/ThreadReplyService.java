@@ -31,6 +31,7 @@ public class ThreadReplyService {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final ModerationEventPublisher moderationEventPublisher;
+    private final ContentSanitizer contentSanitizer;
 
     public Map<String, Object> getRepliesPage(Long threadId, Long after, int size, String token) {
         User requester = requireUser(token);
@@ -73,7 +74,7 @@ public class ThreadReplyService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         ThreadReply reply = ThreadReply.builder()
-                .content(dto.getContent())
+                .content(contentSanitizer.mask(dto.getContent()))
                 .author(author)
                 .thread(thread)
                 .createdAt(LocalDateTime.now())
@@ -113,7 +114,7 @@ public class ThreadReplyService {
             throw new ContentUnderReviewException();
         }
 
-        reply.setContent(updatedDto.getContent());
+        reply.setContent(contentSanitizer.mask(updatedDto.getContent()));
         reply = replyRepository.save(reply);
 
         return mapToDto(reply, user);

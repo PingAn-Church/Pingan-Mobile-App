@@ -32,6 +32,7 @@ public class ThreadService {
     private final UserService userService;
     private final JwtUtil jwtUtil;
     private final ModerationEventPublisher moderationEventPublisher;
+    private final ContentSanitizer contentSanitizer;
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size, String token) {
@@ -64,8 +65,8 @@ public class ThreadService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         Thread thread = Thread.builder()
-                .title(dto.getTitle())
-                .content(dto.getContent())
+                .title(contentSanitizer.mask(dto.getTitle()))
+                .content(contentSanitizer.mask(dto.getContent()))
                 .createdBy(user)
                 .createdAt(LocalDateTime.now()) // 👈 add this
                 .build();
@@ -113,8 +114,8 @@ public class ThreadService {
         }
 
         // Update fields
-        thread.setTitle(updatedDto.getTitle());
-        thread.setContent(updatedDto.getContent());
+        thread.setTitle(contentSanitizer.mask(updatedDto.getTitle()));
+        thread.setContent(contentSanitizer.mask(updatedDto.getContent()));
 
         thread = threadRepository.save(thread);
         return mapToDto(thread, user);

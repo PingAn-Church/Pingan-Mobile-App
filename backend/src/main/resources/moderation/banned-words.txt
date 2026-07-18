@@ -1,0 +1,53 @@
+# Banned-word list for the server-side content filter (ContentSanitizer).
+# One term per line; lines starting with # and blank lines are ignored.
+#
+# Matched terms are replaced with *** before the content is stored or shown.
+# Edit this file and redeploy the backend to update the list.
+
+# --- English ---
+fuck
+fucking
+fucked
+fucker
+motherfucker
+shit
+shitty
+bullshit
+asshole
+bitch
+bastard
+cunt
+dick
+dickhead
+cocksucker
+pussy
+whore
+slut
+wanker
+twat
+prick
+douchebag
+jackass
+dumbass
+nigger
+nigga
+faggot
+retard
+blowjob
+handjob
+
+# --- Chinese ---
+去你妈
+滚你妈
+操你
+操你妈
+我操
+肏
+傻逼
+二逼
+妈逼
+王八蛋
+狗娘养的
+贱人
+婊子
+鸡巴
