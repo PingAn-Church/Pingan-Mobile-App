@@ -106,7 +106,7 @@ class ContentMaskingTest {
 
         ThreadReplyDto saved = threadReplyService.addReply(ThreadReplyDto.builder()
                 .threadId(7L)
-                .content("you ass, please assign the passage")
+                .content("you asshole, please assign the passage")
                 .build(), "Bearer raw");
 
         assertEquals("you ***, please assign the passage", saved.getContent());

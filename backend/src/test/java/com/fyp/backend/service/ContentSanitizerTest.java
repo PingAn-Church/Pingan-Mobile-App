@@ -10,12 +10,12 @@ import org.junit.jupiter.api.Test;
 class ContentSanitizerTest {
 
     private final ContentSanitizer sanitizer =
-            new ContentSanitizer(List.of("ass", "badword", "bad phrase", "傻逼"));
+            new ContentSanitizer(List.of("asshole", "badword", "bad phrase", "傻逼"));
 
     @Test
     void masksStandaloneWordCaseInsensitively() {
-        assertEquals("You ***!", sanitizer.mask("You ASS!"));
-        assertEquals("***", sanitizer.mask("Ass"));
+        assertEquals("You ***!", sanitizer.mask("You ASSHOLE!"));
+        assertEquals("***", sanitizer.mask("Asshole"));
     }
 
     @Test
@@ -26,12 +26,12 @@ class ContentSanitizerTest {
 
     @Test
     void masksAtPunctuationBoundaries() {
-        assertEquals("(***) ***, ***.", sanitizer.mask("(ass) ass, ass."));
+        assertEquals("(***) ***, ***.", sanitizer.mask("(asshole) asshole, asshole."));
     }
 
     @Test
     void masksEveryOccurrence() {
-        assertEquals("*** and *** again", sanitizer.mask("ass and badword again"));
+        assertEquals("*** and *** again", sanitizer.mask("asshole and badword again"));
     }
 
     @Test
