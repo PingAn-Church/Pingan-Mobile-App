@@ -145,8 +145,10 @@
 
 package com.fyp.backend.service;
 
+import com.fyp.backend.model.ConversationMute;
 import com.fyp.backend.model.PushToken;
 import com.fyp.backend.model.User;
+import com.fyp.backend.repository.ConversationMuteRepository;
 import com.fyp.backend.repository.PushTokenRepository;
 import com.fyp.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -155,6 +157,8 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class PushNotificationService {
@@ -164,6 +168,9 @@ public class PushNotificationService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ConversationMuteRepository conversationMuteRepository;
 
     private final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -371,7 +378,7 @@ public class PushNotificationService {
 
     // Send push notifications to all devices associated with the user
     public void sendPushNotification(List<Long> recipientIds, String message, String title, Long conversationId, String conversationType) {
-        for (Long userId : recipientIds) {
+        for (Long userId : filterMutedRecipients(recipientIds, conversationId, conversationType)) {
             List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
             for (PushToken token : tokens) {
                 // Only send notification if the token is active
@@ -380,6 +387,29 @@ public class PushNotificationService {
                 }
             }
         }
+    }
+
+    /**
+     * Drops recipients who muted this conversation. Only chat pushes are
+     * filtered — learning/quiz pushes reuse conversationId for other ids and
+     * must never be muted by a conversation setting.
+     */
+    private List<Long> filterMutedRecipients(List<Long> recipientIds, Long conversationId, String conversationType) {
+        if (conversationId == null
+                || !("private".equals(conversationType) || "group".equals(conversationType))) {
+            return recipientIds;
+        }
+        Set<Long> muted = conversationMuteRepository
+                .findByConversationIdAndConversationType(conversationId, conversationType)
+                .stream()
+                .map(ConversationMute::getUserId)
+                .collect(Collectors.toSet());
+        if (muted.isEmpty()) {
+            return recipientIds;
+        }
+        return recipientIds.stream()
+                .filter(id -> !muted.contains(id))
+                .collect(Collectors.toList());
     }
 
     // Send push notification to a single device via Expo Push API

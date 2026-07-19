@@ -311,6 +311,37 @@ export const updateGroupIcon = async (conversationId, groupIcon) => {
   }
 };
 
+// Per-conversation push-notification mute for the logged-in user.
+export const getConversationMuteStatus = async (conversationId, conversationType) => {
+  const token = await getAuthToken();
+
+  try {
+    const response = await axios.get(apiUrl(`/chat/mute`), {
+      params: { conversationId, conversationType },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data; // { muted }
+  } catch (error) {
+    console.error("Error fetching mute status:", error);
+    throw error;
+  }
+};
+
+export const setConversationMuteStatus = async (conversationId, conversationType, muted) => {
+  const token = await getAuthToken();
+
+  try {
+    const response = await axios.put(apiUrl(`/chat/mute`), null, {
+      params: { conversationId, conversationType, muted },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data; // { muted }
+  } catch (error) {
+    console.error("Error updating mute status:", error);
+    throw error;
+  }
+};
+
 export const deleteConversationFromDatabase = async (conversationId) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No token found.");

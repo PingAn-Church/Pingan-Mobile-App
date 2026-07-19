@@ -37,6 +37,8 @@ import {
   sendMessageToDatabase,
   deleteMessageFromDatabase,
   editMessageInDatabase,
+  getConversationMuteStatus,
+  setConversationMuteStatus,
 } from "../../service/ChatService";
 import {
   getLocalUri as getCachedMedia,
@@ -631,6 +633,39 @@ export default function ChatPage({ route }) {
       return clearActiveConversation;
     }, [conversationId])
   );
+
+  // --- per-conversation notification mute -----------------------------------
+  // Muting only silences push notifications for THIS conversation (filtered
+  // server-side); messages, unread badges and other conversations are unaffected.
+  const [muted, setMuted] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMuted(false);
+    setShowHeaderMenu(false);
+    if (!conversationId || !conversationType) return undefined;
+    getConversationMuteStatus(conversationId, conversationType)
+      .then((res) => {
+        if (!cancelled) setMuted(Boolean(res?.muted));
+      })
+      .catch(() => {}); // show as unmuted; the server keeps the truth
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, conversationType]);
+
+  const toggleMuteNotifications = useCallback(async () => {
+    setShowHeaderMenu(false);
+    const next = !muted;
+    setMuted(next); // optimistic — reverted on failure
+    try {
+      await setConversationMuteStatus(conversationId, conversationType, next);
+    } catch (error) {
+      setMuted(!next);
+      showAlert(i18n.t("error"), i18n.t("muteUpdateFailed"));
+    }
+  }, [muted, conversationId, conversationType]);
 
   // Web two-pane: the user-detail panel is embedded (no focus change), so also
   // re-check when the details panel closes — that's where Block/Unblock lives.
@@ -1489,6 +1524,23 @@ export default function ChatPage({ route }) {
           onPress={handleOpenChatDetails}
         />
       ),
+      // Settings dropdown (mute notifications, ...) for the open conversation.
+      headerRight: conversationId
+        ? () => (
+            <TouchableOpacity
+              onPress={() => setShowHeaderMenu((prev) => !prev)}
+              style={styles.headerMenuButton}
+              accessibilityRole="button"
+              accessibilityLabel={i18n.t(muted ? "unmuteNotifications" : "muteNotifications")}
+            >
+              <Ionicons
+                name={muted ? "notifications-off-outline" : "ellipsis-vertical"}
+                size={21}
+                color="#111827"
+              />
+            </TouchableOpacity>
+          )
+        : undefined,
       headerBackButtonDisplayMode: "minimal",
       headerBackTitle: "",
     });
@@ -1496,8 +1548,10 @@ export default function ChatPage({ route }) {
     activeConversationIcon,
     canOpenChatDetails,
     chatDisplayName,
+    conversationId,
     handleOpenChatDetails,
     language,
+    muted,
     navigation,
   ]);
 
@@ -2547,6 +2601,31 @@ export default function ChatPage({ route }) {
       ) : (
         chatContent
       )}
+
+      <Modal
+        transparent
+        visible={showHeaderMenu}
+        animationType="fade"
+        onRequestClose={() => setShowHeaderMenu(false)}
+      >
+        <View style={styles.menuOverlay} pointerEvents="box-none">
+          <Pressable style={styles.menuBackdrop} onPress={() => setShowHeaderMenu(false)} />
+          <View style={[styles.headerMenu, { top: (headerHeight || 56) + 4 }]}>
+            <TouchableOpacity style={styles.contextMenuItem} onPress={toggleMuteNotifications}>
+              <View style={styles.headerMenuItemRow}>
+                <Ionicons
+                  name={muted ? "notifications-outline" : "notifications-off-outline"}
+                  size={18}
+                  color="#111827"
+                />
+                <Text style={styles.headerMenuItemText}>
+                  {muted ? i18n.t("unmuteNotifications") : i18n.t("muteNotifications")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -3249,6 +3328,35 @@ const styles = StyleSheet.create({
   },
   contextMenuDangerText: {
     color: "#DC2626",
+  },
+  headerMenuButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  headerMenu: {
+    position: "absolute",
+    right: 10,
+    minWidth: 200,
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+  headerMenuItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerMenuItemText: {
+    marginLeft: 10,
+    fontSize: webFontSize(14),
+    color: "#111827",
+    fontWeight: "500",
   },
   messageContentContainer: {
     width: "100%",

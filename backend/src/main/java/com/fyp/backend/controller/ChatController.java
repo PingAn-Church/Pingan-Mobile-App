@@ -4,6 +4,7 @@ import com.fyp.backend.dto.ConversationDto;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.service.ChatService;
+import com.fyp.backend.service.ConversationMuteService;
 import com.fyp.backend.service.ConversationService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
@@ -24,13 +25,16 @@ public class ChatController {
     private final ChatService chatService;
     private final UserService userService;
     private final JwtUtil jwtUtil;
+    private final ConversationMuteService conversationMuteService;
 
     @Autowired
-    public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil, UserService userService) {
+    public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil,
+                          UserService userService, ConversationMuteService conversationMuteService) {
         this.conversationService = conversationService;
         this.chatService = chatService;
         this.userService = userService;
         this.jwtUtil = jwtUtil;
+        this.conversationMuteService = conversationMuteService;
     }
 
     // Fetch user's conversations
@@ -147,6 +151,36 @@ public class ChatController {
             MessageDto sentMessage = chatService.sendMessageAndBroadcast(messageDto, conversationType);
             return ResponseEntity.ok(sentMessage);
 
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // Per-conversation push-notification mute for the logged-in user.
+    @GetMapping("/mute")
+    public ResponseEntity<?> getMuteStatus(@RequestParam Long conversationId,
+                                           @RequestParam String conversationType,
+                                           HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        return ResponseEntity.ok(Map.of(
+                "muted", conversationMuteService.isMuted(userId, conversationId, conversationType)));
+    }
+
+    @PutMapping("/mute")
+    public ResponseEntity<?> setMuteStatus(@RequestParam Long conversationId,
+                                           @RequestParam String conversationType,
+                                           @RequestParam boolean muted,
+                                           HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            conversationMuteService.setMuted(userId, conversationId, conversationType, muted);
+            return ResponseEntity.ok(Map.of("muted", muted));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
