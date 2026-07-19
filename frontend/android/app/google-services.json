@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1032625633031",
+    "project_id": "pingan-app-ee3ac",
+    "storage_bucket": "pingan-app-ee3ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1032625633031:android:b9764400290112ac3837a2",
+        "android_client_info": {
+          "package_name": "org.pingan.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDndjl1B2fxGyW--cMzUs-tYPk3X-GluyI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

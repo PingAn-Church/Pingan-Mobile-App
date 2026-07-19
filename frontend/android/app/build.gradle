@@ -180,3 +180,6 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Firebase Cloud Messaging (push notifications) — reads app/google-services.json.
+apply plugin: 'com.google.gms.google-services'
