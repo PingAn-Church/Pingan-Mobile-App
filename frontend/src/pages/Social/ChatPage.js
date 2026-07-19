@@ -58,6 +58,7 @@ import {
 import { getStompClient } from "../../service/WebSocketService";
 import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../../service/UserService";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
+import { setActiveConversation, clearActiveConversation } from "../../utils/activeConversation";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import VoicePlayer from "../../components/Chat/VoicePlayer";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
@@ -620,6 +621,15 @@ export default function ChatPage({ route }) {
     useCallback(() => {
       refreshBlockStatus();
     }, [refreshBlockStatus])
+  );
+
+  // Report the on-screen conversation while this screen is focused, so the
+  // foreground notification handler (App.js) silences pushes for it.
+  useFocusEffect(
+    useCallback(() => {
+      setActiveConversation(conversationId);
+      return clearActiveConversation;
+    }, [conversationId])
   );
 
   // Web two-pane: the user-detail panel is embedded (no focus change), so also

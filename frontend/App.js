@@ -64,6 +64,7 @@ import i18n from "./i18n";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import { AppUpdateProvider } from "./src/context/AppUpdateContext";
 import * as Notifications from "expo-notifications";
+import { isConversationActive } from "./src/utils/activeConversation";
 
 // E-learning module
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -100,12 +101,24 @@ if (Platform.OS === "web" && typeof document !== "undefined") {
   document.documentElement.style.colorScheme = "light";
 }
 
+// Foreground notification policy: chat pushes stay silent while that exact
+// conversation is already on screen; anywhere else in the app they banner as
+// usual. Pushes received while the app is backgrounded or closed are displayed
+// by the OS directly and never reach this handler.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification?.request?.content?.data ?? {};
+    const suppress =
+      (data.conversationType === "private" || data.conversationType === "group") &&
+      isConversationActive(data.conversationId);
+    return {
+      shouldShowAlert: !suppress,
+      shouldShowBanner: !suppress,
+      shouldShowList: !suppress,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 const Stack = createNativeStackNavigator();

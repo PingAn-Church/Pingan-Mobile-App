@@ -113,8 +113,11 @@ public class ChatService {
 
     private MessageDto buildResponseDto(Message message, Conversation conversation) {
         MessageDto responseDto = new MessageDto(message);
+        // Recipients exclude the sender — the fan-out echoes to the sender's queue
+        // separately, and the sender must never be push-notified for their own message.
         List<Long> recipientIds = conversation.getParticipants().stream()
                 .map(User::getId)
+                .filter(id -> !id.equals(message.getSender().getId()))
                 .collect(Collectors.toList());
         responseDto.setRecipientIds(recipientIds);
         return responseDto;
