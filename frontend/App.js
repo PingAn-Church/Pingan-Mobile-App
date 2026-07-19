@@ -188,7 +188,9 @@ function HomeTabsNavigator() {
           options={{ headerTitle: i18n.t("Events") }}
         />
       )}
-      {user && (
+      {/* Chat/forum entry is hidden until verified; SocialPage keeps its own
+          not-verified guard for anyone who still lands there (e.g. deep link). */}
+      {user?.verifiedUser && (
         <Tab.Screen
           name="Social"
           component={SocialPage}
