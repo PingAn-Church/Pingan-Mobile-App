@@ -62,10 +62,14 @@ const normalizePresignedUrl = (url) => {
 export const getPresignedUploadUrl = async (fileName, fileType) => {
   try {
     const normalizedFileName = normalizeFileName(fileName);
+    // The backend only allows anonymous presigning for "profile" (registration
+    // flow); every other type (group icons etc.) requires the JWT.
+    const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/presigned-upload-url`),
       {
         params: { fileName: normalizedFileName, fileType },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
     return response.data;
