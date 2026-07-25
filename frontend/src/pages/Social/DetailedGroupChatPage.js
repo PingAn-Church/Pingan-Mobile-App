@@ -321,12 +321,17 @@ const DetailedGroupChatPage = ({ route }) => {
         />
         <Text style={styles.groupName}>{conversation.groupName}</Text>
 
-        <TouchableOpacity
-          onPress={handleChangeGroupIcon}
-          style={styles.changeIconButton}
-        >
-          <Text style={styles.changeIconText}>{i18n.t("changeImage")}</Text>
-        </TouchableOpacity>
+        {/* Backend updateGroupIcon is admin-only; only admins get the control so
+            non-admins never hit the guaranteed "only admins" 400 (shown as a generic
+            failure). Matches every other mutating action on this screen. */}
+        {isAdmin && (
+          <TouchableOpacity
+            onPress={handleChangeGroupIcon}
+            style={styles.changeIconButton}
+          >
+            <Text style={styles.changeIconText}>{i18n.t("changeImage")}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Leave Group Button */}

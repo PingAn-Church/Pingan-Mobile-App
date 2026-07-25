@@ -301,9 +301,16 @@ export const deletePicture = async (fileName, fileType) => {
 export const getConversationUploadUrl = async (fileName, conversationId, contentType = "image/jpeg") => {
   try {
     const normalizedFileName = normalizeFileName(fileName);
+    // This endpoint is login-gated (SpringSecurityConfig marks it .authenticated()).
+    // Without the JWT the presign is rejected and chat image/voice sends fail — the
+    // same gap that broke group-icon uploads.
+    const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/conversations/presigned-upload-url`),
-      { params: { fileName: normalizedFileName, conversationId, contentType } }
+      {
+        params: { fileName: normalizedFileName, conversationId, contentType },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
     );
     const presignedUrl = String(response.data || "").trim();
 

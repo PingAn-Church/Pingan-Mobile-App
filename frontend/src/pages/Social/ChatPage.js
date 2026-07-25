@@ -639,6 +639,24 @@ export default function ChatPage({ route }) {
   // server-side); messages, unread badges and other conversations are unaffected.
   const [muted, setMuted] = useState(false);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  // Anchor the header dropdown to the actual header button. useHeaderHeight() doesn't
+  // reliably share the Modal overlay's window-coordinate origin (the overlay uses raw
+  // pageY like the context menu), so we measure the button in window space instead of
+  // guessing from the header height — otherwise the menu drifts down-screen.
+  const headerMenuButtonRef = useRef(null);
+  const [headerMenuTop, setHeaderMenuTop] = useState(null);
+
+  const openHeaderMenu = useCallback(() => {
+    const node = headerMenuButtonRef.current;
+    if (node && typeof node.measureInWindow === "function") {
+      node.measureInWindow((x, y, width, height) => {
+        if (typeof y === "number" && typeof height === "number") {
+          setHeaderMenuTop(y + height + 4);
+        }
+      });
+    }
+    setShowHeaderMenu((prev) => !prev);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1528,7 +1546,8 @@ export default function ChatPage({ route }) {
       headerRight: conversationId
         ? () => (
             <TouchableOpacity
-              onPress={() => setShowHeaderMenu((prev) => !prev)}
+              ref={headerMenuButtonRef}
+              onPress={openHeaderMenu}
               style={styles.headerMenuButton}
               accessibilityRole="button"
               accessibilityLabel={i18n.t(muted ? "unmuteNotifications" : "muteNotifications")}
@@ -2610,7 +2629,7 @@ export default function ChatPage({ route }) {
       >
         <View style={styles.menuOverlay} pointerEvents="box-none">
           <Pressable style={styles.menuBackdrop} onPress={() => setShowHeaderMenu(false)} />
-          <View style={[styles.headerMenu, { top: (headerHeight || 56) + 4 }]}>
+          <View style={[styles.headerMenu, { top: headerMenuTop ?? (headerHeight || 56) + 4 }]}>
             <TouchableOpacity style={styles.contextMenuItem} onPress={toggleMuteNotifications}>
               <View style={styles.headerMenuItemRow}>
                 <Ionicons
