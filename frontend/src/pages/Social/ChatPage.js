@@ -2110,7 +2110,7 @@ export default function ChatPage({ route }) {
 
                     showAlert(i18n.t("success"), i18n.t("copied"));
                   } catch (error) {
-                    showAlert(i18n.t("error"), i18n.t("somethingWentWrong"));
+                    showAlert(i18n.t("error"), i18n.t("copyFailed"));
                   }
                 }}
               >

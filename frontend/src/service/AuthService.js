@@ -91,7 +91,13 @@ export const loginUser = async (loginDetails) => {
     }
   } catch (error) {
     console.error("❌ Error logging in user:", error.response?.data || error);
-    return { success: false, error: error.response?.data || "Login failed." };  // Handle error case
+    // Expose the HTTP status so the screen can tell apart wrong credentials /
+    // deactivated account (401) from a network failure (no response at all).
+    return {
+      success: false,
+      status: error.response?.status ?? null,
+      error: error.response?.data || "Login failed.",
+    };
   }
 };
 

@@ -387,9 +387,8 @@ export function EventFormPage() {
       navigation.goBack();
     } catch (error) {
       console.log("error: ", error);
-      showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
-        { text: i18n.t("ok") },
-      ]);
+      const messageKey = error?.response ? "saveEventFailed" : "networkError";
+      showAlert(i18n.t("error"), i18n.t(messageKey), [{ text: i18n.t("ok") }]);
     } finally {
       setSubmitting(false);
     }

@@ -65,12 +65,26 @@ const LoginPage = () => {
           routes: [{ name: "HomeTabs", params: { screen: "Home" } }],
         });
       } else {
-        showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
-          { text: i18n.t("ok") },
-        ]);
+        // Turn the backend's rejection into a specific, actionable message:
+        // 401 → wrong credentials (or a deactivated account), no response → offline.
+        const status = response?.status;
+        const backendMessage =
+          typeof response?.error === "string" ? response.error : "";
+        let messageKey = "somethingWentWrong";
+        if (status == null) {
+          messageKey = "networkError";
+        } else if (status === 401) {
+          messageKey = /deactiv/i.test(backendMessage)
+            ? "accountDeactivatedContactAdmin"
+            : "invalidCredentials";
+        }
+        showAlert(i18n.t("error"), i18n.t(messageKey), [{ text: i18n.t("ok") }]);
       }
     } catch (error) {
-      showAlert(i18n.t("error"), i18n.t("loginFailed"), [
+      // loginUser resolves on API errors, so reaching here means a later step
+      // (profile fetch, push-token registration) failed after credentials were OK.
+      const messageKey = error?.response ? "somethingWentWrong" : "networkError";
+      showAlert(i18n.t("error"), i18n.t(messageKey), [
         { text: i18n.t("ok") },
       ]);
     } finally {
@@ -178,9 +192,9 @@ export function ForgotPasswordPage() {
         },
       ]);
     } catch (error) {
-      showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [
-        { text: i18n.t("ok") },
-      ]);
+      // Distinguish "couldn't reach the server" from a server-side failure.
+      const messageKey = error?.response ? "somethingWentWrong" : "networkError";
+      showAlert(i18n.t("error"), i18n.t(messageKey), [{ text: i18n.t("ok") }]);
     } finally {
       setSubmitting(false);
     }
