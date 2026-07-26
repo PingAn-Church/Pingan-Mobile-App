@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CertificateRepository;
 import com.fyp.backend.repository.CourseEnrollmentRepository;
@@ -103,6 +105,21 @@ class UserAccountDeletionServiceTest {
         u.setAdmin(admin);
         u.setProfileImage(AVATAR);
         return u;
+    }
+
+    private User member(long id) {
+        User u = new User();
+        u.setId(id);
+        return u;
+    }
+
+    private GroupConversation group(long groupId, List<User> participants, List<User> admins) {
+        GroupConversation g = new GroupConversation();
+        g.setId(groupId);
+        g.setGroupName("Group " + groupId);
+        g.setParticipants(participants);
+        g.setAdmins(admins);
+        return g;
     }
 
     @BeforeEach
@@ -200,5 +217,80 @@ class UserAccountDeletionServiceTest {
         assertThrows(RuntimeException.class, () -> service.deleteUserCompletely(ID));
 
         verify(userRepository, never()).deleteById(anyLong());
+    }
+
+    // ---- group cleanup (regression: LazyInitializationException on participants) --
+
+    @Test
+    void deletingUserInAGroupWithOtherMembersRemovesThemAndKeepsGroup() {
+        User target = user(false, false);
+        User other = member(99L);
+        List<User> participants = new ArrayList<>(List.of(target, other));
+        List<User> admins = new ArrayList<>(List.of(target)); // leaving user was the sole admin
+        GroupConversation g = group(7L, participants, admins);
+
+        when(userRepository.findById(ID)).thenReturn(Optional.of(target));
+        when(groupConversationRepository.findByParticipantId(ID)).thenReturn(List.of(g));
+        when(groupConversationRepository.findById(7L)).thenReturn(Optional.of(g));
+
+        service.deleteUserCompletely(ID);
+
+        // Leaving user pulled from participants + admins; the remaining member promoted.
+        org.junit.jupiter.api.Assertions.assertFalse(
+                participants.stream().anyMatch(u -> ID.equals(u.getId())));
+        org.junit.jupiter.api.Assertions.assertTrue(admins.contains(other));
+        // Group survives — membership change persisted, not deleted; only the leaving
+        // user's own messages are removed from a surviving group.
+        verify(groupConversationRepository).save(g);
+        verify(groupConversationRepository, never()).delete(g);
+        verify(messageRepository).deleteByConversationIdAndSenderIdBulk(7L, ID);
+        verify(userRepository).deleteById(ID);
+    }
+
+    @Test
+    void deletingTheLastMemberDeletesTheWholeGroup() {
+        User target = user(false, false);
+        List<User> participants = new ArrayList<>(List.of(target)); // only member left
+        List<User> admins = new ArrayList<>(List.of(target));
+        GroupConversation g = group(8L, participants, admins);
+
+        when(userRepository.findById(ID)).thenReturn(Optional.of(target));
+        when(groupConversationRepository.findByParticipantId(ID)).thenReturn(List.of(g));
+        when(groupConversationRepository.findById(8L)).thenReturn(Optional.of(g));
+
+        service.deleteUserCompletely(ID);
+
+        // Empty group removed entirely, with all of its messages purged.
+        verify(groupConversationRepository).delete(g);
+        verify(groupConversationRepository, never()).save(g);
+        verify(messageRepository).deleteByConversationIdBulk(8L);
+        verify(userRepository).deleteById(ID);
+    }
+
+    @Test
+    void deletingUserInMultipleGroupsProcessesEachViaFreshRefetch() {
+        User target = user(false, false);
+        GroupConversation g1 = group(7L,
+                new ArrayList<>(List.of(target, member(91L))),
+                new ArrayList<>(List.of(member(91L))));
+        GroupConversation g2 = group(9L,
+                new ArrayList<>(List.of(target, member(92L))),
+                new ArrayList<>(List.of(member(92L))));
+
+        when(userRepository.findById(ID)).thenReturn(Optional.of(target));
+        when(groupConversationRepository.findByParticipantId(ID)).thenReturn(List.of(g1, g2));
+        when(groupConversationRepository.findById(7L)).thenReturn(Optional.of(g1));
+        when(groupConversationRepository.findById(9L)).thenReturn(Optional.of(g2));
+
+        service.deleteUserCompletely(ID);
+
+        // Each group is re-fetched fresh (not reused from the initial list) and
+        // updated — the fix for the multi-group LazyInitializationException, where
+        // purging one group's messages detaches the others.
+        verify(groupConversationRepository).findById(7L);
+        verify(groupConversationRepository).findById(9L);
+        verify(groupConversationRepository).save(g1);
+        verify(groupConversationRepository).save(g2);
+        verify(userRepository).deleteById(ID);
     }
 }

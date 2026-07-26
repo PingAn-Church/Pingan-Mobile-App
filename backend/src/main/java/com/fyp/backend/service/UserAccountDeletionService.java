@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -168,15 +169,22 @@ public class UserAccountDeletionService {
             privateConversationRepository.delete(pc);
         }
 
-        Set<Long> handledGroups = new HashSet<>();
+        // Collect the affected group ids up front (both queries run before any
+        // context-clearing delete), then process each by RE-FETCHING it fresh.
+        // Purging one group's messages clears the persistence context and detaches
+        // every other GroupConversation still held from these result lists, so those
+        // managed instances must not be reused across iterations — re-fetch per group
+        // so each is attached when its lazy participants/admins are read.
+        Set<Long> affectedGroupIds = new LinkedHashSet<>();
         for (GroupConversation g : groupConversationRepository.findByParticipantId(userId)) {
-            purgeUserFromGroup(g, userId, true);
-            handledGroups.add(g.getId());
+            affectedGroupIds.add(g.getId());
         }
         for (GroupConversation g : groupConversationRepository.findByAdminId(userId)) {
-            if (handledGroups.add(g.getId())) {
-                purgeUserFromGroup(g, userId, true);
-            }
+            affectedGroupIds.add(g.getId());
+        }
+        for (Long groupId : affectedGroupIds) {
+            groupConversationRepository.findById(groupId)
+                    .ifPresent(g -> purgeUserFromGroup(g, userId, true));
         }
 
         messageRepository.deleteReadReceiptsByUserId(userId);
@@ -294,34 +302,51 @@ public class UserAccountDeletionService {
      * Remove a user from a group. Their own messages are always deleted (accounts
      * are now removed completely); if the group ends up empty it is deleted too,
      * otherwise an admin is promoted so the group keeps a manager.
+     *
+     * <p><b>Order matters.</b> The group's lazy {@code participants}/{@code admins}
+     * ({@code @ManyToMany}) are read and updated <em>first</em>, while {@code g} is
+     * still attached to the persistence context. The message deletes below are
+     * {@code @Modifying(clearAutomatically = true)}: they clear the context and
+     * detach {@code g}, after which touching an <em>uninitialised</em> lazy
+     * collection throws {@code LazyInitializationException} ("could not initialize
+     * proxy - no Session") — the failure that broke deletion for anyone in a group.
+     * Reading the collections here initialises them, and the membership change is
+     * flushed before the context is cleared.
      */
     private void purgeUserFromGroup(GroupConversation g, Long userId, boolean deleteOwnMessages) {
-        if (deleteOwnMessages) {
-            deleteOwnMessages(g.getId(), userId);
+        List<User> participants = g.getParticipants();
+        if (participants != null) {
+            participants.removeIf(u -> userId.equals(u.getId()));
+        }
+        List<User> admins = g.getAdmins();
+        if (admins != null) {
+            admins.removeIf(u -> userId.equals(u.getId()));
         }
 
-        if (g.getParticipants() != null) {
-            g.getParticipants().removeIf(u -> userId.equals(u.getId()));
-        }
-        if (g.getAdmins() != null) {
-            g.getAdmins().removeIf(u -> userId.equals(u.getId()));
-        }
-
-        boolean noParticipants = g.getParticipants() == null || g.getParticipants().isEmpty();
-        if (noParticipants) {
+        if (participants == null || participants.isEmpty()) {
+            // Last member gone — remove the whole group: icon, every message, the row.
             List<String> groupIcon = new ArrayList<>();
             addObjectUrl(groupIcon, g.getGroupIcon());
             deleteObjectsAfterCommit(groupIcon);
             purgeConversationMessages(g.getId());
             groupConversationRepository.delete(g);
-        } else {
-            if (g.getAdmins() == null) {
-                g.setAdmins(new ArrayList<>());
-            }
-            if (g.getAdmins().isEmpty()) {
-                g.getAdmins().add(g.getParticipants().get(0));
-            }
-            groupConversationRepository.save(g);
+            return;
+        }
+
+        // Someone remains: keep a manager, then persist the membership change now,
+        // while `g` is still attached (flushed before the message delete clears the
+        // context; `g` is not touched again afterwards).
+        if (admins == null) {
+            admins = new ArrayList<>();
+            g.setAdmins(admins);
+        }
+        if (admins.isEmpty()) {
+            admins.add(participants.get(0));
+        }
+        groupConversationRepository.save(g);
+
+        if (deleteOwnMessages) {
+            deleteOwnMessages(g.getId(), userId);
         }
     }
 
