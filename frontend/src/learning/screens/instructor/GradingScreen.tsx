@@ -19,6 +19,7 @@ import {
   type PendingQuestion,
 } from "@/services/gradingService";
 import { notify } from "@/utils/alerts";
+import i18n from "../../../../i18n";
 
 function QuestionGrader({
   attemptId,
@@ -36,7 +37,7 @@ function QuestionGrader({
   const save = async () => {
     const awarded = Number(points);
     if (!Number.isFinite(awarded) || awarded < 0 || awarded > q.points) {
-      notify("Invalid points", `Points must be between 0 and ${q.points}.`);
+      notify(i18n.t("invalidPoints"), i18n.t("pointsRange", { max: q.points }));
       return;
     }
     setSaving(true);
@@ -49,7 +50,7 @@ function QuestionGrader({
       });
       onGraded();
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to save the grade.");
+      notify(i18n.t("error"), e?.message || i18n.t("gradeSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -58,14 +59,14 @@ function QuestionGrader({
   return (
     <View style={styles.questionBox}>
       <Text style={styles.questionText}>{q.question}</Text>
-      <Text style={styles.answerLabel}>Student's answer</Text>
-      <Text style={styles.studentAnswer}>{q.studentAnswer || "(no answer)"}</Text>
-      <Text style={styles.answerLabel}>Expected answer</Text>
+      <Text style={styles.answerLabel}>{i18n.t("studentAnswer")}</Text>
+      <Text style={styles.studentAnswer}>{q.studentAnswer || i18n.t("noAnswer")}</Text>
+      <Text style={styles.answerLabel}>{i18n.t("expectedAnswer")}</Text>
       <Text style={styles.expectedAnswer}>{q.expectedAnswer || "—"}</Text>
 
       <View style={styles.gradeRow}>
         <View style={styles.pointsWrap}>
-          <Text style={styles.answerLabel}>Points (max {q.points})</Text>
+          <Text style={styles.answerLabel}>{i18n.t("pointsMax", { max: q.points })}</Text>
           <TextInput
             style={styles.pointsInput}
             value={points}
@@ -74,12 +75,12 @@ function QuestionGrader({
           />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.answerLabel}>Feedback (optional)</Text>
+          <Text style={styles.answerLabel}>{i18n.t("feedbackOptional")}</Text>
           <TextInput
             style={styles.feedbackInput}
             value={feedback}
             onChangeText={setFeedback}
-            placeholder="Shown to the learner"
+            placeholder={i18n.t("shownToLearner")}
             placeholderTextColor={Colors.textMuted}
           />
         </View>
@@ -87,7 +88,7 @@ function QuestionGrader({
 
       <TouchableOpacity style={styles.gradeBtn} onPress={save} disabled={saving}>
         <Ionicons name="checkmark" size={16} color={Colors.white} />
-        <Text style={styles.gradeBtnText}>{saving ? "Saving..." : "Save grade"}</Text>
+        <Text style={styles.gradeBtnText}>{saving ? i18n.t("saving") : i18n.t("saveGrade")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -101,7 +102,7 @@ function AttemptCard({ item, onGraded }: { item: PendingAttempt; onGraded: () =>
         {item.quizTitle}
       </Text>
       <Text style={styles.cardMeta}>
-        {item.courseTitle} • {item.studentName} • attempt {item.attemptNumber}
+        {item.courseTitle} • {item.studentName} • {i18n.t("attemptN", { n: item.attemptNumber })}
         {submitted ? ` • ${submitted}` : ""}
       </Text>
       {item.questions.map((q) => (
@@ -153,17 +154,17 @@ export default function GradingScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.heading}>Quiz Grading</Text>
+        <Text style={styles.heading}>{i18n.t("quizGrading")}</Text>
       </View>
 
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load the grading queue.</Text>
+        <Text style={styles.empty}>{i18n.t("gradingQueueLoadFailed")}</Text>
       ) : attempts.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="checkmark-done-circle-outline" size={48} color={Colors.textMuted} />
-          <Text style={styles.empty}>All caught up — no answers waiting for review.</Text>
+          <Text style={styles.empty}>{i18n.t("gradingAllCaughtUp")}</Text>
         </View>
       ) : (
         <FlatList

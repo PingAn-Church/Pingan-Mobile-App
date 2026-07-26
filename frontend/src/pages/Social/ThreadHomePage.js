@@ -122,6 +122,7 @@ import {
 import { fetchThreadById, fetchThreads } from "../../service/ThreadService";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
@@ -316,7 +317,9 @@ const ThreadHomePage = () => {
                 : item.content}
             </Text>
             <View style={styles.metaRow}>
-              <Text style={styles.threadMeta}>by {item.createdByName}</Text>
+              <Text style={styles.threadMeta}>
+                by {formatName(item.createdByFirstName, item.createdByLastName) || item.createdByName}
+              </Text>
               <Text style={styles.threadMeta}>{formatDateTime(item.createdAt)}</Text>
             </View>
           </TouchableOpacity>
@@ -366,7 +369,7 @@ const ThreadHomePage = () => {
                 )}
                 <View style={styles.metaRow}>
                   <Text style={styles.threadMeta}>
-                    {i18n.t("by")} {item.createdByName}
+                    {i18n.t("by")} {formatName(item.createdByFirstName, item.createdByLastName) || item.createdByName}
                   </Text>
                   <Text style={styles.threadMeta}>
                     {formatDateTime(item.createdAt)}

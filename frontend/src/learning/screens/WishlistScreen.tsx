@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getWishlist } from "@/services/enrollmentService";
 import { CourseCard } from "./CoursesScreen";
+import i18n from "../../../i18n";
 
 export default function WishlistScreen() {
   const navigation = useNavigation<any>();
@@ -23,13 +24,13 @@ export default function WishlistScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Wishlist</Text>
+      <Text style={styles.heading}>{i18n.t("wishlist")}</Text>
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load your wishlist.</Text>
+        <Text style={styles.empty}>{i18n.t("wishlistLoadFailed")}</Text>
       ) : courses.length === 0 ? (
-        <Text style={styles.empty}>Your wishlist is empty.</Text>
+        <Text style={styles.empty}>{i18n.t("wishlistEmpty")}</Text>
       ) : (
         <FlatList
           data={courses}

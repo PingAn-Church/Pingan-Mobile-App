@@ -12,6 +12,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getAllCoursesAdmin } from "@/services/authoringService";
+import i18n from "../../../../i18n";
 
 export default function CourseManagementScreen() {
   const navigation = useNavigation<any>();
@@ -42,22 +43,22 @@ export default function CourseManagementScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.heading}>Course Management</Text>
+        <Text style={styles.heading}>{i18n.t("courseManagement")}</Text>
         <TouchableOpacity
           style={styles.newBtn}
           onPress={() => navigation.navigate("CourseEditor", { courseId: null })}
         >
           <Ionicons name="add" size={18} color={Colors.white} />
-          <Text style={styles.newBtnText}>New</Text>
+          <Text style={styles.newBtnText}>{i18n.t("newLabel")}</Text>
         </TouchableOpacity>
       </View>
 
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load courses.</Text>
+        <Text style={styles.empty}>{i18n.t("coursesLoadFailed")}</Text>
       ) : courses.length === 0 ? (
-        <Text style={styles.empty}>No courses yet. Tap “New” to create one.</Text>
+        <Text style={styles.empty}>{i18n.t("noCoursesYetCreate")}</Text>
       ) : (
         <FlatList
           data={courses}
@@ -80,11 +81,11 @@ export default function CourseManagementScreen() {
                   {item.title}
                 </Text>
                 <Text style={styles.rowMeta}>
-                  {item.categoryName} • {item.totalSections} modules • {item.totalVideos} videos
+                  {item.categoryName} • {item.totalSections} {i18n.t("modules")} • {item.totalVideos} {i18n.t("videos")}
                 </Text>
               </View>
               <View style={[styles.badge, item.isPublished ? styles.badgePublished : styles.badgeDraft]}>
-                <Text style={styles.badgeText}>{item.isPublished ? "Published" : "Draft"}</Text>
+                <Text style={styles.badgeText}>{item.isPublished ? i18n.t("published") : i18n.t("draft")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
             </TouchableOpacity>

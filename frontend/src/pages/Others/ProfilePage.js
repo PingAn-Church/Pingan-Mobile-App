@@ -33,6 +33,7 @@ import { changePassword } from "../../service/AuthService";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { showAlert } from "../../utils/showAlert";
 import AppUpdateStatusIcon from "../../components/AppUpdateStatusIcon";
 import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
@@ -123,7 +124,7 @@ export default function ProfilePage() {
               key: "1",
               icon: "person-outline",
               label: "name",
-              value: data.firstName + " " + data.lastName,
+              value: formatName(data.firstName, data.lastName),
             },
             {
               key: "2",

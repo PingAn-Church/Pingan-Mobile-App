@@ -479,6 +479,7 @@ import { UserContext } from "../../context/UserContext";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
@@ -795,7 +796,10 @@ const ThreadDetailPage = ({ route }) => {
                   <Text style={styles.threadTitle}>{thread.title}</Text>
                 )}
                 <Text style={styles.threadMeta}>
-                  {i18n.t("by")} {thread.createdByName} •{" "}
+                  {i18n.t("by")}{" "}
+                  {formatName(thread.createdByFirstName, thread.createdByLastName) ||
+                    thread.createdByName}{" "}
+                  •{" "}
                   {formatDateTime(thread.createdAt)}
                 </Text>
 
@@ -853,7 +857,7 @@ const ThreadDetailPage = ({ route }) => {
             return (
               <View style={styles.replyItem}>
                 <Text style={styles.replyAuthor}>
-                  {item.authorName} • {formatDateTime(item.createdAt)}
+                  {formatName(item.authorFirstName, item.authorLastName) || item.authorName} • {formatDateTime(item.createdAt)}
                 </Text>
                 <Text style={styles.reportedPlaceholder}>
                   {i18n.t("reportedPendingReview")}
@@ -864,7 +868,7 @@ const ThreadDetailPage = ({ route }) => {
           return (
           <View style={styles.replyItem}>
             <Text style={styles.replyAuthor}>
-              {item.authorName} • {formatDateTime(item.createdAt)}
+              {formatName(item.authorFirstName, item.authorLastName) || item.authorName} • {formatDateTime(item.createdAt)}
             </Text>
             {editingReplyId === item.id ? (
               <>

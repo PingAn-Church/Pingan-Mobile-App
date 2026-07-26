@@ -7,6 +7,7 @@
  */
 import React, { createContext, useContext, useMemo } from "react";
 import { UserContext } from "../../context/UserContext";
+import { formatName } from "../../utils/formatName";
 
 export type LearningRole = "student" | "instructor" | "admin";
 
@@ -40,7 +41,7 @@ const toLearningUser = (pinganUser: any): LearningUser | null => {
   const isInstructor = !!pinganUser.instructor || isAdmin;
   const role: LearningRole = isAdmin ? "admin" : isInstructor ? "instructor" : "student";
   const name =
-    [pinganUser.firstName, pinganUser.lastName].filter(Boolean).join(" ").trim() ||
+    formatName(pinganUser.firstName, pinganUser.lastName) ||
     pinganUser.email ||
     "User";
   return {

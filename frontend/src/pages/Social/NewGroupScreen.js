@@ -24,6 +24,7 @@ import { UserContext } from "../../context/UserContext";
 import { useNavigation } from "@react-navigation/native";
 import useUserSearch from "../../hooks/useUserSearch";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const NewGroupScreen = () => {
@@ -186,7 +187,7 @@ const NewGroupScreen = () => {
         ]}
       >
         <Text style={styles.userText}>
-          {item.firstName} {item.lastName}
+          {formatName(item.firstName, item.lastName)}
         </Text>
         {Platform.OS === "web" && (
           <View

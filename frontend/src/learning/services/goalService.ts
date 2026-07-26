@@ -1,4 +1,5 @@
 import apiService from "./apiService";
+import i18n from "../../../i18n";
 
 export type GoalMetric = "courses_completed" | "quizzes_passed" | "minutes_spent";
 
@@ -83,9 +84,9 @@ export const clearGoal = (goalId: string) =>
 
 export const metricLabel = (metric: string): string =>
   metric === "courses_completed"
-    ? "courses"
+    ? i18n.t("metricCourses")
     : metric === "quizzes_passed"
-    ? "quizzes"
+    ? i18n.t("metricQuizzes")
     : metric === "minutes_spent"
-    ? "minutes"
+    ? i18n.t("metricMinutes")
     : "";

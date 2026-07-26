@@ -118,6 +118,8 @@ public class ReviewService {
 
     private Map<String, Object> reviewMap(CourseRating r, User providedUser, User requester) {
         String name = "Anonymous";
+        String firstName = null;
+        String lastName = null;
         String avatar = null;
         if (!r.isAnonymous()) {
             User u = providedUser != null ? providedUser : userRepository.findById(r.getUserId()).orElse(null);
@@ -125,6 +127,10 @@ public class ReviewService {
                 String full = ((u.getFirstName() == null ? "" : u.getFirstName()) + " "
                         + (u.getLastName() == null ? "" : u.getLastName())).trim();
                 name = full.isEmpty() ? (u.getEmail() == null ? "User" : u.getEmail()) : full;
+                // Components so the client orders the name per its display language;
+                // left null for anonymous/empty so it falls back to reviewerName.
+                firstName = u.getFirstName();
+                lastName = u.getLastName();
                 avatar = u.getProfileImage();
             }
         }
@@ -138,6 +144,8 @@ public class ReviewService {
         m.put("review", canView ? r.getReview() : null);
         m.put("isAnonymous", canView && r.isAnonymous());
         m.put("reviewerName", name);
+        m.put("reviewerFirstName", firstName);
+        m.put("reviewerLastName", lastName);
         m.put("reviewerAvatar", avatar);
         m.put("createdAt", r.getCreatedAt());
         m.put("instructorReply", canView ? r.getInstructorReply() : null);

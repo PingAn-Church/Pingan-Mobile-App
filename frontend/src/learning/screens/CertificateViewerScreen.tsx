@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import type { Certificate } from "@/services/certificateService";
+import i18n from "../../../i18n";
 
 export default function CertificateViewerScreen() {
   const navigation = useNavigation<any>();
@@ -11,13 +12,13 @@ export default function CertificateViewerScreen() {
   const cert: Certificate | undefined = route.params?.certificate;
 
   useEffect(() => {
-    navigation.setOptions({ title: "Certificate" });
+    navigation.setOptions({ title: i18n.t("certificate") });
   }, [navigation]);
 
   if (!cert) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Text style={styles.muted}>Certificate unavailable.</Text>
+        <Text style={styles.muted}>{i18n.t("certificateUnavailable")}</Text>
       </View>
     );
   }
@@ -28,14 +29,14 @@ export default function CertificateViewerScreen() {
     <View style={[styles.container, styles.center]}>
       <View style={styles.cert}>
         <Ionicons name="ribbon" size={56} color={Colors.starGold} />
-        <Text style={styles.kicker}>Certificate of Completion</Text>
-        <Text style={styles.label}>This certifies that</Text>
-        <Text style={styles.name}>{cert.userName || "Learner"}</Text>
-        <Text style={styles.label}>has successfully completed</Text>
+        <Text style={styles.kicker}>{i18n.t("certificateOfCompletion")}</Text>
+        <Text style={styles.label}>{i18n.t("certifiesThat")}</Text>
+        <Text style={styles.name}>{cert.userName || i18n.t("learner")}</Text>
+        <Text style={styles.label}>{i18n.t("hasCompleted")}</Text>
         <Text style={styles.course}>{cert.courseTitle}</Text>
-        {!!issued && <Text style={styles.date}>Issued {issued}</Text>}
+        {!!issued && <Text style={styles.date}>{i18n.t("issuedOn", { date: issued })}</Text>}
         <View style={styles.divider} />
-        <Text style={styles.number}>No. {cert.certificateNumber}</Text>
+        <Text style={styles.number}>{i18n.t("certificateNo", { number: cert.certificateNumber })}</Text>
       </View>
     </View>
   );

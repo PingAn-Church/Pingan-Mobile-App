@@ -29,6 +29,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import defaultProfileImage from "../../../assets/user.png";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { isTranslationEnabled, translateText } from "../../service/TranslateService";
 import { UserContext } from "../../context/UserContext";
 import { ChatContext } from "../../context/ChatContext";
@@ -516,7 +517,7 @@ export default function ChatPage({ route }) {
         setParticipants(
           userDetails.map((u) => ({
             id: u.id,
-            fullName: `${u.firstName} ${u.lastName}`,
+            fullName: formatName(u.firstName, u.lastName),
             email: u.email,
             profileImage: u.profileImage,
           }))
@@ -1584,6 +1585,11 @@ export default function ChatPage({ route }) {
         if (!isGroup) {
           const participantIds = conv.participants || [];
           const names = conv.participantNames || [];
+          const profiles = conv.participantProfiles || [];
+          // Prefer raw name components so the title honours the display-language
+          // order (Chinese = family name first); fall back to the combined name.
+          const nameAt = (idx) =>
+            formatName(profiles[idx]?.firstName, profiles[idx]?.lastName) || names[idx];
           const selfIndex = participantIds.findIndex(
             (participantId) => String(participantId) === String(currentUser?.id)
           );
@@ -1591,10 +1597,11 @@ export default function ChatPage({ route }) {
             (participantId) => String(participantId) !== String(currentUser?.id)
           );
 
-          if (otherIndex !== -1 && names[otherIndex]) {
-            title = names[otherIndex];
+          if (otherIndex !== -1 && nameAt(otherIndex)) {
+            title = nameAt(otherIndex);
           } else if (selfIndex !== -1 && names.length > 1) {
-            title = names.find((_, idx) => idx !== selfIndex) || i18n.t("privateChat");
+            const otherIdx = participantIds.findIndex((_, idx) => idx !== selfIndex);
+            title = (otherIdx !== -1 && nameAt(otherIdx)) || i18n.t("privateChat");
           } else {
             title = i18n.t("privateChat");
           }
@@ -2356,7 +2363,7 @@ export default function ChatPage({ route }) {
                         />
                         <View style={styles.sidebarTextWrap}>
                           <Text style={styles.sidebarConversationTitle} numberOfLines={1}>
-                            {`${item?.firstName || ""} ${item?.lastName || ""}`.trim() || i18n.t("unknownUser")}
+                            {formatName(item?.firstName, item?.lastName) || i18n.t("unknownUser")}
                           </Text>
                           <Text style={styles.sidebarConversationPreview} numberOfLines={1}>
                             {item?.email || ""}
@@ -2446,7 +2453,7 @@ export default function ChatPage({ route }) {
                         />
                         <View style={styles.sidebarTextWrap}>
                           <Text style={styles.sidebarConversationTitle} numberOfLines={1}>
-                            {`${item?.firstName || ""} ${item?.lastName || ""}`.trim() || i18n.t("unknownUser")}
+                            {formatName(item?.firstName, item?.lastName) || i18n.t("unknownUser")}
                           </Text>
                           <Text style={styles.sidebarConversationPreview} numberOfLines={1}>
                             {item?.email || ""}

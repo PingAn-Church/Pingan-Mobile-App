@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants";
+import i18n from "../../../../i18n";
 
 export interface MatchPair {
   left: string;
@@ -64,7 +65,7 @@ export default function MatchingQuestion({ left, right, value, onChange }: Props
   return (
     <View>
       <Text style={styles.hint}>
-        {selectedLeft ? "Now tap a choice on the right →" : "Tap a prompt on the left to start"}
+        {selectedLeft ? i18n.t("matchTapRight") : i18n.t("matchTapLeft")}
       </Text>
       <View style={styles.row}>
         <View style={styles.col}>

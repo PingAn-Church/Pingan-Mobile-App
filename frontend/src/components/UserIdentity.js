@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { formatName } from "../utils/formatName";
 
 /**
  * A user's name with their email as small, muted subtext underneath.
@@ -30,7 +31,7 @@ export default function UserIdentity({
   return (
     <View style={[styles.container, containerStyle]}>
       <Text style={[styles.name, nameStyle]} numberOfLines={1}>
-        {firstName} {lastName}
+        {formatName(firstName, lastName)}
         {suffix}
       </Text>
       {showEmail && email ? (

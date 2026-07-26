@@ -95,6 +95,8 @@ public class ThreadReplyService {
                 .threadId(reply.getThread().getId())
                 .authorId(reply.getAuthor().getId())
                 .authorName(reply.getAuthor().getFirstName() + " " + reply.getAuthor().getLastName())
+                .authorFirstName(reply.getAuthor().getFirstName())
+                .authorLastName(reply.getAuthor().getLastName())
                 .reported(Boolean.TRUE.equals(reply.getReported()))
                 .build();
     }

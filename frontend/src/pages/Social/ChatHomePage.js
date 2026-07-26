@@ -42,6 +42,7 @@ import { getStompClient } from "../../service/WebSocketService";
 import defaultProfileImage from "../../../assets/user.png";
 import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const ChatHomePage = () => {
@@ -309,7 +310,7 @@ const ChatHomePage = () => {
           (p) => String(p.id) === String(otherParticipant)
         );
         title = participantData
-          ? `${participantData.firstName} ${participantData.lastName}`
+          ? formatName(participantData.firstName, participantData.lastName)
           : i18n.t("unknownUser");
       }
     } else {

@@ -11,6 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getCourseStats, type CourseStatsRow } from "@/services/authoringService";
+import i18n from "../../../../i18n";
 
 function StatBlock({ icon, value, label }: { icon: any; value: string; label: string }) {
   return (
@@ -30,18 +31,18 @@ function StatsCard({ item }: { item: CourseStatsRow }) {
           {item.title}
         </Text>
         <View style={[styles.badge, item.isPublished ? styles.badgePublished : styles.badgeDraft]}>
-          <Text style={styles.badgeText}>{item.isPublished ? "Published" : "Draft"}</Text>
+          <Text style={styles.badgeText}>{item.isPublished ? i18n.t("published") : i18n.t("draft")}</Text>
         </View>
       </View>
 
       <View style={styles.statRow}>
-        <StatBlock icon="people-outline" value={String(item.enrolledCount)} label="Enrolled" />
-        <StatBlock icon="checkmark-done-outline" value={String(item.completedCount)} label="Completed" />
-        <StatBlock icon="flag-outline" value={`${item.completionRate}%`} label="Completion" />
+        <StatBlock icon="people-outline" value={String(item.enrolledCount)} label={i18n.t("enrolled")} />
+        <StatBlock icon="checkmark-done-outline" value={String(item.completedCount)} label={i18n.t("completed")} />
+        <StatBlock icon="flag-outline" value={`${item.completionRate}%`} label={i18n.t("completion")} />
       </View>
 
       <View style={styles.progressLabelRow}>
-        <Text style={styles.progressLabel}>Average progress</Text>
+        <Text style={styles.progressLabel}>{i18n.t("averageProgress")}</Text>
         <Text style={styles.progressPct}>{item.averageProgress}%</Text>
       </View>
       <View style={styles.progressTrack}>
@@ -52,8 +53,8 @@ function StatsCard({ item }: { item: CourseStatsRow }) {
         <Ionicons name="star" size={14} color={Colors.starGold} />
         <Text style={styles.ratingText}>
           {item.totalRatings > 0
-            ? `${item.rating.toFixed(1)} (${item.totalRatings} rating${item.totalRatings === 1 ? "" : "s"})`
-            : "No ratings yet"}
+            ? i18n.t("ratingWithCount", { rating: item.rating.toFixed(1), count: item.totalRatings })
+            : i18n.t("noRatingsYet")}
         </Text>
       </View>
     </View>
@@ -88,15 +89,15 @@ export default function CourseStatsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.heading}>Course Stats</Text>
+        <Text style={styles.heading}>{i18n.t("courseStats")}</Text>
       </View>
 
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load course stats.</Text>
+        <Text style={styles.empty}>{i18n.t("statsLoadFailed")}</Text>
       ) : stats.length === 0 ? (
-        <Text style={styles.empty}>No courses yet.</Text>
+        <Text style={styles.empty}>{i18n.t("noCoursesYet")}</Text>
       ) : (
         <FlatList
           data={stats}

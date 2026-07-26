@@ -14,5 +14,9 @@ public class ThreadReplyDto {
     private Long threadId;
     private Long authorId;
     private String authorName;
+    // Raw components so the client can order the name per its display language
+    // (Chinese shows family name first). authorName stays for backward-compat.
+    private String authorFirstName;
+    private String authorLastName;
     private boolean reported;
 }

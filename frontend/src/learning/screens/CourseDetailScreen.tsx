@@ -28,6 +28,7 @@ import { confirmAction } from "../../utils/confirmAction";
 import { reportContent, REPORT_TYPE_COURSE_REVIEW } from "../../service/ReportService";
 import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
 
 export default function CourseDetailScreen() {
@@ -351,7 +352,10 @@ export default function CourseDetailScreen() {
     return (
       <View style={[styles.review, styles.reviewListItem]}>
         <View style={styles.reviewTop}>
-          <Text style={styles.reviewer}>{r.reviewerName}</Text>
+          <Text style={styles.reviewer}>
+            {formatName((r as any).reviewerFirstName, (r as any).reviewerLastName) ||
+              r.reviewerName}
+          </Text>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             {[1, 2, 3, 4, 5].map((s) => (
               <Ionicons

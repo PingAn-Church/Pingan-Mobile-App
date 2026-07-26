@@ -94,6 +94,8 @@ public class ThreadService {
                 .createdAt(thread.getCreatedAt())
                 .createdById(thread.getCreatedBy().getId())
                 .createdByName(thread.getCreatedBy().getFirstName() + " " + thread.getCreatedBy().getLastName())
+                .createdByFirstName(thread.getCreatedBy().getFirstName())
+                .createdByLastName(thread.getCreatedBy().getLastName())
                 .reported(Boolean.TRUE.equals(thread.getReported()))
                 .build();
     }

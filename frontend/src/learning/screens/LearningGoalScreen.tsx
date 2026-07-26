@@ -14,6 +14,7 @@ import {
   type GoalTemplate,
 } from "@/services/goalService";
 import { confirmDestructive, notify } from "@/utils/alerts";
+import i18n from "../../../i18n";
 
 export default function LearningGoalScreen() {
   const queryClient = useQueryClient();
@@ -35,17 +36,17 @@ export default function LearningGoalScreen() {
       await createGoalsFromTemplates([t.id]);
       refresh();
     } catch (e: any) {
-      notify("Error", e?.message || "Could not add goal.");
+      notify(i18n.t("error"), e?.message || i18n.t("couldNotAddGoal"));
     }
   };
 
   const remove = (g: LearningGoal) => {
-    confirmDestructive("Remove goal", `Remove "${g.label}"?`, "Remove", async () => {
+    confirmDestructive(i18n.t("removeGoal"), i18n.t("removeGoalConfirm", { label: g.label }), i18n.t("remove"), async () => {
       try {
         await clearGoal(g.id);
         refresh();
       } catch (e: any) {
-        notify("Error", e?.message || "Could not remove goal.");
+        notify(i18n.t("error"), e?.message || i18n.t("couldNotRemoveGoal"));
       }
     });
   };
@@ -59,37 +60,39 @@ export default function LearningGoalScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 18, paddingBottom: 50 }}>
-      <Text style={styles.heading}>Learning Goals</Text>
+      <Text style={styles.heading}>{i18n.t("learningGoals")}</Text>
 
       <View style={styles.streakRow}>
         <Ionicons name="flame" size={22} color={Colors.streakFire} />
         <Text style={styles.streakText}>
-          {data?.currentStreak ?? 0}-day streak
+          {i18n.t("dayStreak", { days: data?.currentStreak ?? 0 })}
         </Text>
-        <Text style={styles.streakSub}>Best: {data?.longestStreak ?? 0}</Text>
+        <Text style={styles.streakSub}>
+          {i18n.t("bestStreak", { value: data?.longestStreak ?? 0 })}
+        </Text>
       </View>
 
       {goalsQuery.isLoading ? (
         <ActivityIndicator style={{ marginTop: 30 }} color={Colors.secondary} />
       ) : (
         <>
-          <Text style={styles.sectionTitle}>Active goals</Text>
+          <Text style={styles.sectionTitle}>{i18n.t("activeGoals")}</Text>
           {goals.length === 0 ? (
-            <Text style={styles.muted}>No active goals. Add one below.</Text>
+            <Text style={styles.muted}>{i18n.t("noActiveGoals")}</Text>
           ) : (
             goals.map((g) => <GoalCard key={g.id} goal={g} onRemove={() => remove(g)} />)
           )}
 
-          <Text style={styles.sectionTitle}>Add a goal</Text>
+          <Text style={styles.sectionTitle}>{i18n.t("addGoal")}</Text>
           {available.length === 0 ? (
-            <Text style={styles.muted}>You've adopted all available goals.</Text>
+            <Text style={styles.muted}>{i18n.t("allGoalsAdopted")}</Text>
           ) : (
             available.map((t) => (
               <TouchableOpacity key={t.id} style={styles.templateRow} onPress={() => adopt(t)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.templateLabel}>{t.label}</Text>
                   <Text style={styles.templateMeta}>
-                    {t.difficulty ? `${t.difficulty} • ` : ""}+{t.rewardPoints} pts
+                    {t.difficulty ? `${t.difficulty} • ` : ""}+{t.rewardPoints} {i18n.t("pointsUnit")}
                   </Text>
                 </View>
                 <Ionicons name="add-circle" size={26} color={Colors.secondary} />
@@ -122,7 +125,7 @@ function GoalCard({ goal, onRemove }: { goal: LearningGoal; onRemove: () => void
         <View style={[styles.fill, { width: `${pct}%` }]} />
       </View>
       <Text style={styles.goalMeta}>
-        {goal.currentValue}/{goal.targetValue} {metricLabel(goal.metric)} • +{goal.rewardPoints} pts
+        {goal.currentValue}/{goal.targetValue} {metricLabel(goal.metric)} • +{goal.rewardPoints} {i18n.t("pointsUnit")}
       </Text>
     </View>
   );

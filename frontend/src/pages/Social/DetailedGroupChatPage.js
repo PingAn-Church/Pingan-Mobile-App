@@ -32,6 +32,7 @@ import defaultProfileImage from "../../../assets/user.png";
 import { deleteConversationFromDatabase } from "../../service/ChatService";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const DetailedGroupChatPage = ({ route }) => {
@@ -59,10 +60,17 @@ const DetailedGroupChatPage = ({ route }) => {
 
     setConversation(found);
     setIsAdmin(found.adminIds.includes(user.id));
-    const participantList = found.participants.map((id, index) => ({
-      id,
-      fullName: found.participantNames?.[index] || i18n.t("unknownUser"),
-    }));
+    const participantList = found.participants.map((id, index) => {
+      // Keep name components so the row can be ordered per the display language;
+      // participantProfiles is index-aligned with participants (same backend order).
+      const profile = found.participantProfiles?.[index];
+      return {
+        id,
+        firstName: profile?.firstName,
+        lastName: profile?.lastName,
+        fallbackName: found.participantNames?.[index] || i18n.t("unknownUser"),
+      };
+    });
     setParticipants(participantList);
   }, [conversations, conversationId, user.id]);
 
@@ -379,7 +387,9 @@ const DetailedGroupChatPage = ({ route }) => {
               style={styles.profileImage}
             />
             <View style={styles.textContainer}>
-              <Text style={styles.name}>{item.fullName}</Text>
+              <Text style={styles.name}>
+                {formatName(item.firstName, item.lastName) || item.fallbackName}
+              </Text>
               <Text style={styles.bio}>{item.bio || i18n.t("noBio")}</Text>
             </View>
 

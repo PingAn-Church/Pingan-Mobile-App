@@ -20,6 +20,7 @@ import {
   type QuizQuestion,
 } from "@/services/quizService";
 import MatchingQuestion, { type MatchPair } from "./components/MatchingQuestion";
+import i18n from "../../../i18n";
 
 export default function QuizScreen() {
   const navigation = useNavigation<any>();
@@ -33,7 +34,7 @@ export default function QuizScreen() {
   const [result, setResult] = useState<QuizResult | null>(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: route.params?.title || "Quiz" });
+    navigation.setOptions({ title: route.params?.title || i18n.t("quiz") });
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -43,7 +44,7 @@ export default function QuizScreen() {
     try {
       setQuiz(await getQuizDetail(quizId));
     } catch {
-      notify("Error", "Could not load this quiz.");
+      notify(i18n.t("error"), i18n.t("quizLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -77,7 +78,7 @@ export default function QuizScreen() {
       const r = await submitQuiz(quizId, payload);
       setResult(r);
     } catch (e: any) {
-      notify("Error", e?.message || "Could not submit quiz.");
+      notify(i18n.t("error"), e?.message || i18n.t("quizSubmitFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -99,7 +100,7 @@ export default function QuizScreen() {
   if (!quiz) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Text style={styles.muted}>Quiz unavailable.</Text>
+        <Text style={styles.muted}>{i18n.t("quizUnavailable")}</Text>
       </View>
     );
   }
@@ -108,21 +109,19 @@ export default function QuizScreen() {
     return (
       <View style={[styles.container, styles.center, { padding: 24 }]}>
         <Ionicons name="hourglass-outline" size={72} color={Colors.starGold} />
-        <Text style={styles.resultLabel}>Submitted for review</Text>
+        <Text style={styles.resultLabel}>{i18n.t("quizSubmittedForReview")}</Text>
         <Text style={[styles.muted, { textAlign: "center", marginTop: 8 }]}>
-          {result.pendingCount} answer{result.pendingCount === 1 ? "" : "s"} await your
-          instructor's review. Your final score will be released once grading is done —
-          we'll notify you.
+          {i18n.t("quizPendingReview", { count: result.pendingCount })}
         </Text>
         <View style={{ height: 24 }} />
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={() => navigation.replace("QuizResults", { quizId, title: quiz.title })}
         >
-          <Text style={styles.primaryBtnText}>View detailed feedback</Text>
+          <Text style={styles.primaryBtnText}>{i18n.t("viewDetailedFeedback")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.ghostBtnText}>Back to course</Text>
+          <Text style={styles.ghostBtnText}>{i18n.t("backToCourse")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -140,26 +139,28 @@ export default function QuizScreen() {
         />
         <Text style={styles.resultScore}>{result.score}%</Text>
         <Text style={styles.resultLabel}>
-          {result.isPassed ? "Passed!" : "Keep practising"}
+          {result.isPassed ? i18n.t("quizPassed") : i18n.t("quizKeepPractising")}
         </Text>
         <Text style={styles.muted}>
-          {result.correctAnswers}/{result.totalQuestions} correct
-          {result.attemptsRemaining !== null ? ` • ${result.attemptsRemaining} attempts left` : ""}
+          {i18n.t("quizCorrectCount", { correct: result.correctAnswers, total: result.totalQuestions })}
+          {result.attemptsRemaining !== null
+            ? ` • ${i18n.t("attemptsLeft", { count: result.attemptsRemaining })}`
+            : ""}
         </Text>
         <View style={{ height: 24 }} />
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={() => navigation.replace("QuizResults", { quizId, title: quiz.title })}
         >
-          <Text style={styles.primaryBtnText}>View detailed feedback</Text>
+          <Text style={styles.primaryBtnText}>{i18n.t("viewDetailedFeedback")}</Text>
         </TouchableOpacity>
         {canRetry && (
           <TouchableOpacity style={styles.ghostBtn} onPress={retry}>
-            <Text style={styles.ghostBtnText}>Try again</Text>
+            <Text style={styles.ghostBtnText}>{i18n.t("tryAgain")}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.ghostBtnText}>Back to course</Text>
+          <Text style={styles.ghostBtnText}>{i18n.t("backToCourse")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -168,7 +169,7 @@ export default function QuizScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 18, paddingBottom: 60 }}>
       <Text style={styles.title}>{quiz.title}</Text>
-      <Text style={styles.muted}>Pass mark: {quiz.passingScore}%</Text>
+      <Text style={styles.muted}>{i18n.t("passMark", { score: quiz.passingScore })}</Text>
 
       {quiz.questions.map((q, idx) => (
         <View key={q.id} style={styles.question}>
@@ -180,7 +181,7 @@ export default function QuizScreen() {
       ))}
 
       <TouchableOpacity style={styles.primaryBtn} onPress={handleSubmit} disabled={submitting}>
-        <Text style={styles.primaryBtnText}>{submitting ? "Submitting..." : "Submit Quiz"}</Text>
+        <Text style={styles.primaryBtnText}>{submitting ? i18n.t("submitting") : i18n.t("submitQuiz")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -210,7 +211,7 @@ function renderInput(
         style={styles.shortAnswer}
         value={typeof value === "string" ? value : ""}
         onChangeText={(v) => setSingle(q.id, v)}
-        placeholder="Type your answer"
+        placeholder={i18n.t("typeYourAnswer")}
         placeholderTextColor={Colors.textMuted}
       />
     );

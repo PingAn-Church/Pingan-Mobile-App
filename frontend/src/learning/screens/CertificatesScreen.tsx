@@ -5,6 +5,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getCertificates, type Certificate } from "@/services/certificateService";
+import i18n from "../../../i18n";
 
 export default function CertificatesScreen() {
   const navigation = useNavigation<any>();
@@ -23,14 +24,14 @@ export default function CertificatesScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Certificates</Text>
+      <Text style={styles.heading}>{i18n.t("certificates")}</Text>
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load your certificates.</Text>
+        <Text style={styles.empty}>{i18n.t("certificatesLoadFailed")}</Text>
       ) : certificates.length === 0 ? (
         <Text style={styles.empty}>
-          Complete a course to earn your first certificate.
+          {i18n.t("noCertificates")}
         </Text>
       ) : (
         <FlatList
@@ -54,7 +55,7 @@ function CertificateCard({ cert, onPress }: { cert: Certificate; onPress: () => 
         <Text style={styles.title} numberOfLines={2}>
           {cert.courseTitle}
         </Text>
-        <Text style={styles.meta}>No. {cert.certificateNumber}</Text>
+        <Text style={styles.meta}>{i18n.t("certificateNo", { number: cert.certificateNumber })}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
     </TouchableOpacity>

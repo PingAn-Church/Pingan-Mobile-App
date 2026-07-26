@@ -5,6 +5,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import { getAchievements, type Achievement } from "@/services/achievementService";
+import i18n from "../../../i18n";
 
 export default function AchievementsScreen() {
   const { data, isLoading, isError, refetch } = useQuery({
@@ -23,18 +24,18 @@ export default function AchievementsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Achievements</Text>
+      <Text style={styles.heading}>{i18n.t("achievements")}</Text>
       {!isLoading && !isError && achievements.length > 0 && (
         <Text style={styles.sub}>
-          {earnedCount} of {achievements.length} unlocked
+          {i18n.t("achievementsUnlocked", { earned: earnedCount, total: achievements.length })}
         </Text>
       )}
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load achievements.</Text>
+        <Text style={styles.empty}>{i18n.t("achievementsLoadFailed")}</Text>
       ) : achievements.length === 0 ? (
-        <Text style={styles.empty}>No achievements available yet.</Text>
+        <Text style={styles.empty}>{i18n.t("noAchievements")}</Text>
       ) : (
         <FlatList
           data={achievements}

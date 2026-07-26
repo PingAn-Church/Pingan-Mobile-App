@@ -31,17 +31,18 @@ import {
   type QuestionType,
 } from "@/services/quizService";
 import type { LearningCategory, LearningCourseDetail } from "@/types";
+import i18n from "../../../../i18n";
 
 type LessonKind = "video" | "resource";
 
 const CATEGORY_COLORS = ["#6366F1", "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 
-const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
-  { value: "multiple-choice", label: "Single choice" },
-  { value: "multiple-correct", label: "Multi select" },
-  { value: "true-false", label: "True / False" },
-  { value: "short-answer", label: "Short answer" },
-  { value: "matching", label: "Matching" },
+const QUESTION_TYPES: { value: QuestionType; labelKey: string }[] = [
+  { value: "multiple-choice", labelKey: "qtSingleChoice" },
+  { value: "multiple-correct", labelKey: "qtMultiSelect" },
+  { value: "true-false", labelKey: "qtTrueFalse" },
+  { value: "short-answer", labelKey: "qtShortAnswer" },
+  { value: "matching", labelKey: "qtMatching" },
 ];
 
 export default function CourseEditorScreen() {
@@ -109,7 +110,7 @@ export default function CourseEditorScreen() {
   }>({ visible: false, quizId: "", questionType: "multiple-choice", question: "", points: "1", optionsText: "", correctText: "", tfValue: "True", pairsText: "" });
 
   useEffect(() => {
-    navigation.setOptions({ title: courseId ? "Edit Course" : "New Course" });
+    navigation.setOptions({ title: courseId ? i18n.t("editCourse") : i18n.t("newCourse") });
     (async () => {
       try {
         setCategories(await getCategories());
@@ -135,7 +136,7 @@ export default function CourseEditorScreen() {
       setCategoryName(d.categoryName || "General");
       setOutcomes(d.outcomes || []);
     } catch {
-      notify("Error", "Could not load course.");
+      notify(i18n.t("error"), i18n.t("courseLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -159,7 +160,7 @@ export default function CourseEditorScreen() {
 
   const handleSaveCourse = async () => {
     if (!title.trim()) {
-      notify("Required", "Please enter a course title.");
+      notify(i18n.t("required"), i18n.t("enterCourseTitle"));
       return;
     }
     setSaving(true);
@@ -179,9 +180,9 @@ export default function CourseEditorScreen() {
         await authoring.setCourseOutcomes(courseId, cleanOutcomes);
         await reloadContent(courseId);
       }
-      notify("Saved", "Course saved successfully.");
+      notify(i18n.t("saved"), i18n.t("courseSaved"));
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to save course.");
+      notify(i18n.t("error"), e?.message || i18n.t("courseSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -189,12 +190,12 @@ export default function CourseEditorScreen() {
 
   const handleDeleteCourse = () => {
     if (!courseId) return;
-    confirmDestructive("Delete course", "This permanently deletes the course and its content.", "Delete", async () => {
+    confirmDestructive(i18n.t("deleteCourse"), i18n.t("deleteCourseConfirm"), i18n.t("delete"), async () => {
       try {
         await authoring.deleteCourse(courseId);
         navigation.goBack();
       } catch (e: any) {
-        notify("Error", e?.message || "Failed to delete.");
+        notify(i18n.t("error"), e?.message || i18n.t("courseDeleteFailed"));
       }
     });
   };
@@ -223,7 +224,7 @@ export default function CourseEditorScreen() {
         }
       }
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to upload the cover image.");
+      notify(i18n.t("error"), e?.message || i18n.t("coverUploadFailed"));
     } finally {
       setUploadingCover(false);
     }
@@ -233,7 +234,7 @@ export default function CourseEditorScreen() {
   const saveCategory = async () => {
     const name = categoryModal.name.trim();
     if (!name) {
-      notify("Required", "Category name is required.");
+      notify(i18n.t("required"), i18n.t("categoryNameRequired"));
       return;
     }
     try {
@@ -248,7 +249,7 @@ export default function CourseEditorScreen() {
       setCategories(await getCategories());
       setCategoryModal({ visible: false, name: "", color: CATEGORY_COLORS[0] });
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to save category.");
+      notify(i18n.t("error"), e?.message || i18n.t("categorySaveFailed"));
     }
   };
 
@@ -257,16 +258,16 @@ export default function CourseEditorScreen() {
 
   const removeCategory = (c: LearningCategory) => {
     confirmDestructive(
-      "Delete category",
-      `Delete "${c.name}"? Courses in it move to General.`,
-      "Delete",
+      i18n.t("deleteCategory"),
+      i18n.t("deleteCategoryConfirm", { name: c.name }),
+      i18n.t("delete"),
       async () => {
         try {
           await authoring.deleteCategory(c.id);
           setCategories(await getCategories());
           if (categoryName === c.name) setCategoryName("General");
         } catch (e: any) {
-          notify("Error", e?.message || "Failed to delete the category.");
+          notify(i18n.t("error"), e?.message || i18n.t("categoryDeleteFailed"));
         }
       }
     );
@@ -281,7 +282,7 @@ export default function CourseEditorScreen() {
   // ---- sections -----------------------------------------------------
   const saveSection = async () => {
     if (!courseId || !sectionModal.title.trim()) {
-      notify("Required", "Module title is required.");
+      notify(i18n.t("required"), i18n.t("moduleTitleRequired"));
       return;
     }
     try {
@@ -300,17 +301,17 @@ export default function CourseEditorScreen() {
       setSectionModal({ visible: false, title: "", description: "" });
       await reloadContent(courseId);
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to save module.");
+      notify(i18n.t("error"), e?.message || i18n.t("moduleSaveFailed"));
     }
   };
 
   const removeSection = (id: string) => {
-    confirmDestructive("Delete module", "Delete this module and its lessons?", "Delete", async () => {
+    confirmDestructive(i18n.t("deleteModule"), i18n.t("deleteModuleConfirm"), i18n.t("delete"), async () => {
       try {
         await authoring.deleteSection(id);
         if (courseId) await reloadContent(courseId);
       } catch (e: any) {
-        notify("Error", e?.message || "Failed to delete the module.");
+        notify(i18n.t("error"), e?.message || i18n.t("moduleDeleteFailed"));
       }
     });
   };
@@ -330,7 +331,7 @@ export default function CourseEditorScreen() {
 
   const saveLesson = async () => {
     if (!courseId || !lessonModal.title.trim()) {
-      notify("Required", "Lesson title is required.");
+      notify(i18n.t("required"), i18n.t("lessonTitleRequired"));
       return;
     }
     try {
@@ -356,18 +357,18 @@ export default function CourseEditorScreen() {
       setLessonModal((m) => ({ ...m, visible: false }));
       await reloadContent(courseId);
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to add lesson.");
+      notify(i18n.t("error"), e?.message || i18n.t("lessonAddFailed"));
     }
   };
 
   const removeLesson = (kind: LessonKind, id: string) => {
-    confirmDestructive("Delete lesson", "Remove this lesson?", "Delete", async () => {
+    confirmDestructive(i18n.t("deleteLesson"), i18n.t("deleteLessonConfirm"), i18n.t("delete"), async () => {
       try {
         if (kind === "video") await authoring.deleteVideo(id);
         else await authoring.deleteResource(id);
         if (courseId) await reloadContent(courseId);
       } catch (e: any) {
-        notify("Error", e?.message || "Failed to delete the lesson.");
+        notify(i18n.t("error"), e?.message || i18n.t("lessonDeleteFailed"));
       }
     });
   };
@@ -378,7 +379,7 @@ export default function CourseEditorScreen() {
 
   const saveQuiz = async () => {
     if (!courseId || !quizModal.title.trim()) {
-      notify("Required", "Quiz title is required.");
+      notify(i18n.t("required"), i18n.t("quizTitleRequired"));
       return;
     }
     try {
@@ -391,17 +392,17 @@ export default function CourseEditorScreen() {
       setQuizModal((m) => ({ ...m, visible: false }));
       await reloadContent(courseId);
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to create quiz.");
+      notify(i18n.t("error"), e?.message || i18n.t("quizCreateFailed"));
     }
   };
 
   const removeQuiz = (id: string) => {
-    confirmDestructive("Delete quiz", "Delete this quiz and its questions?", "Delete", async () => {
+    confirmDestructive(i18n.t("deleteQuiz"), i18n.t("deleteQuizConfirm"), i18n.t("delete"), async () => {
       try {
         await deleteQuiz(id);
         if (courseId) await reloadContent(courseId);
       } catch (e: any) {
-        notify("Error", e?.message || "Failed to delete the quiz.");
+        notify(i18n.t("error"), e?.message || i18n.t("quizDeleteFailed"));
       }
     });
   };
@@ -413,7 +414,7 @@ export default function CourseEditorScreen() {
       setQuestionEditor({ visible: true, quiz, loading: false });
     } catch {
       setQuestionEditor({ visible: false, quiz: null, loading: false });
-      notify("Error", "Could not load the quiz.");
+      notify(i18n.t("error"), i18n.t("quizLoadFailed"));
     }
   };
 
@@ -441,7 +442,7 @@ export default function CourseEditorScreen() {
   const saveQuestion = async () => {
     const m = questionModal;
     if (!m.question.trim()) {
-      notify("Required", "Question text is required.");
+      notify(i18n.t("required"), i18n.t("questionTextRequired"));
       return;
     }
     const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
@@ -470,7 +471,7 @@ export default function CourseEditorScreen() {
         })
         .filter((p) => p.left && p.right);
       if (pairs.length === 0) {
-        notify("Required", "Enter at least one pair as 'left => right'.");
+        notify(i18n.t("required"), i18n.t("pairRequired"));
         return;
       }
       body.correctAnswer = pairs;
@@ -482,7 +483,7 @@ export default function CourseEditorScreen() {
         ? body.correctAnswer.length > 0
         : String(body.correctAnswer ?? "").length > 0;
       if (!hasAnswer) {
-        notify("Required", "Please provide the correct answer.");
+        notify(i18n.t("required"), i18n.t("provideCorrectAnswer"));
         return;
       }
     }
@@ -492,17 +493,17 @@ export default function CourseEditorScreen() {
       setQuestionModal((s) => ({ ...s, visible: false }));
       await reloadQuestions(m.quizId);
     } catch (e: any) {
-      notify("Error", e?.message || "Failed to add question.");
+      notify(i18n.t("error"), e?.message || i18n.t("questionAddFailed"));
     }
   };
 
   const removeQuestion = (quizId: string, questionId: string) => {
-    confirmDestructive("Delete question", "Remove this question?", "Delete", async () => {
+    confirmDestructive(i18n.t("deleteQuestion"), i18n.t("deleteQuestionConfirm"), i18n.t("delete"), async () => {
       try {
         await deleteQuestion(questionId);
         await reloadQuestions(quizId);
       } catch (e: any) {
-        notify("Error", e?.message || "Failed to delete the question.");
+        notify(i18n.t("error"), e?.message || i18n.t("questionDeleteFailed"));
       }
     });
   };
@@ -517,20 +518,20 @@ export default function CourseEditorScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: 18, paddingBottom: 60 }}>
-      <Text style={styles.label}>Title</Text>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Course title" placeholderTextColor={Colors.textMuted} />
+      <Text style={styles.label}>{i18n.t("titleLabel")}</Text>
+      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder={i18n.t("courseTitlePlaceholder")} placeholderTextColor={Colors.textMuted} />
 
-      <Text style={styles.label}>Description</Text>
+      <Text style={styles.label}>{i18n.t("description")}</Text>
       <TextInput
         style={[styles.input, styles.multiline]}
         value={description}
         onChangeText={setDescription}
-        placeholder="What is this course about?"
+        placeholder={i18n.t("courseAboutPlaceholder")}
         placeholderTextColor={Colors.textMuted}
         multiline
       />
 
-      <Text style={styles.label}>Category</Text>
+      <Text style={styles.label}>{i18n.t("category")}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         {[{ id: "general", name: "General" }, ...categories.map((c) => ({ id: c.id, name: c.name }))]
           .filter((c, i, arr) => arr.findIndex((x) => x.name === c.name) === i)
@@ -551,12 +552,12 @@ export default function CourseEditorScreen() {
           onPress={() => setCategoryModal({ visible: true, name: "", color: CATEGORY_COLORS[0] })}
         >
           <Ionicons name="add" size={15} color={Colors.secondary} />
-          <Text style={[styles.chipText, { color: Colors.secondary }]}>New</Text>
+          <Text style={[styles.chipText, { color: Colors.secondary }]}>{i18n.t("newLabel")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.chip, styles.chipManage]}
           onPress={() => setManageVisible(true)}
-          accessibilityLabel="Manage categories"
+          accessibilityLabel={i18n.t("manageCategories")}
         >
           <Ionicons name="settings-outline" size={15} color={Colors.textSecondary} />
         </TouchableOpacity>
@@ -564,39 +565,39 @@ export default function CourseEditorScreen() {
 
       <View style={styles.row2}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.label}>Duration (hours)</Text>
+          <Text style={styles.label}>{i18n.t("durationHoursLabel")}</Text>
           <TextInput style={styles.input} value={durationHours} onChangeText={setDurationHours} keyboardType="numeric" />
         </View>
       </View>
 
-      <Text style={styles.label}>Cover image</Text>
+      <Text style={styles.label}>{i18n.t("coverImage")}</Text>
       {!!thumbnailUrl && <CourseCoverImage uri={thumbnailUrl} style={styles.coverPreview} />}
       <View style={styles.coverRow}>
         <TouchableOpacity style={styles.coverBtn} onPress={handlePickCover} disabled={uploadingCover}>
           <Ionicons name="image-outline" size={18} color={Colors.secondary} />
           <Text style={styles.coverBtnText}>
-            {uploadingCover ? "Uploading..." : thumbnailUrl ? "Change image" : "Choose image"}
+            {uploadingCover ? i18n.t("uploading") : thumbnailUrl ? i18n.t("changeImage") : i18n.t("chooseImage")}
           </Text>
         </TouchableOpacity>
         {!!thumbnailUrl && !uploadingCover && (
           <TouchableOpacity style={styles.coverBtn} onPress={() => setThumbnailUrl("")}>
             <Ionicons name="trash-outline" size={18} color={Colors.red} />
-            <Text style={[styles.coverBtnText, { color: Colors.red }]}>Remove</Text>
+            <Text style={[styles.coverBtnText, { color: Colors.red }]}>{i18n.t("remove")}</Text>
           </TouchableOpacity>
         )}
       </View>
-      <TextInput style={styles.input} value={thumbnailUrl} onChangeText={setThumbnailUrl} placeholder="...or paste an image URL (https://...)" placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+      <TextInput style={styles.input} value={thumbnailUrl} onChangeText={setThumbnailUrl} placeholder={i18n.t("pasteImageUrl")} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
 
-      <Text style={styles.label}>Tags (comma separated)</Text>
-      <TextInput style={styles.input} value={tags} onChangeText={setTags} placeholder="java, backend" placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+      <Text style={styles.label}>{i18n.t("tagsLabel")}</Text>
+      <TextInput style={styles.input} value={tags} onChangeText={setTags} placeholder={i18n.t("tagsExample")} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
 
       <View style={styles.switchRow}>
-        <Text style={styles.label}>Published</Text>
+        <Text style={styles.label}>{i18n.t("published")}</Text>
         <Switch value={isPublished} onValueChange={setIsPublished} />
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Learning outcomes</Text>
+        <Text style={styles.sectionTitle}>{i18n.t("learningOutcomes")}</Text>
         <TouchableOpacity onPress={addOutcome}>
           <Ionicons name="add-circle" size={24} color={Colors.secondary} />
         </TouchableOpacity>
@@ -607,7 +608,7 @@ export default function CourseEditorScreen() {
             style={[styles.input, { flex: 1, marginBottom: 0 }]}
             value={o}
             onChangeText={(v) => setOutcome(i, v)}
-            placeholder="Learners will be able to..."
+            placeholder={i18n.t("outcomePlaceholder")}
             placeholderTextColor={Colors.textMuted}
           />
           <TouchableOpacity onPress={() => removeOutcome(i)}>
@@ -617,21 +618,21 @@ export default function CourseEditorScreen() {
       ))}
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSaveCourse} disabled={saving}>
-        <Text style={styles.saveBtnText}>{saving ? "Saving..." : courseId ? "Save Course" : "Create Course"}</Text>
+        <Text style={styles.saveBtnText}>{saving ? i18n.t("saving") : courseId ? i18n.t("saveCourse") : i18n.t("createCourse")}</Text>
       </TouchableOpacity>
 
       {/* Content management (after the course exists) */}
       {courseId && (
         <View style={{ marginTop: 28 }}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Course content</Text>
+            <Text style={styles.sectionTitle}>{i18n.t("courseContent")}</Text>
             <TouchableOpacity onPress={() => setSectionModal({ visible: true, title: "", description: "" })}>
               <Ionicons name="add-circle" size={24} color={Colors.secondary} />
             </TouchableOpacity>
           </View>
 
           {(detail?.modules ?? []).length === 0 ? (
-            <Text style={styles.muted}>No modules yet. Add one to start.</Text>
+            <Text style={styles.muted}>{i18n.t("noModulesYet")}</Text>
           ) : (
             detail!.modules.map((m, idx) => (
               <View key={m.id} style={styles.module}>
@@ -678,7 +679,7 @@ export default function CourseEditorScreen() {
                         />
                         <Text style={styles.lessonText} numberOfLines={1}>
                           {l.title}
-                          {isQuiz ? "  (tap to edit questions)" : ""}
+                          {isQuiz ? i18n.t("tapToEditQuestions") : ""}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -694,15 +695,15 @@ export default function CourseEditorScreen() {
                 <View style={styles.addLessonRow}>
                   <TouchableOpacity style={styles.addLessonBtn} onPress={() => openAddLesson(m.id, "video")}>
                     <Ionicons name="videocam-outline" size={16} color={Colors.secondary} />
-                    <Text style={styles.addLessonText}>Video</Text>
+                    <Text style={styles.addLessonText}>{i18n.t("videoLabel")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.addLessonBtn} onPress={() => openAddLesson(m.id, "resource")}>
                     <Ionicons name="document-outline" size={16} color={Colors.secondary} />
-                    <Text style={styles.addLessonText}>Document</Text>
+                    <Text style={styles.addLessonText}>{i18n.t("document")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.addLessonBtn} onPress={() => openAddQuiz(m.id)}>
                     <Ionicons name="help-circle-outline" size={16} color={Colors.secondary} />
-                    <Text style={styles.addLessonText}>Quiz</Text>
+                    <Text style={styles.addLessonText}>{i18n.t("quiz")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -710,7 +711,7 @@ export default function CourseEditorScreen() {
           )}
 
           <TouchableOpacity style={styles.deleteCourseBtn} onPress={handleDeleteCourse}>
-            <Text style={styles.deleteCourseText}>Delete course</Text>
+            <Text style={styles.deleteCourseText}>{i18n.t("deleteCourse")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -720,13 +721,13 @@ export default function CourseEditorScreen() {
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.modalCard, { maxHeight: "85%" }]}>
             <View style={styles.moduleHeader}>
-              <Text style={styles.modalTitle} numberOfLines={1}>Manage categories</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>{i18n.t("manageCategories")}</Text>
               <TouchableOpacity onPress={() => setManageVisible(false)}>
                 <Ionicons name="close" size={24} color={Colors.textSecondary} />
               </TouchableOpacity>
             </View>
             {categories.length === 0 ? (
-              <Text style={styles.muted}>No categories yet. Add one below.</Text>
+              <Text style={styles.muted}>{i18n.t("noCategoriesYet")}</Text>
             ) : (
               <ScrollView style={{ maxHeight: 360 }}>
                 {categories.map((c) => {
@@ -739,7 +740,7 @@ export default function CourseEditorScreen() {
                         {c.courseCount ? `  ·  ${c.courseCount}` : ""}
                       </Text>
                       {isGeneral ? (
-                        <Text style={styles.catDefaultTag}>default</Text>
+                        <Text style={styles.catDefaultTag}>{i18n.t("defaultTag")}</Text>
                       ) : (
                         <>
                           <TouchableOpacity onPress={() => openEditCategory(c)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -759,7 +760,7 @@ export default function CourseEditorScreen() {
               style={[styles.modalSaveBtn, { alignSelf: "stretch", alignItems: "center", marginTop: 14 }]}
               onPress={() => setCategoryModal({ visible: true, name: "", color: CATEGORY_COLORS[0] })}
             >
-              <Text style={styles.saveBtnText}>Add category</Text>
+              <Text style={styles.saveBtnText}>{i18n.t("addCategory")}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -769,9 +770,9 @@ export default function CourseEditorScreen() {
       <Modal visible={categoryModal.visible} transparent animationType="fade" onRequestClose={() => setCategoryModal((m) => ({ ...m, visible: false }))}>
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{categoryModal.id ? "Edit category" : "New category"}</Text>
-            <TextInput style={styles.input} value={categoryModal.name} onChangeText={(v) => setCategoryModal((m) => ({ ...m, name: v }))} placeholder="Category name" placeholderTextColor={Colors.textMuted} />
-            <Text style={styles.label}>Color</Text>
+            <Text style={styles.modalTitle}>{categoryModal.id ? i18n.t("editCategory") : i18n.t("newCategory")}</Text>
+            <TextInput style={styles.input} value={categoryModal.name} onChangeText={(v) => setCategoryModal((m) => ({ ...m, name: v }))} placeholder={i18n.t("categoryNamePlaceholder")} placeholderTextColor={Colors.textMuted} />
+            <Text style={styles.label}>{i18n.t("color")}</Text>
             <View style={styles.swatchRow}>
               {CATEGORY_COLORS.map((c) => (
                 <TouchableOpacity
@@ -783,10 +784,10 @@ export default function CourseEditorScreen() {
             </View>
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={() => setCategoryModal((m) => ({ ...m, visible: false }))}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{i18n.t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveCategory}>
-                <Text style={styles.saveBtnText}>{categoryModal.id ? "Save" : "Create"}</Text>
+                <Text style={styles.saveBtnText}>{categoryModal.id ? i18n.t("save") : i18n.t("create")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -797,15 +798,15 @@ export default function CourseEditorScreen() {
       <Modal visible={sectionModal.visible} transparent animationType="fade" onRequestClose={() => setSectionModal((s) => ({ ...s, visible: false }))}>
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{sectionModal.id ? "Edit module" : "New module"}</Text>
-            <TextInput style={styles.input} value={sectionModal.title} onChangeText={(v) => setSectionModal((s) => ({ ...s, title: v }))} placeholder="Module title" placeholderTextColor={Colors.textMuted} />
-            <TextInput style={[styles.input, styles.multiline]} value={sectionModal.description} onChangeText={(v) => setSectionModal((s) => ({ ...s, description: v }))} placeholder="Description (optional)" placeholderTextColor={Colors.textMuted} multiline />
+            <Text style={styles.modalTitle}>{sectionModal.id ? i18n.t("editModule") : i18n.t("newModule")}</Text>
+            <TextInput style={styles.input} value={sectionModal.title} onChangeText={(v) => setSectionModal((s) => ({ ...s, title: v }))} placeholder={i18n.t("moduleTitlePlaceholder")} placeholderTextColor={Colors.textMuted} />
+            <TextInput style={[styles.input, styles.multiline]} value={sectionModal.description} onChangeText={(v) => setSectionModal((s) => ({ ...s, description: v }))} placeholder={i18n.t("descriptionOptional")} placeholderTextColor={Colors.textMuted} multiline />
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={() => setSectionModal((s) => ({ ...s, visible: false }))}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{i18n.t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveSection}>
-                <Text style={styles.saveBtnText}>Save</Text>
+                <Text style={styles.saveBtnText}>{i18n.t("save")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -816,22 +817,22 @@ export default function CourseEditorScreen() {
       <Modal visible={lessonModal.visible} transparent animationType="fade" onRequestClose={() => setLessonModal((m) => ({ ...m, visible: false }))}>
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{lessonModal.kind === "video" ? "New video" : "New document"}</Text>
-            <TextInput style={styles.input} value={lessonModal.title} onChangeText={(v) => setLessonModal((m) => ({ ...m, title: v }))} placeholder="Lesson title" placeholderTextColor={Colors.textMuted} />
-            <TextInput style={styles.input} value={lessonModal.url} onChangeText={(v) => setLessonModal((m) => ({ ...m, url: v }))} placeholder={lessonModal.kind === "video" ? "Video URL (YouTube)" : "Document URL (PDF / Google Doc)"} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+            <Text style={styles.modalTitle}>{lessonModal.kind === "video" ? i18n.t("newVideo") : i18n.t("newDocument")}</Text>
+            <TextInput style={styles.input} value={lessonModal.title} onChangeText={(v) => setLessonModal((m) => ({ ...m, title: v }))} placeholder={i18n.t("lessonTitlePlaceholder")} placeholderTextColor={Colors.textMuted} />
+            <TextInput style={styles.input} value={lessonModal.url} onChangeText={(v) => setLessonModal((m) => ({ ...m, url: v }))} placeholder={lessonModal.kind === "video" ? i18n.t("videoUrlPlaceholder") : i18n.t("documentUrlPlaceholder")} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
             {lessonModal.kind === "video" && (
-              <TextInput style={styles.input} value={lessonModal.durationMinutes} onChangeText={(v) => setLessonModal((m) => ({ ...m, durationMinutes: v }))} placeholder="Duration (minutes)" placeholderTextColor={Colors.textMuted} keyboardType="numeric" />
+              <TextInput style={styles.input} value={lessonModal.durationMinutes} onChangeText={(v) => setLessonModal((m) => ({ ...m, durationMinutes: v }))} placeholder={i18n.t("durationMinutesLabel")} placeholderTextColor={Colors.textMuted} keyboardType="numeric" />
             )}
             <View style={styles.switchRow}>
-              <Text style={styles.label}>Free preview</Text>
+              <Text style={styles.label}>{i18n.t("freePreview")}</Text>
               <Switch value={lessonModal.isPreview} onValueChange={(v) => setLessonModal((m) => ({ ...m, isPreview: v }))} />
             </View>
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={() => setLessonModal((m) => ({ ...m, visible: false }))}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{i18n.t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveLesson}>
-                <Text style={styles.saveBtnText}>Add</Text>
+                <Text style={styles.saveBtnText}>{i18n.t("add")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -842,16 +843,16 @@ export default function CourseEditorScreen() {
       <Modal visible={quizModal.visible} transparent animationType="fade" onRequestClose={() => setQuizModal((m) => ({ ...m, visible: false }))}>
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>New quiz</Text>
-            <TextInput style={styles.input} value={quizModal.title} onChangeText={(v) => setQuizModal((m) => ({ ...m, title: v }))} placeholder="Quiz title" placeholderTextColor={Colors.textMuted} />
-            <Text style={styles.label}>Pass mark (%)</Text>
+            <Text style={styles.modalTitle}>{i18n.t("newQuiz")}</Text>
+            <TextInput style={styles.input} value={quizModal.title} onChangeText={(v) => setQuizModal((m) => ({ ...m, title: v }))} placeholder={i18n.t("quizTitlePlaceholder")} placeholderTextColor={Colors.textMuted} />
+            <Text style={styles.label}>{i18n.t("passMarkPercent")}</Text>
             <TextInput style={styles.input} value={quizModal.passingScore} onChangeText={(v) => setQuizModal((m) => ({ ...m, passingScore: v }))} keyboardType="numeric" />
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={() => setQuizModal((m) => ({ ...m, visible: false }))}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{i18n.t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveQuiz}>
-                <Text style={styles.saveBtnText}>Create</Text>
+                <Text style={styles.saveBtnText}>{i18n.t("create")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -863,7 +864,7 @@ export default function CourseEditorScreen() {
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.modalCard, { maxHeight: "85%" }]}>
             <View style={styles.moduleHeader}>
-              <Text style={styles.modalTitle} numberOfLines={1}>{questionEditor.quiz?.title || "Quiz"}</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>{questionEditor.quiz?.title || i18n.t("quiz")}</Text>
               <TouchableOpacity onPress={() => setQuestionEditor((s) => ({ ...s, visible: false }))}>
                 <Ionicons name="close" size={24} color={Colors.textSecondary} />
               </TouchableOpacity>
@@ -873,7 +874,7 @@ export default function CourseEditorScreen() {
             ) : (
               <ScrollView style={{ maxHeight: 360 }}>
                 {(questionEditor.quiz?.questions ?? []).length === 0 ? (
-                  <Text style={styles.muted}>No questions yet. Add one below.</Text>
+                  <Text style={styles.muted}>{i18n.t("noQuestionsYet")}</Text>
                 ) : (
                   questionEditor.quiz!.questions.map((q, i) => (
                     <View key={q.id} style={styles.lessonRow}>
@@ -892,7 +893,7 @@ export default function CourseEditorScreen() {
               style={[styles.modalSaveBtn, { alignSelf: "stretch", alignItems: "center", marginTop: 14 }]}
               onPress={() => questionEditor.quiz && openAddQuestion(questionEditor.quiz.id)}
             >
-              <Text style={styles.saveBtnText}>Add question</Text>
+              <Text style={styles.saveBtnText}>{i18n.t("addQuestion")}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -902,37 +903,37 @@ export default function CourseEditorScreen() {
       <Modal visible={questionModal.visible} transparent animationType="fade" onRequestClose={() => setQuestionModal((m) => ({ ...m, visible: false }))}>
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.modalCard, { maxHeight: "88%" }]}>
-            <Text style={styles.modalTitle}>New question</Text>
+            <Text style={styles.modalTitle}>{i18n.t("newQuestion")}</Text>
             <ScrollView style={{ maxHeight: 460 }}>
-              <Text style={styles.label}>Type</Text>
+              <Text style={styles.label}>{i18n.t("typeLabel")}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
                 {QUESTION_TYPES.map((t) => {
                   const active = questionModal.questionType === t.value;
                   return (
                     <TouchableOpacity key={t.value} style={[styles.chip, active && styles.chipActive]} onPress={() => setQuestionModal((m) => ({ ...m, questionType: t.value }))}>
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{t.label}</Text>
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{i18n.t(t.labelKey)}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
 
-              <Text style={styles.label}>Question</Text>
-              <TextInput style={[styles.input, styles.multiline]} value={questionModal.question} onChangeText={(v) => setQuestionModal((m) => ({ ...m, question: v }))} placeholder="Question text" placeholderTextColor={Colors.textMuted} multiline />
+              <Text style={styles.label}>{i18n.t("question")}</Text>
+              <TextInput style={[styles.input, styles.multiline]} value={questionModal.question} onChangeText={(v) => setQuestionModal((m) => ({ ...m, question: v }))} placeholder={i18n.t("questionTextPlaceholder")} placeholderTextColor={Colors.textMuted} multiline />
 
               {(questionModal.questionType === "multiple-choice" || questionModal.questionType === "multiple-correct") && (
                 <>
-                  <Text style={styles.label}>Options (one per line)</Text>
-                  <TextInput style={[styles.input, styles.multiline]} value={questionModal.optionsText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, optionsText: v }))} placeholder={"Option A\nOption B\nOption C"} placeholderTextColor={Colors.textMuted} multiline />
+                  <Text style={styles.label}>{i18n.t("optionsOnePerLine")}</Text>
+                  <TextInput style={[styles.input, styles.multiline]} value={questionModal.optionsText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, optionsText: v }))} placeholder={i18n.t("optionsPlaceholder")} placeholderTextColor={Colors.textMuted} multiline />
                   <Text style={styles.label}>
-                    {questionModal.questionType === "multiple-correct" ? "Correct options (comma separated, must match above)" : "Correct option (must match one above)"}
+                    {questionModal.questionType === "multiple-correct" ? i18n.t("correctOptionsMulti") : i18n.t("correctOptionSingle")}
                   </Text>
-                  <TextInput style={styles.input} value={questionModal.correctText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, correctText: v }))} placeholder={questionModal.questionType === "multiple-correct" ? "Option A, Option C" : "Option B"} placeholderTextColor={Colors.textMuted} />
+                  <TextInput style={styles.input} value={questionModal.correctText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, correctText: v }))} placeholder={questionModal.questionType === "multiple-correct" ? i18n.t("correctMultiPlaceholder") : i18n.t("correctSinglePlaceholder")} placeholderTextColor={Colors.textMuted} />
                 </>
               )}
 
               {questionModal.questionType === "true-false" && (
                 <>
-                  <Text style={styles.label}>Correct answer</Text>
+                  <Text style={styles.label}>{i18n.t("correctAnswer")}</Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     {(["True", "False"] as const).map((v) => {
                       const active = questionModal.tfValue === v;
@@ -948,27 +949,27 @@ export default function CourseEditorScreen() {
 
               {questionModal.questionType === "short-answer" && (
                 <>
-                  <Text style={styles.label}>Expected answer</Text>
-                  <TextInput style={styles.input} value={questionModal.correctText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, correctText: v }))} placeholder="Accepted answer (case-insensitive)" placeholderTextColor={Colors.textMuted} />
+                  <Text style={styles.label}>{i18n.t("expectedAnswer")}</Text>
+                  <TextInput style={styles.input} value={questionModal.correctText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, correctText: v }))} placeholder={i18n.t("acceptedAnswerPlaceholder")} placeholderTextColor={Colors.textMuted} />
                 </>
               )}
 
               {questionModal.questionType === "matching" && (
                 <>
-                  <Text style={styles.label}>Pairs (one per line, as 'left =&gt; right')</Text>
+                  <Text style={styles.label}>{i18n.t("pairsLabel")}</Text>
                   <TextInput style={[styles.input, styles.multiline]} value={questionModal.pairsText} onChangeText={(v) => setQuestionModal((m) => ({ ...m, pairsText: v }))} placeholder={"HTTP => 80\nHTTPS => 443"} placeholderTextColor={Colors.textMuted} multiline />
                 </>
               )}
 
-              <Text style={styles.label}>Points</Text>
+              <Text style={styles.label}>{i18n.t("points")}</Text>
               <TextInput style={styles.input} value={questionModal.points} onChangeText={(v) => setQuestionModal((m) => ({ ...m, points: v }))} keyboardType="numeric" />
             </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={() => setQuestionModal((m) => ({ ...m, visible: false }))}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{i18n.t("cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={saveQuestion}>
-                <Text style={styles.saveBtnText}>Add</Text>
+                <Text style={styles.saveBtnText}>{i18n.t("add")}</Text>
               </TouchableOpacity>
             </View>
           </View>

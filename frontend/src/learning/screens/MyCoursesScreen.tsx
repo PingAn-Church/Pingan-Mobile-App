@@ -13,11 +13,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getMyCourses, type EnrolledCourse } from "@/services/enrollmentService";
+import i18n from "../../../i18n";
 
-const HUB_LINKS: { route: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { route: "Certificates", label: "Certificates", icon: "ribbon-outline" },
-  { route: "Achievements", label: "Achievements", icon: "trophy-outline" },
-  { route: "LearningGoal", label: "Goals", icon: "flag-outline" },
+const HUB_LINKS: { route: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { route: "Certificates", labelKey: "certificates", icon: "ribbon-outline" },
+  { route: "Achievements", labelKey: "achievements", icon: "trophy-outline" },
+  { route: "LearningGoal", labelKey: "goalsShort", icon: "flag-outline" },
 ];
 
 function ProgressBar({ value }: { value: number }) {
@@ -60,8 +61,8 @@ export default function MyCoursesScreen() {
           {item.title}
         </Text>
         <Text style={styles.cardMeta}>
-          {item.completedSections}/{item.totalSections} modules
-          {item.isCompleted ? " • Completed" : ""}
+          {item.completedSections}/{item.totalSections} {i18n.t("modules")}
+          {item.isCompleted ? ` • ${i18n.t("completed")}` : ""}
         </Text>
         <ProgressBar value={item.progressPercentage} />
         <Text style={styles.pct}>{Math.round(item.progressPercentage)}%</Text>
@@ -71,12 +72,12 @@ export default function MyCoursesScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>My Learning</Text>
+      <Text style={styles.heading}>{i18n.t("myLearning")}</Text>
       {stats && (
         <View style={styles.statsRow}>
-          <Stat label="Enrolled" value={stats.totalEnrollments} />
-          <Stat label="Completed" value={stats.completedCourses} />
-          <Stat label="Avg progress" value={`${Math.round(stats.averageProgress)}%`} />
+          <Stat label={i18n.t("enrolled")} value={stats.totalEnrollments} />
+          <Stat label={i18n.t("completed")} value={stats.completedCourses} />
+          <Stat label={i18n.t("avgProgress")} value={`${Math.round(stats.averageProgress)}%`} />
         </View>
       )}
 
@@ -84,7 +85,7 @@ export default function MyCoursesScreen() {
         {HUB_LINKS.map((l) => (
           <TouchableOpacity key={l.route} style={styles.hubBtn} onPress={() => navigation.navigate(l.route)}>
             <Ionicons name={l.icon} size={20} color={Colors.secondary} />
-            <Text style={styles.hubLabel}>{l.label}</Text>
+            <Text style={styles.hubLabel}>{i18n.t(l.labelKey)}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -92,9 +93,9 @@ export default function MyCoursesScreen() {
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
       ) : isError ? (
-        <Text style={styles.empty}>Could not load your courses.</Text>
+        <Text style={styles.empty}>{i18n.t("myCoursesLoadFailed")}</Text>
       ) : courses.length === 0 ? (
-        <Text style={styles.empty}>You haven't enrolled in any courses yet.</Text>
+        <Text style={styles.empty}>{i18n.t("noEnrolledCourses")}</Text>
       ) : (
         <FlatList
           data={courses}

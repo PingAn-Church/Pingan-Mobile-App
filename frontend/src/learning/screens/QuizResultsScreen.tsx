@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
 import { notify } from "@/utils/alerts";
+import i18n from "../../../i18n";
 import {
   getQuizDetail,
   getQuizResults,
@@ -49,7 +50,7 @@ export default function QuizResultsScreen() {
   const [detail, setDetail] = useState<QuizDetail | null>(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: route.params?.title || "Quiz results" });
+    navigation.setOptions({ title: route.params?.title || i18n.t("quizResults") });
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -67,7 +68,7 @@ export default function QuizResultsScreen() {
       setDetail(d);
       if (d?.title) navigation.setOptions({ title: d.title });
     } catch (e: any) {
-      notify("Error", e?.message || "Could not load your results.");
+      notify(i18n.t("error"), e?.message || i18n.t("resultsLoadFailed"));
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ export default function QuizResultsScreen() {
   if (!results) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Text style={styles.muted}>Results unavailable.</Text>
+        <Text style={styles.muted}>{i18n.t("resultsUnavailable")}</Text>
       </View>
     );
   }
@@ -100,16 +101,16 @@ export default function QuizResultsScreen() {
     return (
       <View style={[styles.container, styles.center, { padding: 24 }]}>
         <Ionicons name="help-circle-outline" size={72} color={Colors.textMuted} />
-        <Text style={styles.resultLabel}>Not attempted yet</Text>
+        <Text style={styles.resultLabel}>{i18n.t("notAttemptedYet")}</Text>
         <Text style={[styles.muted, { textAlign: "center", marginTop: 8 }]}>
-          You haven't taken this quiz yet.
+          {i18n.t("notTakenQuizYet")}
         </Text>
         <View style={{ height: 24 }} />
         <TouchableOpacity style={styles.primaryBtn} onPress={goAttempt}>
-          <Text style={styles.primaryBtnText}>Take quiz</Text>
+          <Text style={styles.primaryBtnText}>{i18n.t("takeQuiz")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.ghostBtnText}>Back to course</Text>
+          <Text style={styles.ghostBtnText}>{i18n.t("backToCourse")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -126,10 +127,9 @@ export default function QuizResultsScreen() {
         {pending ? (
           <>
             <Ionicons name="hourglass-outline" size={56} color={Colors.starGold} />
-            <Text style={styles.resultLabel}>Awaiting grading</Text>
+            <Text style={styles.resultLabel}>{i18n.t("awaitingGrading")}</Text>
             <Text style={[styles.muted, { textAlign: "center", marginTop: 6 }]}>
-              Some answers are still being reviewed by your instructor. Your final score will
-              appear here once grading is done. Auto-graded answers are shown below.
+              {i18n.t("resultsPendingText")}
             </Text>
           </>
         ) : (
@@ -141,11 +141,13 @@ export default function QuizResultsScreen() {
             />
             <Text style={styles.resultScore}>{results.score}%</Text>
             <Text style={styles.resultLabel}>
-              {results.isPassed ? "Passed!" : "Keep practising"}
+              {results.isPassed ? i18n.t("quizPassed") : i18n.t("quizKeepPractising")}
             </Text>
             <Text style={styles.muted}>
-              {results.correctAnswers}/{results.totalQuestions} correct
-              {detail?.passingScore != null ? ` • pass mark ${detail.passingScore}%` : ""}
+              {i18n.t("quizCorrectCount", { correct: results.correctAnswers, total: results.totalQuestions })}
+              {detail?.passingScore != null
+                ? ` • ${i18n.t("passMark", { score: detail.passingScore })}`
+                : ""}
             </Text>
           </>
         )}
@@ -174,22 +176,22 @@ export default function QuizResultsScreen() {
               <Ionicons name={verdictIcon as any} size={20} color={verdictColor} />
             </View>
 
-            <Text style={styles.fieldLabel}>Your answer</Text>
+            <Text style={styles.fieldLabel}>{i18n.t("yourAnswer")}</Text>
             <Text style={styles.fieldValue}>{formatAnswer(q.yourAnswer)}</Text>
 
             {q.pendingReview ? (
-              <Text style={styles.pendingTag}>Pending instructor review</Text>
+              <Text style={styles.pendingTag}>{i18n.t("pendingInstructorReview")}</Text>
             ) : (
               <>
                 {showCorrect && (
                   <>
-                    <Text style={styles.fieldLabel}>Correct answer</Text>
+                    <Text style={styles.fieldLabel}>{i18n.t("correctAnswer")}</Text>
                     <Text style={styles.fieldValue}>{formatAnswer(q.correctAnswer)}</Text>
                   </>
                 )}
                 {q.maxPoints != null && (
                   <Text style={styles.points}>
-                    {q.pointsAwarded ?? 0} / {q.maxPoints} points
+                    {i18n.t("pointsAwarded", { awarded: q.pointsAwarded ?? 0, max: q.maxPoints })}
                   </Text>
                 )}
               </>
@@ -197,7 +199,7 @@ export default function QuizResultsScreen() {
 
             {!!q.feedback && (
               <View style={styles.feedbackBox}>
-                <Text style={styles.feedbackLabel}>Instructor feedback</Text>
+                <Text style={styles.feedbackLabel}>{i18n.t("instructorFeedback")}</Text>
                 <Text style={styles.feedbackText}>{q.feedback}</Text>
               </View>
             )}
@@ -209,11 +211,11 @@ export default function QuizResultsScreen() {
 
       {canRetry && (
         <TouchableOpacity style={styles.primaryBtn} onPress={goAttempt}>
-          <Text style={styles.primaryBtnText}>Retake quiz</Text>
+          <Text style={styles.primaryBtnText}>{i18n.t("retakeQuiz")}</Text>
         </TouchableOpacity>
       )}
       <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
-        <Text style={styles.ghostBtnText}>Back to course</Text>
+        <Text style={styles.ghostBtnText}>{i18n.t("backToCourse")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

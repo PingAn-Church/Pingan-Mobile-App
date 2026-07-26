@@ -19,6 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import { ChatContext } from "../../context/ChatContext";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const DetailedPrivateChatPage = ({ route }) => {
@@ -214,7 +215,7 @@ const DetailedPrivateChatPage = ({ route }) => {
           style={styles.profileImage}
         />
         <Text style={styles.participantName}>
-          {participantDetails.firstName} {participantDetails.lastName}
+          {formatName(participantDetails.firstName, participantDetails.lastName)}
         </Text>
         {participantDetails.email && (
           <Text style={styles.email}>{participantDetails.email}</Text>

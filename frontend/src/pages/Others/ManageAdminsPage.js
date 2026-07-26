@@ -22,6 +22,7 @@ import {
 } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
 import UserIdentity from "../../components/UserIdentity";
+import { formatName } from "../../utils/formatName";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNavigation } from "@react-navigation/native";
@@ -387,7 +388,7 @@ export function ManageUsersPage() {
   const confirmDeactivate = (target) => {
     showAlert(
       i18n.t("deactivateUserTitle"),
-      `${target.firstName} ${target.lastName} — ${i18n.t("deactivateUserMessage")}`,
+      `${formatName(target.firstName, target.lastName)} — ${i18n.t("deactivateUserMessage")}`,
       [
         { text: i18n.t("cancel"), style: "cancel" },
         { text: i18n.t("continue"), onPress: () => confirmDeactivateFinal(target) },
@@ -425,7 +426,7 @@ export function ManageUsersPage() {
   const confirmDeleteUser = (target) => {
     showAlert(
       i18n.t("deleteUserTitle"),
-      `${target.firstName} ${target.lastName} — ${i18n.t("deleteUserMessage")}`,
+      `${formatName(target.firstName, target.lastName)} — ${i18n.t("deleteUserMessage")}`,
       [
         { text: i18n.t("cancel"), style: "cancel" },
         { text: i18n.t("delete"), style: "destructive", onPress: () => doDeleteUser(target.id) },

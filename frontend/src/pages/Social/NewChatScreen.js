@@ -120,6 +120,7 @@ import { useNavigation } from "@react-navigation/native";
 import { ChatContext } from "../../context/ChatContext";
 import useUserSearch from "../../hooks/useUserSearch";
 import i18n from "../../../i18n";
+import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { getBlockStatus, unblockUser } from "../../service/BlockService";
 import { confirmAction } from "../../utils/confirmAction";
@@ -189,7 +190,7 @@ const NewChatScreen = () => {
       onPress={() => handleStartPrivateChat(item)}
     >
       <Text style={styles.userName}>
-        {item.firstName} {item.lastName}
+        {formatName(item.firstName, item.lastName)}
       </Text>
     </TouchableOpacity>
   );

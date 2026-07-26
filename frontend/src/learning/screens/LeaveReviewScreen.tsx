@@ -28,7 +28,7 @@ export default function LeaveReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    navigation.setOptions({ title: "Leave a Review" });
+    navigation.setOptions({ title: i18n.t("leaveReview") });
     (async () => {
       try {
         const existing = await getMyReview(courseId);
@@ -46,11 +46,11 @@ export default function LeaveReviewScreen() {
 
   const submit = async () => {
     if (rating < 1) {
-      notify("Rating required", "Please choose a star rating.");
+      notify(i18n.t("ratingRequired"), i18n.t("chooseStarRating"));
       return;
     }
     if (!text.trim()) {
-      notify("Review required", "Please write a short review.");
+      notify(i18n.t("reviewRequired"), i18n.t("writeShortReview"));
       return;
     }
     setSubmitting(true);
@@ -58,13 +58,13 @@ export default function LeaveReviewScreen() {
       const payload = { rating, review: text.trim(), isAnonymous: anonymous };
       if (editing) await updateReview(courseId, payload);
       else await postReview(courseId, payload);
-      notify("Thank you", "Your review has been saved.", () => navigation.goBack());
+      notify(i18n.t("thankYou"), i18n.t("reviewSaved"), () => navigation.goBack());
     } catch (e: any) {
       notify(
         i18n.t("error"),
         e?.status === 409 || e?.statusCode === 409
           ? i18n.t("contentUnderReview")
-          : e?.message || "Failed to submit review."
+          : e?.message || i18n.t("reviewSubmitFailed")
       );
     } finally {
       setSubmitting(false);
@@ -81,7 +81,7 @@ export default function LeaveReviewScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Your rating</Text>
+      <Text style={styles.label}>{i18n.t("yourRating")}</Text>
       <View style={styles.stars}>
         {[1, 2, 3, 4, 5].map((s) => (
           <TouchableOpacity key={s} onPress={() => setRating(s)}>
@@ -94,24 +94,24 @@ export default function LeaveReviewScreen() {
         ))}
       </View>
 
-      <Text style={styles.label}>Your review</Text>
+      <Text style={styles.label}>{i18n.t("yourReview")}</Text>
       <TextInput
         style={styles.input}
         value={text}
         onChangeText={setText}
-        placeholder="Share what you thought about this course..."
+        placeholder={i18n.t("reviewPlaceholder")}
         placeholderTextColor={Colors.textMuted}
         multiline
       />
 
       <View style={styles.switchRow}>
-        <Text style={styles.label}>Post anonymously</Text>
+        <Text style={styles.label}>{i18n.t("postAnonymously")}</Text>
         <Switch value={anonymous} onValueChange={setAnonymous} />
       </View>
 
       <TouchableOpacity style={styles.btn} onPress={submit} disabled={submitting}>
         <Text style={styles.btnText}>
-          {submitting ? "Saving..." : editing ? "Update Review" : "Submit Review"}
+          {submitting ? i18n.t("saving") : editing ? i18n.t("updateReview") : i18n.t("submitReview")}
         </Text>
       </TouchableOpacity>
     </View>
