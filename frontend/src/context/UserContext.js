@@ -1,4 +1,10 @@
-import React, { createContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { refreshAccessToken, getAuthToken } from "../service/TokenService";
 import { fetchUserProfile, getOnlineUsers } from "../service/UserService";
@@ -8,6 +14,12 @@ import uuid from 'react-native-uuid';
 
 export const UserContext = createContext();
 const GUEST_MODE_KEY = "guestMode";
+// How often to silently re-check the signed-in user's permissions (verification,
+// role, active status) so a server-side change — e.g. an admin verifying the
+// account — unlocks the UI without a re-login. Kept deliberately infrequent:
+// permission changes are rare, we skip polling while backgrounded, and we also
+// refresh on foreground, so this is just a slow safety net.
+const PERMISSION_POLL_INTERVAL_MS = 60 * 1000;
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -47,7 +59,33 @@ export const UserProvider = ({ children }) => {
       return null;
     }
   };
-  
+
+  // Force a fresh profile fetch — unlike fetchUserData, this does NOT short-circuit
+  // once a user is loaded — and swap it into context only when something actually
+  // changed. That way pages gated on user.verifiedUser (SocialPage, activities)
+  // re-render the moment permissions change, mirroring a fresh sign-in, while
+  // unchanged polls cause no re-render.
+  const refreshUser = useCallback(async () => {
+    try {
+      const token = await getAuthToken();
+      if (!token) return null;
+
+      const userInfo = await fetchUserProfile();
+      setUser((prev) =>
+        prev && JSON.stringify(prev) === JSON.stringify(userInfo) ? prev : userInfo
+      );
+      setUserReady(true);
+      return userInfo;
+    } catch (error) {
+      // Transient failures (network blips, token-refresh races) must not drop the
+      // session — keep the current user and try again on the next tick.
+      console.warn(
+        "⚠️ Permission refresh failed, keeping current session:",
+        error?.message || error
+      );
+      return null;
+    }
+  }, []);
 
   const fetchOnlineUsers = async () => {
     if (!user?.id) return;
@@ -109,6 +147,29 @@ export const UserProvider = ({ children }) => {
     }
   }, [user]);
 
+  // Poll for permission changes while signed in. Depending on user?.id (not the
+  // whole user object) keeps the interval steady across profile updates — it only
+  // restarts on login/logout — so a verification flip doesn't tear it down. We
+  // skip ticks while backgrounded, and refresh immediately on foreground so a
+  // change made while the app was away shows up right away instead of up to a
+  // full interval later.
+  useEffect(() => {
+    if (!user?.id) return; // nothing to refresh for guests / logged-out users
+
+    const intervalId = setInterval(() => {
+      if (AppState.currentState === "active") refreshUser();
+    }, PERMISSION_POLL_INTERVAL_MS);
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") refreshUser();
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      subscription.remove();
+    };
+  }, [user?.id, refreshUser]);
+
   return (
     <UserContext.Provider
       value={{
@@ -119,6 +180,7 @@ export const UserProvider = ({ children }) => {
         setUser,
         setUserReady,
         fetchUserData,
+        refreshUser, // force a permission re-check (used by polling + on demand)
         logout, // ✅ exposed
         enterGuestMode,
         userStatus,
