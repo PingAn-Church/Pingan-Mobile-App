@@ -13,6 +13,7 @@ import { getEventById, checkInToEvent } from "../../service/EventService";
 import { getUserById } from "../../service/UserService";
 import { useRoute } from "@react-navigation/native";
 import { UserContext } from "../../context/UserContext";
+import UserIdentity from "../../components/UserIdentity";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import i18n from "../../../i18n";
@@ -227,9 +228,11 @@ export default function ActivityDetailPage() {
                     size={20}
                     style={styles.userIcon}
                   />
-                  <Text style={styles.userText}>
-                    {item.firstName} {item.lastName}
-                  </Text>
+                  <UserIdentity
+                    user={item}
+                    nameStyle={styles.userText}
+                    showEmail={!!user?.admin}
+                  />
                 </View>
               )}
             />

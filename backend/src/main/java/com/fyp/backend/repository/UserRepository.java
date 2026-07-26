@@ -32,6 +32,20 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
             + " OR LOWER(CONCAT(u.firstName, ' ', u.lastName)) LIKE LOWER(CONCAT('%', :q, '%')) )")
     Page<User> searchActiveByName(@Param("q") String q, Pageable pageable);
 
+    /** Verified + active users, paginated — backs the chat pickers' empty-query page. */
+    Page<User> findByActiveTrueAndDeletedAccountFalseAndIsVerifiedUserTrue(Pageable pageable);
+
+    /**
+     * Name search over active, admin-verified users for the chat pickers. Matches
+     * first, last, or "first last"; email is intentionally not searchable (no
+     * enumeration). Unverified users are hidden — they can't use chat until approved.
+     */
+    @Query("SELECT u FROM User u WHERE u.active = true AND u.deletedAccount = false AND u.isVerifiedUser = true AND ("
+            + " LOWER(u.firstName) LIKE LOWER(CONCAT('%', :q, '%'))"
+            + " OR LOWER(u.lastName) LIKE LOWER(CONCAT('%', :q, '%'))"
+            + " OR LOWER(CONCAT(u.firstName, ' ', u.lastName)) LIKE LOWER(CONCAT('%', :q, '%')) )")
+    Page<User> searchActiveVerifiedByName(@Param("q") String q, Pageable pageable);
+
     /**
      * Find a user by their email address.
      *

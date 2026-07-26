@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,9 +32,11 @@ import com.fyp.backend.util.TotpUtil;
 
 /**
  * Security-behaviour regression tests for the auth flow: deactivated accounts must
- * never log in / refresh / verify, registration distinguishes active vs deactivated
- * collisions, and OTP verification is brute-force locked and single-use. Pure unit
- * tests — repositories, Redis, mail and JWT are mocked (no DB/SMTP/Redis calls).
+ * never log in / refresh, registration distinguishes active vs deactivated
+ * collisions and only persists a pending sign-up (no user row until the code is
+ * confirmed), and OTP verification is brute-force locked, single-use, and is where
+ * the account is finally created. Pure unit tests — repositories, Redis, mail and
+ * JWT are mocked (no DB/SMTP/Redis calls).
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -48,6 +51,10 @@ class AuthServiceTest {
     @InjectMocks private AuthService authService;
 
     private static final String EMAIL = "user@example.com";
+    // A pending sign-up blob as AuthService serializes/deserializes it (public fields).
+    private static final String PENDING_JSON =
+            "{\"firstName\":\"New\",\"lastName\":\"User\",\"email\":\"" + EMAIL
+            + "\",\"passwordHash\":\"hashed\",\"profileImage\":null,\"birthday\":null}";
 
     private User user(boolean active) {
         User u = new User();
@@ -62,6 +69,15 @@ class AuthServiceTest {
         LoginDto dto = new LoginDto();
         dto.setEmail(EMAIL);
         dto.setPassword("secret");
+        return dto;
+    }
+
+    private UserDto registerDto() {
+        UserDto dto = new UserDto();
+        dto.setEmail(EMAIL);
+        dto.setFirstName("New");
+        dto.setLastName("User");
+        dto.setPassword("secret123");
         return dto;
     }
 
@@ -96,39 +112,46 @@ class AuthServiceTest {
         org.junit.jupiter.api.Assertions.assertFalse(authService.isAccountActive(EMAIL));
     }
 
-    // ---- registration collisions -------------------------------------------
+    // ---- registration collisions + pending-only persistence -----------------
 
     @Test
     void registerRejectsExistingActiveEmailAsConflict() {
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(true)));
-        UserDto dto = new UserDto();
-        dto.setEmail(EMAIL);
-        assertThrows(IllegalArgumentException.class, () -> authService.registerUser(dto));
+        assertThrows(IllegalArgumentException.class, () -> authService.registerUser(registerDto()));
     }
 
     @Test
     void registerSignalsDeactivatedEmailDistinctly() {
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(false)));
-        UserDto dto = new UserDto();
-        dto.setEmail(EMAIL);
-        assertThrows(IllegalStateException.class, () -> authService.registerUser(dto));
+        assertThrows(IllegalStateException.class, () -> authService.registerUser(registerDto()));
     }
 
-    // ---- OTP verification: lockout, single-use, gating ----------------------
+    @Test
+    void registerStashesPendingSignUpWithoutCreatingUser() {
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed");
+
+        authService.registerUser(registerDto());
+
+        // The account row is NOT created here — only a pending record in Redis.
+        verify(redisService).savePendingRegistration(eq(EMAIL), anyString());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    // ---- OTP verification: lockout, single-use, account materialisation ------
 
     @Test
     void verifyCodeIsLockedAfterTooManyFailures() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(true)));
         when(redisService.isOtpVerifyLocked(EMAIL)).thenReturn(true);
 
         ApiException ex = assertApiException(() -> authService.verifyCode(EMAIL, "000000"));
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
         verify(redisService, never()).clearOtpState(EMAIL);
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
     void verifyCodeRejectsWrongCodeAndRecordsFailure() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(true)));
         when(redisService.isOtpVerifyLocked(EMAIL)).thenReturn(false);
         when(redisService.peekOtpSecret(EMAIL)).thenReturn(TotpUtil.generateSecret());
 
@@ -136,49 +159,53 @@ class AuthServiceTest {
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
         verify(redisService).recordOtpVerifyFailure(EMAIL);
         verify(redisService, never()).clearOtpState(EMAIL);
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
-    void verifyCodeAcceptsValidCodeAndClearsStateSingleUse() {
+    void verifyCodeCreatesAccountFromPendingAndClearsStateSingleUse() {
         String secret = TotpUtil.generateSecret();
-        User u = user(true);
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(u));
         when(redisService.isOtpVerifyLocked(EMAIL)).thenReturn(false);
         when(redisService.peekOtpSecret(EMAIL)).thenReturn(secret);
+        when(redisService.getPendingRegistration(EMAIL)).thenReturn(PENDING_JSON);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
         User result = authService.verifyCode(EMAIL, TotpUtil.currentCode(secret));
 
-        assertSame(u, result);
-        verify(redisService).clearOtpState(EMAIL); // single-use: code invalidated on success
+        assertEquals(EMAIL, result.getEmail());
+        org.junit.jupiter.api.Assertions.assertFalse(result.isVerifiedUser()); // admin approval is separate
+        verify(userRepository).save(any(User.class));            // account materialised on verify
+        verify(redisService).deletePendingRegistration(EMAIL);    // pending consumed
+        verify(redisService).clearOtpState(EMAIL);                // code single-use
     }
 
     @Test
-    void verifyCodeBlocksDeactivatedAccount() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(false)));
-        ApiException ex = assertApiException(() -> authService.verifyCode(EMAIL, "000000"));
-        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+    void verifyCodeFailsWhenPendingSignUpExpired() {
+        String secret = TotpUtil.generateSecret();
+        when(redisService.isOtpVerifyLocked(EMAIL)).thenReturn(false);
+        when(redisService.peekOtpSecret(EMAIL)).thenReturn(secret);
+        when(redisService.getPendingRegistration(EMAIL)).thenReturn(null); // lapsed TTL
+
+        ApiException ex = assertApiException(() -> authService.verifyCode(EMAIL, TotpUtil.currentCode(secret)));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).save(any(User.class));
+        verify(redisService).clearOtpState(EMAIL);
     }
 
-    // ---- send verification code: existence / activation / rate limits -------
+    // ---- send verification code: pending gate + rate limits -----------------
 
     @Test
-    void sendVerificationCodeRejectsUnknownEmail() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+    void sendVerificationCodeRejectsWhenNoPendingRegistration() {
+        when(redisService.hasPendingRegistration(EMAIL)).thenReturn(false);
         ApiException ex = assertApiException(() -> authService.sendVerificationCode(EMAIL));
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
         verify(emailService, never()).sendVerificationCodeEmail(anyString(), anyString());
     }
 
     @Test
-    void sendVerificationCodeBlocksDeactivatedAccount() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(false)));
-        ApiException ex = assertApiException(() -> authService.sendVerificationCode(EMAIL));
-        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
-    }
-
-    @Test
     void sendVerificationCodeEnforcesCooldown() {
-        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(true)));
+        when(redisService.hasPendingRegistration(EMAIL)).thenReturn(true);
         when(redisService.tryStartOtpCooldown(EMAIL)).thenReturn(false);
         when(redisService.otpCooldownRemaining(EMAIL)).thenReturn(42L);
 

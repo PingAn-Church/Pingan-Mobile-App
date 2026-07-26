@@ -122,8 +122,9 @@ public class UserController {
     // New endpoint to get all users (excluding the currently logged-in user)
     /**
      * Directory search for chat pickers: any authenticated user, paginated, and
-     * limited to minimal fields (no email). Empty query returns the first page of
-     * active users so pickers can show an initial list.
+     * limited to minimal fields (no email). Only admin-verified users are listed —
+     * unverified accounts can't use chat, so they're hidden here too. Empty query
+     * returns the first page of verified users so pickers can show an initial list.
      */
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchUsers(
@@ -137,8 +138,8 @@ public class UserController {
 
         String term = q == null ? "" : q.trim();
         Page<User> result = term.isEmpty()
-                ? userRepository.findByActiveTrueAndDeletedAccountFalse(pageable)
-                : userRepository.searchActiveByName(term, pageable);
+                ? userRepository.findByActiveTrueAndDeletedAccountFalseAndIsVerifiedUserTrue(pageable)
+                : userRepository.searchActiveVerifiedByName(term, pageable);
 
         List<UserSummaryDto> data = result.getContent().stream()
                 .map(UserSummaryDto::from)

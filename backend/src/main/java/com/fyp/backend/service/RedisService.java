@@ -28,6 +28,9 @@ public class RedisService {
     private static final String OTP_COOLDOWN_KEY = "otp_cooldown:";
     private static final String OTP_COUNT_KEY = "otp_count:";
     private static final String OTP_VERIFY_FAIL_KEY = "otp_verify_fail:";
+    // Pending sign-up held here (not the DB) until the emailed code is confirmed.
+    private static final String PENDING_REG_KEY = "pending_reg:";
+    private static final long PENDING_REG_TTL_HOURS = 24;
     private static final long OTP_SECRET_TTL_HOURS = 24;
     private static final long OTP_COOLDOWN_SECONDS = 60;
     private static final long OTP_DAILY_MAX = 10;
@@ -216,5 +219,31 @@ public class RedisService {
     public void clearOtpState(String email) {
         redisTemplate.delete(OTP_SECRET_KEY + email);
         redisTemplate.delete(OTP_VERIFY_FAIL_KEY + email);
+    }
+
+    // ---- pending registration (pre-verification sign-up) ----------------
+
+    /**
+     * Store a serialized pending sign-up keyed by email, expiring after
+     * {@value #PENDING_REG_TTL_HOURS}h. Re-registering the same email before it is
+     * verified overwrites the previous record (and refreshes the TTL).
+     */
+    public void savePendingRegistration(String email, String json) {
+        redisTemplate.opsForValue().set(PENDING_REG_KEY + email, json, Duration.ofHours(PENDING_REG_TTL_HOURS));
+    }
+
+    /** Read the serialized pending sign-up for an email (null if none/expired). */
+    public String getPendingRegistration(String email) {
+        return redisTemplate.opsForValue().get(PENDING_REG_KEY + email);
+    }
+
+    /** Whether a pending sign-up is currently held for this email. */
+    public boolean hasPendingRegistration(String email) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(PENDING_REG_KEY + email));
+    }
+
+    /** Drop the pending sign-up once the account has been materialised. */
+    public void deletePendingRegistration(String email) {
+        redisTemplate.delete(PENDING_REG_KEY + email);
     }
 }

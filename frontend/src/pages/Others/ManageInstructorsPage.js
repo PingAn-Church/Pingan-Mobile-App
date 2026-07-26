@@ -17,6 +17,7 @@ import {
   updateUserActiveStatus,
 } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
+import UserIdentity from "../../components/UserIdentity";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNavigation } from "@react-navigation/native";
@@ -245,9 +246,7 @@ export default function ManageInstructorsPage() {
               <Ionicons name="remove-circle" size={24} color="red" />
             </TouchableOpacity>
           )}
-          <Text style={styles.userName}>
-            {item.firstName} {item.lastName}
-          </Text>
+          <UserIdentity user={item} nameStyle={styles.userName} />
         </View>
         <TouchableOpacity onPress={action} style={styles.iconButton}>
           <Ionicons name={icon} size={24} color={iconColor} />

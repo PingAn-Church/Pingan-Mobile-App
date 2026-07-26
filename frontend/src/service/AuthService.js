@@ -23,7 +23,8 @@ const clearLocalSession = async () => {
 
 export const registerUser = async (userDetails) => {
   try {
-    // Creates the (unverified) account; tokens are issued later by verifyCode.
+    // Stashes the sign-up server-side (no account row yet); the row is created and
+    // tokens are issued only once verifyCode confirms the emailed code.
     const response = await axios.post(apiUrl(`/auth/register`), userDetails);
     return response;
   } catch (error) {

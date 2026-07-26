@@ -21,7 +21,6 @@ import {
 } from "../../service/OSSService";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
-import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert"
 import GuestContinueLink from "../../components/GuestContinueLink";
 import AuthSwitchLink from "../../components/AuthSwitchLink";
@@ -40,7 +39,6 @@ export default function RegisterPage() {
 
   const navigation = useNavigation(); // React Navigation
   const { language } = useContext(LanguageContext);
-  const { handleRegisterPushToken } = useNotification();
   const termsCopy = TERMS_COPY[language] || TERMS_COPY.en;
 
   useEffect(() => {
@@ -167,11 +165,10 @@ export default function RegisterPage() {
 
       const response = await registerUser(user);
 
-      // Account created (unverified). Register the push token now (stored
-      // inactive pre-JWT) and send the user to enter the emailed code.
+      // No account exists yet — the sign-up is held server-side until the emailed
+      // code is verified, which is when the user row is created and the push token
+      // is registered (see VerificationCodePage). Just go enter the code.
       if (response.status === 200) {
-        const newUser = response.data;
-        if (newUser?.id) await handleRegisterPushToken(newUser.id);
         navigation.navigate("VerificationCode", { email });
       }
     } catch (error) {

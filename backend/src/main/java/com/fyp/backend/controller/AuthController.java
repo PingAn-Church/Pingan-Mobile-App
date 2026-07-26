@@ -109,10 +109,11 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto userDto) {
         try {
-            // Create the (unverified) account. Tokens are issued only after the
-            // emailed verification code is confirmed via /verify-code.
-            UserProfileDto registeredUser = authService.registerUser(userDto);
-            return ResponseEntity.ok(registeredUser);
+            // Stash the sign-up (Redis) and let the client trigger the emailed code.
+            // No account row is created until /verify-code confirms it, so a mistyped
+            // email never leaves a stray, unverifiable user behind.
+            authService.registerUser(userDto);
+            return ResponseEntity.ok(Map.of("status", "pending", "email", userDto.getEmail()));
         } catch (IllegalStateException e) {
             // Email belongs to a deactivated account.
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());

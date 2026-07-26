@@ -21,6 +21,7 @@ import {
   deleteUser,
 } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
+import UserIdentity from "../../components/UserIdentity";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useNavigation } from "@react-navigation/native";
@@ -241,10 +242,11 @@ export default function ManageAdminsPage() {
     if (section.key === "admins") {
       return (
         <View style={styles.userItem}>
-          <Text style={styles.userName}>
-            {item.firstName} {item.lastName}
-            {item.id === user?.id ? i18n.t("you") : ""}
-          </Text>
+          <UserIdentity
+            user={item}
+            nameStyle={styles.userName}
+            suffix={item.id === user?.id ? i18n.t("you") : ""}
+          />
           {item.id !== user?.id && (
             <TouchableOpacity onPress={() => handleRemoveAdmin(item.id)} style={styles.iconButton}>
               <Ionicons name="person-remove" size={24} color="red" />
@@ -256,9 +258,7 @@ export default function ManageAdminsPage() {
 
     return (
       <View style={styles.userItem}>
-        <Text style={styles.userName}>
-          {item.firstName} {item.lastName}
-        </Text>
+        <UserIdentity user={item} nameStyle={styles.userName} />
         <TouchableOpacity onPress={() => handleAddAdmin(item.id)} style={styles.iconButton}>
           <Ionicons name="person-add" size={24} color="green" />
         </TouchableOpacity>
@@ -475,9 +475,7 @@ export function ManageUsersPage() {
             <Ionicons name="remove-circle" size={24} color="red" />
           </TouchableOpacity>
         )}
-        <Text style={styles.userName}>
-          {rowUser.firstName} {rowUser.lastName}
-        </Text>
+        <UserIdentity user={rowUser} nameStyle={styles.userName} />
       </View>
       <TouchableOpacity onPress={() => action(rowUser.id)} style={styles.iconButton}>
         <Ionicons name={icon} size={24} color={iconColor} />
@@ -526,9 +524,7 @@ export function ManageUsersPage() {
             >
               <Ionicons name="trash" size={24} color="red" />
             </TouchableOpacity>
-            <Text style={styles.userName}>
-              {item.firstName} {item.lastName}
-            </Text>
+            <UserIdentity user={item} nameStyle={styles.userName} />
           </View>
           <TouchableOpacity
             onPress={() => handleReactivate(item.id)}

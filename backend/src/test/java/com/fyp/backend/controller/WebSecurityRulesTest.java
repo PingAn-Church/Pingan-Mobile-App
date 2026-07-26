@@ -152,7 +152,7 @@ class WebSecurityRulesTest {
     @Test
     @WithMockUser
     void userSearchOmitsEmailAndClampsPageSize() throws Exception {
-        when(userRepository.findByActiveTrueAndDeletedAccountFalse(any(Pageable.class)))
+        when(userRepository.findByActiveTrueAndDeletedAccountFalseAndIsVerifiedUserTrue(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(userWithEmail(2, "secret@example.com")),
                         PageRequest.of(0, 50), 1));
 
