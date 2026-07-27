@@ -7,8 +7,8 @@ export default {
       version: "0.3.7",
       // Tablets rotate freely (landscape sidebar layout); phones are locked to
       // portrait at runtime in App.js via expo-screen-orientation, and natively
-      // on iPhone via Info.plist. Keep "default" so `expo prebuild` doesn't
-      // re-lock the Android manifest.
+      // on iPhone via the UISupportedInterfaceOrientations keys below. Keep
+      // "default" so `expo prebuild` doesn't re-lock the Android manifest.
       orientation: "default",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",
@@ -21,6 +21,20 @@ export default {
         supportsTablet: true,
         buildNumber: "307",
         infoPlist: {
+          // orientation: "default" above would otherwise let prebuild write all
+          // four orientations for iPhone too. Spelling them out here keeps the
+          // portrait-only phone layout reproducible, so `expo prebuild --clean`
+          // regenerates Info.plist instead of quietly unlocking rotation.
+          UISupportedInterfaceOrientations: [
+            "UIInterfaceOrientationPortrait",
+            "UIInterfaceOrientationPortraitUpsideDown",
+          ],
+          "UISupportedInterfaceOrientations~ipad": [
+            "UIInterfaceOrientationPortrait",
+            "UIInterfaceOrientationPortraitUpsideDown",
+            "UIInterfaceOrientationLandscapeLeft",
+            "UIInterfaceOrientationLandscapeRight",
+          ],
           NSPhotoLibraryUsageDescription:
             "We need access to your photo library to upload profile images.",
           NSCameraUsageDescription:
