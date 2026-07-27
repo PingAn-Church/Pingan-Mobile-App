@@ -30,6 +30,18 @@ public interface MessageDeliveryStatusRepository extends JpaRepository<MessageDe
             @Param("conversationId") Long conversationId,
             @Param("userId") Long userId);
 
+    // Marks a whole conversation read for one user in a single statement. Per-message
+    // receipts only ever cover the history page the client has loaded, so opening a
+    // chat with hundreds of unread used to leave most of them unread server-side.
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE message_delivery_status SET status = 'READ', timestamp = CURRENT_TIMESTAMP "
+            + "WHERE user_id = :userId AND status <> 'READ' AND message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId AND sender_id <> :userId)",
+            nativeQuery = true)
+    int markConversationRead(
+            @Param("conversationId") Long conversationId,
+            @Param("userId") Long userId);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = "DELETE FROM message_delivery_status WHERE user_id = :userId "
             + "AND message_id IN (SELECT id FROM messages WHERE conversation_id = :conversationId)",

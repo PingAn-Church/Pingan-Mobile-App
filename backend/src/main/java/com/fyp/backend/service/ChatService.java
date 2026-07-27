@@ -340,6 +340,32 @@ public class ChatService {
         }
     }
 
+    /**
+     * Marks every message in a conversation as read for one user.
+     *
+     * The client's per-message receipts only cover the history page it has loaded
+     * (the newest 30), so opening a conversation with hundreds of unread left the
+     * rest unread on the server: the badge cleared locally and then reappeared on
+     * the next refetch. This clears the whole conversation in one go.
+     *
+     * @return the user's remaining unread in this conversation — zero unless
+     *         something arrived mid-flight.
+     */
+    @Transactional
+    public long markConversationRead(Long userId, Long conversationId, String conversationType) {
+        Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
+        checkUserIsParticipant(conversation, userId);
+
+        // Anyone added to a group after a message was sent has no delivery row for
+        // it, and updateMessageStatus only ever touches rows that already exist —
+        // so backfill first, then flip. Same pairing as ConversationService uses
+        // when adding a participant.
+        messageDeliveryStatusRepository.insertSentStatusesForConversation(conversationId, userId);
+        messageDeliveryStatusRepository.markConversationRead(conversationId, userId);
+
+        return messageRepository.countUnread(conversationId, userId);
+    }
+
 
     public List<User> getConversationParticipants(Long conversationId, String conversationType) {
         if ("group".equalsIgnoreCase(conversationType)) {

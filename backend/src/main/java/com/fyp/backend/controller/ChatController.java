@@ -156,6 +156,27 @@ public class ChatController {
         }
     }
 
+    /**
+     * Marks a whole conversation read for the logged-in user, called when they open
+     * it. The per-message WebSocket receipts only cover the loaded history page, so
+     * without this the unread badge reappears on the next refetch.
+     */
+    @PostMapping("/read")
+    public ResponseEntity<?> markConversationRead(@RequestParam Long conversationId,
+                                                  @RequestParam String conversationType,
+                                                  HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            long remaining = chatService.markConversationRead(userId, conversationId, conversationType);
+            return ResponseEntity.ok(Map.of("unreadCount", remaining));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     // Per-conversation push-notification mute for the logged-in user.
     @GetMapping("/mute")
     public ResponseEntity<?> getMuteStatus(@RequestParam Long conversationId,

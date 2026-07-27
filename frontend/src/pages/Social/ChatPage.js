@@ -40,6 +40,7 @@ import {
   editMessageInDatabase,
   getConversationMuteStatus,
   setConversationMuteStatus,
+  markConversationRead,
 } from "../../service/ChatService";
 import {
   getLocalUri as getCachedMedia,
@@ -935,6 +936,15 @@ export default function ChatPage({ route }) {
       }
     });
   }, [conversation?.chatHistory, conversation?.unreadCount, conversationId, currentUser?.id, messages]);
+
+  // Opening a conversation reads all of it, not just the page on screen. The
+  // per-message receipts below can only speak for messages the client has loaded,
+  // so without this one call everything older stays unread on the server and the
+  // badge comes back the next time the conversation list refreshes.
+  useEffect(() => {
+    if (!currentUser?.id || !conversationId || !conversationType) return;
+    markConversationRead(conversationId, conversationType);
+  }, [conversationId, conversationType, currentUser?.id]);
 
   const updateConversationHistory = (updater) => {
     setConversations((prev) =>

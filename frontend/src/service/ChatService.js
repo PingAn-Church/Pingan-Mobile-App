@@ -311,6 +311,30 @@ export const updateGroupIcon = async (conversationId, groupIcon) => {
   }
 };
 
+/**
+ * Marks a whole conversation read, called when the user opens it.
+ *
+ * The WebSocket read receipts only cover the history page currently loaded, so on
+ * their own they leave everything older unread on the server — the badge would
+ * clear locally and then reappear on the next refresh. Best-effort: a failure
+ * costs a stale badge, never the ability to read the conversation.
+ */
+export const markConversationRead = async (conversationId, conversationType) => {
+  const token = await getAuthToken();
+  if (!token) return null;
+
+  try {
+    const response = await axios.post(apiUrl(`/chat/read`), null, {
+      params: { conversationId, conversationType },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data; // { unreadCount }
+  } catch (error) {
+    console.warn("⚠️ Could not mark the conversation read:", error?.message || error);
+    return null;
+  }
+};
+
 // Per-conversation push-notification mute for the logged-in user.
 export const getConversationMuteStatus = async (conversationId, conversationType) => {
   const token = await getAuthToken();
