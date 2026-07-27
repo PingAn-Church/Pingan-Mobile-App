@@ -42,6 +42,22 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             + "AND ds.user.id = :userId AND ds.status = 'READ')")
     long countUnread(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
+    // Unread across every conversation the user belongs to — the number that goes on
+    // the app icon. Muted conversations are left out: they are silenced app-wide, not
+    // just for pushes. Reading m.conversation.id uses the FK column directly, so this
+    // never has to resolve the TABLE_PER_CLASS Conversation hierarchy.
+    @Query("SELECT COUNT(m) FROM Message m WHERE m.sender.id <> :userId "
+            + "AND NOT EXISTS (SELECT 1 FROM MessageDeliveryStatus ds WHERE ds.message.id = m.id "
+            + "AND ds.user.id = :userId AND ds.status = 'READ') "
+            + "AND NOT EXISTS (SELECT 1 FROM ConversationMute cm WHERE cm.userId = :userId "
+            + "AND cm.conversationId = m.conversation.id) "
+            + "AND (m.conversation.id IN "
+            + "(SELECT g.id FROM GroupConversation g JOIN g.participants p WHERE p.id = :userId) "
+            + "OR m.conversation.id IN "
+            + "(SELECT pc.id FROM PrivateConversation pc "
+            + "WHERE pc.userOne.id = :userId OR pc.userTwo.id = :userId))")
+    long countTotalUnread(@Param("userId") Long userId);
+
     void deleteById(Long messageId);
 
     // Account-deletion sweep: drop this user's read-receipt join rows across every

@@ -40,6 +40,7 @@ class ConversationMuteTest {
     @Mock private ConversationMuteRepository conversationMuteRepository;
     @Mock private GroupConversationRepository groupConversationRepository;
     @Mock private PrivateConversationRepository privateConversationRepository;
+    @Mock private UnreadCountService unreadCountService;
 
     @InjectMocks private PushNotificationService pushNotificationService;
     @InjectMocks private ConversationMuteService conversationMuteService;

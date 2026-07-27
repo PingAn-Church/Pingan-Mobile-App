@@ -182,6 +182,9 @@ public class PushNotificationService {
     @Autowired
     private PushMessages pushMessages;
 
+    @Autowired
+    private UnreadCountService unreadCountService;
+
     private final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
     // Reused across sends — RestTemplate is thread-safe once built, and a new one
@@ -405,6 +408,8 @@ public class PushNotificationService {
      * rendered against the language their device last reported.
      */
     public void sendPushNotification(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long conversationId, String conversationType) {
+        boolean isChat = "private".equals(conversationType) || "group".equals(conversationType);
+
         for (Long userId : filterMutedRecipients(recipientIds, conversationId, conversationType)) {
             List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
             if (tokens == null || tokens.isEmpty()) continue;
@@ -413,10 +418,16 @@ public class PushNotificationService {
             String localizedBody = message == null ? "" : message.render(language);
             String localizedTitle = title == null ? "" : title.render(language);
 
+            // The app icon can only learn the count from the payload when the app
+            // isn't running to count for itself. Resolved once per recipient, not
+            // per device — every device of theirs shows the same number. Learning
+            // events carry no badge (see sendPushToDevice).
+            Integer badge = isChat ? (int) unreadCountService.totalUnreadFor(userId) : null;
+
             for (PushToken token : tokens) {
                 // Only send notification if the token is active
                 if (token.isActive()) {
-                    sendPushToDevice(token.getToken(), localizedBody, localizedTitle, conversationId, conversationType);
+                    sendPushToDevice(token.getToken(), localizedBody, localizedTitle, conversationId, conversationType, badge);
                 }
             }
         }
@@ -455,8 +466,13 @@ public class PushNotificationService {
      * through Jackson sends UTF-8 and escapes the values, so a message holding a
      * quote, backslash or newline can no longer produce malformed JSON that Expo
      * rejects outright.
+     *
+     * A null badge is left off the payload entirely. Only chat pushes count
+     * towards the app icon, and an absent badge tells the OS to leave whatever is
+     * already there alone — a learning notification must not wipe someone's unread
+     * message count.
      */
-    private void sendPushToDevice(String token, String message, String title, Long conversationId, String conversationType) {
+    private void sendPushToDevice(String token, String message, String title, Long conversationId, String conversationType, Integer badge) {
         // conversationId is absent for learning pushes; omit the key rather than
         // shipping the literal string "null" the concatenated payload produced.
         Map<String, Object> data = new LinkedHashMap<>();
@@ -471,6 +487,9 @@ public class PushNotificationService {
         payload.put("to", token);
         payload.put("title", title == null ? "" : title);
         payload.put("body", message == null ? "" : message);
+        if (badge != null) {
+            payload.put("badge", badge);
+        }
         payload.put("data", data);
 
         HttpHeaders headers = new HttpHeaders();

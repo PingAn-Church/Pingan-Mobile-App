@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
@@ -56,6 +57,7 @@ class PushNotificationEncodingTest {
     @Mock private UserRepository userRepository;
     @Mock private ConversationMuteRepository conversationMuteRepository;
     @Mock private RestTemplate restTemplate;
+    @Mock private UnreadCountService unreadCountService;
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
 
     @InjectMocks private PushNotificationService pushNotificationService;
@@ -152,5 +154,31 @@ class PushNotificationEncodingTest {
         JsonNode data = parse(entity).path("data");
         assertFalse(data.has("conversationId"), "a null id must not ship as the string \"null\"");
         assertEquals("learning", data.path("conversationType").asText());
+    }
+
+    @Test
+    void chatPushCarriesTheRecipientsUnreadTotalForTheAppIcon() throws Exception {
+        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "private"))
+                .thenReturn(List.of());
+        when(unreadCountService.totalUnreadFor(RECIPIENT)).thenReturn(7L);
+
+        HttpEntity<?> entity = capturePush(() -> pushNotificationService.sendPushNotification(
+                List.of(RECIPIENT), pushMessages.literal("在吗？"),
+                pushMessages.personName("伟", "张"), 42L, "private"));
+
+        assertEquals(7, parse(entity).path("badge").asInt());
+    }
+
+    @Test
+    void learningPushCarriesNoBadgeSoItCannotWipeTheUnreadCount() throws Exception {
+        // Chat messages are the only thing the icon counts. An absent badge key
+        // leaves whatever the OS is already showing untouched — sending 0 here
+        // would clear a legitimate unread count.
+        HttpEntity<?> entity = capturePush(() -> pushNotificationService.notifyLearningEvent(
+                RECIPIENT, "push.learning.achievement.title", "push.learning.achievement.body",
+                "Faithful Reader"));
+
+        assertFalse(parse(entity).has("badge"), "learning pushes must not set a badge");
+        verifyNoInteractions(unreadCountService);
     }
 }

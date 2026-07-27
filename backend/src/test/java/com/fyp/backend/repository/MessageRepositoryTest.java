@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,9 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.TestPropertySource;
 
+import com.fyp.backend.model.Conversation;
+import com.fyp.backend.model.ConversationMute;
+import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageDeliveryStatus;
 import com.fyp.backend.model.PrivateConversation;
@@ -63,11 +67,15 @@ class MessageRepositoryTest {
     }
 
     private Message message(User sender, String content) {
+        return message(conversation, "private", sender, content);
+    }
+
+    private Message message(Conversation target, String type, User sender, String content) {
         Message m = new Message();
         m.setContent(content);
         m.setType("text");
-        m.setConversationType("private");
-        m.setConversation(conversation);
+        m.setConversationType(type);
+        m.setConversation(target);
         m.setSender(sender);
         m.setTimestamp(now());
         return em.persist(m);
@@ -75,6 +83,19 @@ class MessageRepositoryTest {
 
     private void markRead(Message m, User reader) {
         em.persist(new MessageDeliveryStatus(m, reader, "READ", now()));
+    }
+
+    private GroupConversation group(String name, User... members) {
+        GroupConversation g = new GroupConversation();
+        g.setGroupName(name); // non-null column
+        g.setParticipants(new ArrayList<>(List.of(members)));
+        g.setCreatedAt(now());
+        g.setUpdatedAt(now());
+        return em.persist(g);
+    }
+
+    private void mute(User user, Conversation target, String type) {
+        em.persist(new ConversationMute(user.getId(), target.getId(), type));
     }
 
     @Test
@@ -108,5 +129,53 @@ class MessageRepositoryTest {
                 conversation.getId(), oldestSoFar, PageRequest.of(0, 2));
         assertEquals(2, older.size());
         assertTrue(older.get(0).getId() < oldestSoFar); // strictly older than the cursor
+    }
+
+    @Test
+    void totalUnreadSpansPrivateAndGroupConversations() {
+        GroupConversation prayerGroup = group("Prayer", me, other);
+        message(other, "private one");
+        message(prayerGroup, "group", other, "group one");
+        message(prayerGroup, "group", other, "group two");
+        em.flush();
+
+        assertEquals(3, messageRepository.countTotalUnread(me.getId()));
+    }
+
+    @Test
+    void totalUnreadIgnoresOwnMessagesAndAlreadyReadOnes() {
+        message(me, "my own message");
+        Message read = message(other, "already seen");
+        message(other, "still waiting");
+        markRead(read, me);
+        em.flush();
+
+        assertEquals(1, messageRepository.countTotalUnread(me.getId()));
+    }
+
+    @Test
+    void totalUnreadLeavesOutMutedConversations() {
+        GroupConversation noisyGroup = group("Noisy", me, other);
+        message(other, "private one");
+        message(noisyGroup, "group", other, "group one");
+        message(noisyGroup, "group", other, "group two");
+        mute(me, noisyGroup, "group");
+        em.flush();
+
+        // The muted group still has unread of its own for the chat list; it just
+        // doesn't demand attention app-wide.
+        assertEquals(1, messageRepository.countTotalUnread(me.getId()));
+        assertEquals(2, messageRepository.countUnread(noisyGroup.getId(), me.getId()));
+    }
+
+    @Test
+    void totalUnreadIgnoresConversationsTheUserIsNotIn() {
+        User stranger = persistUser("stranger@example.com");
+        User friend = persistUser("friend@example.com");
+        GroupConversation theirGroup = group("Theirs", stranger, friend);
+        message(theirGroup, "group", stranger, "not for me");
+        em.flush();
+
+        assertEquals(0, messageRepository.countTotalUnread(me.getId()));
     }
 }

@@ -40,6 +40,7 @@ class PushLocalizationTest {
     @Mock private UserRepository userRepository;
     @Mock private ConversationMuteRepository conversationMuteRepository;
     @Mock private RestTemplate restTemplate;
+    @Mock private UnreadCountService unreadCountService;
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
 
     @InjectMocks private PushNotificationService pushNotificationService;
