@@ -347,7 +347,8 @@ export default function ChatPage({ route }) {
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
   const { user: currentUser } = useContext(UserContext);
-  const { conversations, setConversations, loadOlderMessages } = useContext(ChatContext);
+  const { conversations, setConversations, setConversationMuted, loadOlderMessages } =
+    useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
   const headerHeight = useHeaderHeight();
@@ -678,13 +679,17 @@ export default function ChatPage({ route }) {
     setShowHeaderMenu(false);
     const next = !muted;
     setMuted(next); // optimistic — reverted on failure
+    // Muted conversations drop out of the app-wide badge, so the shared list has
+    // to learn about the change too, not just this screen's local state.
+    setConversationMuted(conversationId, next);
     try {
       await setConversationMuteStatus(conversationId, conversationType, next);
     } catch (error) {
       setMuted(!next);
+      setConversationMuted(conversationId, !next);
       showAlert(i18n.t("error"), i18n.t("muteUpdateFailed"));
     }
-  }, [muted, conversationId, conversationType]);
+  }, [muted, conversationId, conversationType, setConversationMuted]);
 
   // Web two-pane: the user-detail panel is embedded (no focus change), so also
   // re-check when the details panel closes — that's where Block/Unblock lives.

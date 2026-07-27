@@ -90,6 +90,9 @@ public class ConversationDto {
     private Long updatedAt;
     // Server-computed unread badge so clients don't need every message to count.
     private long unreadCount = 0;
+    // Whether the logged-in user muted this conversation. Ships with the list so the
+    // app can total up unread across conversations without a mute call per row.
+    private boolean muted = false;
 
     // Constructor for GroupConversation
     public ConversationDto(GroupConversation groupConversation) {

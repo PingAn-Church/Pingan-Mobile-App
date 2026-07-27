@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
+import { ChatContext } from "../../context/ChatContext";
 
 const safeT = (key, fallback) => {
   const translated = i18n.t(key);
@@ -32,6 +33,7 @@ const SocialPage = () => {
   const { width } = useWindowDimensions();
   const { language } = useContext(LanguageContext);
   const { user } = useContext(UserContext);
+  const { totalUnread } = useContext(ChatContext);
 
   const isWide = width >= 880;
 
@@ -107,6 +109,16 @@ const SocialPage = () => {
                 <Text style={styles.featureTitle}>{card.title}</Text>
                 <Text style={styles.featureSubtitle}>{card.subtitle}</Text>
               </View>
+
+              {/* Social is a hub, so the tab badge would otherwise vanish one tap
+                  in — repeat the count on the card that leads to the messages. */}
+              {card.key === "chat" && totalUnread > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>
+                    {totalUnread > 99 ? "99+" : totalUnread}
+                  </Text>
+                </View>
+              )}
 
               <View style={[styles.chevronWrap, { borderColor: `${card.tint}22` }]}>
                 <Ionicons name="chevron-forward" size={18} color={card.tint} />
@@ -240,6 +252,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
+  },
+  // Matches the per-conversation badge in ChatHomePage so the count reads as the
+  // same thing wherever it appears.
+  unreadBadge: {
+    backgroundColor: "#ef4444",
+    borderRadius: 11,
+    minWidth: 22,
+    height: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    marginRight: 10,
+  },
+  unreadText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 12,
   },
   guardCard: {
     marginHorizontal: 24,

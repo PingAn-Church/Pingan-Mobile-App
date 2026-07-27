@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ConversationService {
@@ -31,6 +33,7 @@ public class ConversationService {
     private final OSSService ossService;
     private final MessageRepository messageRepository;
     private final MessageDeliveryStatusRepository messageDeliveryStatusRepository;
+    private final ConversationMuteRepository conversationMuteRepository;
 
     @Autowired
     public ConversationService(GroupConversationRepository groupConversationRepository,
@@ -39,7 +42,8 @@ public class ConversationService {
                                SimpMessagingTemplate messagingTemplate,
                                OSSService ossService,
                                MessageRepository messageRepository,
-                               MessageDeliveryStatusRepository messageDeliveryStatusRepository) {
+                               MessageDeliveryStatusRepository messageDeliveryStatusRepository,
+                               ConversationMuteRepository conversationMuteRepository) {
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
         this.userRepository = userRepository;
@@ -47,6 +51,7 @@ public class ConversationService {
         this.ossService = ossService;
         this.messageRepository = messageRepository;
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
+        this.conversationMuteRepository = conversationMuteRepository;
     }
 
     private Timestamp now() {
@@ -71,10 +76,19 @@ public class ConversationService {
         privateConversationRepository.findByUserId(userId)
                 .forEach(pc -> conversations.add(new ConversationDto(pc)));
 
+        // One lookup for every mute this user holds — matching on conversation id alone
+        // is safe because ids are unique across group and private conversations, and it
+        // avoids depending on how the stored conversation_type was cased.
+        Set<Long> mutedConversationIds = conversationMuteRepository.findByUserId(userId)
+                .stream()
+                .map(ConversationMute::getConversationId)
+                .collect(Collectors.toSet());
+
         // Attach a server-computed unread count so the client no longer needs to load
         // every message just to render unread badges.
         for (ConversationDto c : conversations) {
             c.setUnreadCount(messageRepository.countUnread(c.getConversationId(), userId));
+            c.setMuted(mutedConversationIds.contains(c.getConversationId()));
         }
 
         return conversations;

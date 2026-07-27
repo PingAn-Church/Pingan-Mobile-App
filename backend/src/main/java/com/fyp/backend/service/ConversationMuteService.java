@@ -14,9 +14,10 @@ import com.fyp.backend.repository.PrivateConversationRepository;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Per-user, per-conversation push-notification mutes. Muting only silences
- * pushes for that conversation (see PushNotificationService); message delivery,
- * unread counts and every other conversation's notifications are untouched.
+ * Per-user, per-conversation push-notification mutes. Muting silences pushes for
+ * that conversation (see PushNotificationService) and keeps it out of the app-wide
+ * unread badge; message delivery, the conversation's own unread count in the chat
+ * list, and every other conversation's notifications are untouched.
  */
 @Service
 @RequiredArgsConstructor

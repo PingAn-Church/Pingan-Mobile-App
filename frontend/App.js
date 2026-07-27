@@ -34,7 +34,7 @@ import DetailedPrivateChatPage from "./src/pages/Social/DetailedPrivateChatPage"
 import MyActivityPage from "./src/pages/Activity/MyActivityPage";
 import ActivityDetailPage from "./src/pages/Activity/ActivityDetailPage";
 import { UserProvider, UserContext } from "./src/context/UserContext";
-import { ChatProvider } from "./src/context/ChatContext";
+import { ChatProvider, ChatContext } from "./src/context/ChatContext";
 import { WebSocketProvider } from "./src/context/WebSocketProvider";
 import ManageVideosPage, {
   AddVideoPage,
@@ -93,6 +93,7 @@ import * as Device from "expo-device";
 import * as ScreenOrientation from "expo-screen-orientation";
 import EntryScreen from "./src/components/EntryScreen";
 import HeaderBackButton from "./src/components/HeaderBackButton";
+import AppBadgeSync from "./src/components/AppBadgeSync";
 
 // App is light-only (iOS/Android forced light). Pin the web document to a light
 // color-scheme so the browser's dark mode doesn't auto-style native controls,
@@ -133,8 +134,13 @@ const Tab = createBottomTabNavigator();
 function HomeTabsNavigator() {
   const { language } = useContext(LanguageContext); // to listen to language change
   const { user } = useContext(UserContext);
+  const { totalUnread } = useContext(ChatContext);
   const { width, height } = useWindowDimensions();
   const sidebar = width >= 768 && width > height;
+
+  // react-navigation hides the badge entirely when this is undefined.
+  const unreadBadge =
+    totalUnread > 0 ? (totalUnread > 99 ? "99+" : totalUnread) : undefined;
 
   return (
     <Tab.Navigator
@@ -209,6 +215,8 @@ function HomeTabsNavigator() {
           component={SocialPage}
           options={{
             headerTitle: i18n.t("Social"),
+            // Chat is the only badged surface, and it lives under this tab.
+            tabBarBadge: unreadBadge,
             tabBarIcon: ({ focused, color, size }) => (
               <Ionicons
                 name={focused ? "chatbubbles" : "chatbubbles-outline"}
@@ -496,6 +504,7 @@ export default function App() {
               <WebSocketProvider>
                 <EntryGate>
                 <SessionQueryBoundary />
+                <AppBadgeSync />
                 <AuthGuard navigationRef={navigationRef} />
                 <Stack.Navigator initialRouteName="Welcome" screenOptions={rootStackScreenOptions}>
                   <Stack.Screen

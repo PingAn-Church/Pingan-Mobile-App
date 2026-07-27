@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { getConversations, getChatHistory } from "../service/ChatService";
 import { getOnlineUsers } from "../service/UserService";
 import { getStompClient, subscribeToConversation } from "../service/WebSocketService";
@@ -408,6 +408,30 @@ export const ChatProvider = ({ children }) => {
     );
   };
 
+  // Unread across every conversation, driving the tab badge and the OS app-icon
+  // badge. Muted conversations are left out — they still show their own row badge
+  // in the chat list, they just don't demand attention app-wide.
+  const totalUnread = useMemo(
+    () =>
+      conversations.reduce(
+        (sum, conv) => (conv?.muted ? sum : sum + (conv?.unreadCount || 0)),
+        0
+      ),
+    [conversations]
+  );
+
+  // Muting is toggled from the chat header; patching it here makes the badge react
+  // at once instead of waiting for the next conversation refetch.
+  const setConversationMuted = (conversationId, muted) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        String(conv.conversationId) === String(conversationId)
+          ? { ...conv, muted }
+          : conv
+      )
+    );
+  };
+
   const handleGroupIconUpdate = (msg) => {
     setConversations((prev) =>
       prev.map((conv) =>
@@ -423,8 +447,10 @@ export const ChatProvider = ({ children }) => {
       value={{
         conversations,
         loading,
+        totalUnread,
         resetChat,
         setConversations,
+        setConversationMuted,
         fetchInitialData,
         loadOlderMessages,
         handleWebSocketMessage,

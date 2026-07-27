@@ -14,4 +14,6 @@ public interface ConversationMuteRepository extends JpaRepository<ConversationMu
 
     List<ConversationMute> findByConversationIdAndConversationType(
             Long conversationId, String conversationType);
+
+    List<ConversationMute> findByUserId(Long userId);
 }
