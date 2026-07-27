@@ -9,7 +9,14 @@ import {
   Modal,
   Platform,
 } from "react-native";
-import { Audio } from "expo-av";
+import {
+  useAudioRecorder,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  setAudioModeAsync,
+  requestRecordingPermissionsAsync,
+  RecordingPresets,
+} from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 
 const VoiceRecorder = ({
@@ -23,27 +30,34 @@ const VoiceRecorder = ({
   const [showPreview, setShowPreview] = useState(false);
   const [recordedUri, setRecordedUri] = useState(null);
   const [recordedDuration, setRecordedDuration] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackProgress, setPlaybackProgress] = useState(0);
   const [isSending, setIsSending] = useState(false);
 
-  const recordingRef = useRef(null);
   const durationTimerRef = useRef(null);
-  const soundRef = useRef(null);
   const controlSize = Math.max(40, buttonSize);
+
+  // expo-audio's recorder and player are hooks, so they replace the imperative
+  // recordingRef/soundRef pair. Both release themselves on unmount, and the
+  // preview player is rebuilt whenever recordedUri changes — including back to
+  // null on cancel, which is what tears the old clip down.
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const previewPlayer = useAudioPlayer(recordedUri ? { uri: recordedUri } : null);
+  const previewStatus = useAudioPlayerStatus(previewPlayer);
+
+  const isPlaying = previewStatus.playing;
+  // Prefer the player's own duration once known; recordedDuration is the
+  // wall-clock count from the recording timer. Both are seconds — expo-audio
+  // reports seconds throughout, where expo-av used milliseconds.
+  const previewDuration =
+    previewStatus.duration > 0 ? previewStatus.duration : recordedDuration;
+  const playbackProgress =
+    previewStatus.didJustFinish || previewDuration <= 0
+      ? 0
+      : Math.min(1, Math.max(0, (previewStatus.currentTime || 0) / previewDuration));
 
   useEffect(() => {
     return () => {
       if (durationTimerRef.current) {
         clearInterval(durationTimerRef.current);
-      }
-
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
       }
     };
   }, []);
@@ -64,14 +78,12 @@ const VoiceRecorder = ({
   };
 
   const resetPreviewState = async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
+    if (previewStatus.playing) {
+      previewPlayer.pause();
     }
 
     setShowPreview(false);
-    setIsPlaying(false);
-    setPlaybackProgress(0);
+    // Clearing the URI rebuilds the hook's player, which releases this clip.
     setRecordedUri(null);
     setRecordedDuration(0);
   };
@@ -80,20 +92,20 @@ const VoiceRecorder = ({
     if (isRecording) return;
 
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== "granted") {
+      const { granted } = await requestRecordingPermissionsAsync();
+      if (!granted) {
         showAlert("Permission Required", "Please allow microphone access to record voice messages.");
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recorder.prepareToRecordAsync();
+      recorder.record();
 
-      recordingRef.current = recording;
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -107,46 +119,32 @@ const VoiceRecorder = ({
   };
 
   const stopRecording = async () => {
-    if (!recordingRef.current) return;
+    if (!isRecording) return;
 
     try {
       clearDurationTimer();
 
       setIsRecording(false);
-      await recordingRef.current.stopAndUnloadAsync();
+      await recorder.stop();
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
 
-      const uri = recordingRef.current.getURI();
+      // The recorder exposes the finished file on itself rather than returning it.
+      const uri = recorder.uri;
       const duration = recordingDuration;
 
-      recordingRef.current = null;
       setRecordingDuration(0);
 
       if (!uri || duration <= 0) return;
 
       setRecordedUri(uri);
       setRecordedDuration(duration);
-      setPlaybackProgress(0);
       setShowPreview(true);
     } catch {
       showAlert("Error", "Failed to stop recording. Please try again.");
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status) => {
-    if (!status.isLoaded) return;
-
-    if (status.durationMillis && status.durationMillis > 0) {
-      setPlaybackProgress(Math.min(1, status.positionMillis / status.durationMillis));
-    }
-
-    if (status.didJustFinish) {
-      setIsPlaying(false);
-      setPlaybackProgress(0);
     }
   };
 
@@ -154,44 +152,25 @@ const VoiceRecorder = ({
     if (!recordedUri) return;
 
     try {
-      if (!soundRef.current) {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-        });
-
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: recordedUri },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-
-        soundRef.current = sound;
-        setIsPlaying(true);
+      if (isPlaying) {
+        previewPlayer.pause();
         return;
       }
 
-      const status = await soundRef.current.getStatusAsync();
-      if (!status.isLoaded) return;
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
 
-      if (status.isPlaying) {
-        await soundRef.current.pauseAsync();
-        setIsPlaying(false);
-      } else {
-        const isAtEnd =
-          typeof status.durationMillis === "number" &&
-          typeof status.positionMillis === "number" &&
-          status.durationMillis > 0 &&
-          status.positionMillis >= status.durationMillis - 250;
+      const isAtEnd =
+        previewStatus.didJustFinish ||
+        (previewDuration > 0 && (previewStatus.currentTime || 0) >= previewDuration - 0.25);
 
-        if (isAtEnd) {
-          setPlaybackProgress(0);
-          await soundRef.current.setPositionAsync(0);
-        }
-
-        await soundRef.current.playAsync();
-        setIsPlaying(true);
+      if (isAtEnd) {
+        await previewPlayer.seekTo(0);
       }
+
+      previewPlayer.play();
     } catch {
       showAlert("Error", "Failed to play recording.");
     }

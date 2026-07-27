@@ -9,9 +9,8 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/learning/*"]
+      "@/*": ["./src/learning/*"]
     }
   },
   "include": [

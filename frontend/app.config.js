@@ -66,11 +66,23 @@ export default {
         favicon: "./assets/favicon.png",
       },
       newArchEnabled: true,
+      // SDK 57 expects every native module to register its config plugin
+      // explicitly; `expo install --fix` reports the ones missing here.
       plugins: [
         "expo-font",
-        // Enforces userInterfaceStyle: "light" on Android during prebuild, so the
-        // light-only theme survives `expo prebuild --clean` (see styles.xml).
+        // Applies userInterfaceStyle: "light" at runtime. On Android that is only
+        // a string resource, so ./plugins/withAndroidLightTheme pins the native
+        // theme as well — see that file for why both are needed.
         "expo-system-ui",
+        "./plugins/withAndroidLightTheme",
+        "expo-audio",
+        // Peer of expo-audio, installed directly so the native module resolves
+        // outside Expo Go.
+        "expo-asset",
+        "expo-image",
+        "expo-localization",
+        "expo-status-bar",
+        "@react-native-community/datetimepicker",
       ],
       extra: {
         BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_BASE_URL,

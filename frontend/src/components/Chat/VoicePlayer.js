@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
-import { Audio } from "expo-av";
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 import { getConversationDownloadUrl } from "../../service/OSSService";
 import { getLocalUri as getCachedMedia } from "../../service/MediaCacheService";
 
 const VoicePlayer = ({ audioUrl, duration, conversationId, isMe = false }) => {
-  const [sound, setSound] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [totalDuration, setTotalDuration] = useState((duration || 0) * 1000);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState(null);
   const waveformBars = useMemo(() => [4, 8, 12, 16, 10, 6, 9, 14, 18, 13, 8, 5, 10, 15, 12, 7], []);
+
+  // expo-audio is hook-based, so the player can't be created on demand the way
+  // Audio.Sound.createAsync was. useAudioPlayer keys on the source, so passing
+  // the URL as soon as it resolves swaps the player over and releases the old
+  // one — which also covers unmount, so there's no unload effect any more.
+  const player = useAudioPlayer(resolvedAudioUrl ? { uri: resolvedAudioUrl } : null);
+  const status = useAudioPlayerStatus(player);
 
   // Resolve the presigned URL for the audio file
   useEffect(() => {
@@ -40,115 +42,59 @@ const VoicePlayer = ({ audioUrl, duration, conversationId, isMe = false }) => {
     resolveUrl();
   }, [audioUrl, conversationId]);
 
-  useEffect(() => {
-    return () => {
-      // Cleanup: unload sound when component unmounts
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [sound]);
-
-  useEffect(() => {
-    setTotalDuration((duration || 0) * 1000);
-  }, [duration]);
-
-  const formatTime = (milliseconds) => {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
+  // expo-audio reports seconds, where expo-av reported milliseconds. The
+  // `duration` prop is seconds too — it comes off the message record — so the
+  // whole component now works in one unit instead of converting at the edges.
+  const formatTime = (seconds) => {
+    const whole = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(whole / 60);
+    const secs = whole % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const playSound = async () => {
+  const isPlaying = status.playing;
+  const isLoading = !resolvedAudioUrl || status.isBuffering;
+
+  // Fall back to the prop until the player has loaded enough to report its own
+  // duration, so the bubble shows a sensible length before first play.
+  const totalSeconds = status.duration > 0 ? status.duration : duration || 0;
+  // Once finished the player parks at the end; show it back at zero, matching
+  // the old didJustFinish reset.
+  const positionSeconds = status.didJustFinish ? 0 : status.currentTime || 0;
+
+  const handlePlayPause = async () => {
+    if (!resolvedAudioUrl) {
+      console.warn("Audio URL not resolved yet");
+      return;
+    }
+
     try {
-      if (!resolvedAudioUrl) {
-        console.warn("Audio URL not resolved yet");
+      if (isPlaying) {
+        player.pause();
         return;
       }
 
-      setIsLoading(true);
-
-      // Configure audio mode for playback
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: "duckOthers",
       });
 
-      if (!sound) {
-        // Load the sound for the first time
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: resolvedAudioUrl },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-        setSound(newSound);
-        setIsPlaying(true);
-      } else {
-        const status = await sound.getStatusAsync();
-        const isAtEnd =
-          status?.isLoaded &&
-          typeof status.durationMillis === "number" &&
-          typeof status.positionMillis === "number" &&
-          status.positionMillis >= status.durationMillis - 200;
-
-        if (isAtEnd) {
-          await sound.setPositionAsync(0);
-          setPosition(0);
-        }
-
-        // Resume playing
-        await sound.playAsync();
-        setIsPlaying(true);
+      // Starting from the end should replay rather than sit there finished.
+      if (status.didJustFinish || (totalSeconds > 0 && status.currentTime >= totalSeconds - 0.2)) {
+        await player.seekTo(0);
       }
 
-      setIsLoading(false);
+      player.play();
     } catch (error) {
       console.error("Error playing sound:", error);
-      setIsLoading(false);
     }
   };
 
-  const pauseSound = async () => {
-    try {
-      if (sound) {
-        await sound.pauseAsync();
-        setIsPlaying(false);
-      }
-    } catch (error) {
-      console.error("Error pausing sound:", error);
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      if (typeof status.durationMillis === "number" && status.durationMillis > 0) {
-        setTotalDuration(status.durationMillis);
-      }
-
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setPosition(0);
-      }
-    }
-  };
-
-  const handlePlayPause = () => {
-    if (isPlaying) {
-      pauseSound();
-    } else {
-      playSound();
-    }
-  };
-
-  const totalDurationMs = totalDuration > 0 ? totalDuration : (duration || 0) * 1000;
-  const progressRatio = totalDurationMs > 0 ? Math.min(1, Math.max(0, position / totalDurationMs)) : 0;
+  const progressRatio = totalSeconds > 0 ? Math.min(1, Math.max(0, positionSeconds / totalSeconds)) : 0;
   const activeBars = Math.floor(progressRatio * waveformBars.length);
-  const displayDuration = formatTime(totalDurationMs);
-  const displayPosition = formatTime(position);
+  const displayDuration = formatTime(totalSeconds);
+  const displayPosition = formatTime(positionSeconds);
   const palette = isMe
     ? {
         playButtonBg: "#FFFFFF",

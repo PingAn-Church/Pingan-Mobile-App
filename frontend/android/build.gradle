@@ -6,11 +6,10 @@ buildscript {
     mavenCentral()
   }
   dependencies {
+        classpath 'com.google.gms:google-services:4.4.4'
     classpath('com.android.tools.build:gradle')
     classpath('com.facebook.react:react-native-gradle-plugin')
     classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
-    // Firebase Cloud Messaging (push notifications) — reads app/google-services.json.
-    classpath('com.google.gms:google-services:4.4.1')
   }
 }
 

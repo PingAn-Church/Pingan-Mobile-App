@@ -113,7 +113,6 @@ Notifications.setNotificationHandler({
       (data.conversationType === "private" || data.conversationType === "group") &&
       isConversationActive(data.conversationId);
     return {
-      shouldShowAlert: !suppress,
       shouldShowBanner: !suppress,
       shouldShowList: !suppress,
       shouldPlaySound: false,
