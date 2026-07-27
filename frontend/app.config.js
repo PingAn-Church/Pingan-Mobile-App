@@ -48,8 +48,12 @@ export default {
       },
       android: {
         adaptiveIcon: {
+          // foregroundImage keeps the logo inside the centre 66% (Android's
+          // 72dp-of-108dp safe zone) with transparent padding around it —
+          // anything outside that is cropped by the launcher's mask. The
+          // padding is transparent so this colour is what shows behind it.
           foregroundImage: "./assets/adaptive-icon.png",
-          backgroundColor: "#2CA5C4",
+          backgroundColor: "#FFFFFF",
         },
         permissions: [
           "CAMERA",
@@ -83,6 +87,19 @@ export default {
         "expo-localization",
         "expo-status-bar",
         "@react-native-community/datetimepicker",
+        // Shrink release builds: R8 removes unused code, and unused resources are
+        // stripped. Release-only, so `npm run android` (a debug build) is
+        // unaffected. These were hand-written into gradle.properties and
+        // `expo prebuild --clean` dropped them; as a plugin they are regenerated.
+        [
+          "expo-build-properties",
+          {
+            android: {
+              enableMinifyInReleaseBuilds: true,
+              enableShrinkResourcesInReleaseBuilds: true,
+            },
+          },
+        ],
       ],
       extra: {
         BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_BASE_URL,
