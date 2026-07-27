@@ -88,8 +88,8 @@ public class AchievementService {
                 userRepository.save(u);
             });
         }
-        pushNotificationService.notifyLearningEvent(userId, "Achievement unlocked",
-                "You earned the \"" + a.getName() + "\" badge!");
+        pushNotificationService.notifyLearningEvent(userId,
+                "push.learning.achievement.title", "push.learning.achievement.body", a.getName());
     }
 
     public List<Map<String, Object>> getAchievements(Long userId) {

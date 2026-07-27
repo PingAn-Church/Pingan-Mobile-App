@@ -7,8 +7,9 @@ import React, {
 import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { refreshAccessToken, getAuthToken } from "../service/TokenService";
-import { fetchUserProfile, getOnlineUsers } from "../service/UserService";
+import { fetchUserProfile, getOnlineUsers, updateMyLanguage } from "../service/UserService";
 import { logoutUser as logoutService } from "../service/AuthService";
+import i18n from "../../i18n";
 // import { v4 as uuidv4 } from "uuid"; // Import uuid for generating unique IDs
 import uuid from 'react-native-uuid';
 
@@ -51,6 +52,10 @@ export const UserProvider = ({ children }) => {
       setUserReady(true);
       setIsGuest(false);
       await AsyncStorage.removeItem(GUEST_MODE_KEY);
+      // Report this device's language so server-composed push text matches it.
+      if (userInfo && userInfo.language !== i18n.locale) {
+        updateMyLanguage(i18n.locale);
+      }
       return userInfo;
     } catch (error) {
       console.error("❌ Error fetching user info:", error);
@@ -75,6 +80,14 @@ export const UserProvider = ({ children }) => {
         prev && JSON.stringify(prev) === JSON.stringify(userInfo) ? prev : userInfo
       );
       setUserReady(true);
+
+      // The server composes push notification text, so it has to know which
+      // language this device reads. Reporting it here covers sign-in and heals
+      // any drift (reinstall, language changed while signed out) without an
+      // extra round trip when the two already agree.
+      if (userInfo && userInfo.language !== i18n.locale) {
+        updateMyLanguage(i18n.locale);
+      }
       return userInfo;
     } catch (error) {
       // Transient failures (network blips, token-refresh races) must not drop the

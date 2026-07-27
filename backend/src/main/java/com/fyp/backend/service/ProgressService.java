@@ -141,8 +141,8 @@ public class ProgressService {
     private void awardCourseCompletion(Long userId, Long courseId) {
         certificateService.issueForCompletion(userId, courseId);
         String title = courseRepository.findById(courseId).map(c -> c.getTitle()).orElse("your course");
-        pushNotificationService.notifyLearningEvent(userId, "Course completed",
-                "Congratulations! You completed \"" + title + "\" and earned a certificate.");
+        pushNotificationService.notifyLearningEvent(userId,
+                "push.learning.courseCompleted.title", "push.learning.courseCompleted.body", title);
         achievementService.evaluate(userId, courseId);
     }
 

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import i18n from "../../i18n";
+import { updateMyLanguage } from "../service/UserService";
 
 export const LanguageContext = createContext();
 
@@ -25,6 +26,9 @@ export const LanguageProvider = ({ children }) => {
     setLanguage(newLang);
     i18n.locale = newLang;
     await AsyncStorage.setItem("appLanguage", newLang);
+    // Push notification text is written server-side, so the backend needs to
+    // know the new choice. Best-effort — UserContext re-reports it on sign-in.
+    updateMyLanguage(newLang);
   };
 
   return (

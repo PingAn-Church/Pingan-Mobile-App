@@ -56,6 +56,14 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     List<User> findByEmailIn(Collection<String> emails);
 
+    /**
+     * The app language this user's device last reported, for composing push text.
+     * Projected on its own so the fan-out does not load a whole User per recipient;
+     * empty when the user has never reported one.
+     */
+    @Query("SELECT u.language FROM User u WHERE u.id = :id")
+    Optional<String> findLanguageById(@Param("id") Long id);
+
     List<User> findByIsVerifiedUserTrue();
 
     List<User> findByIsVerifiedUserTrueAndDeletedAccountFalse();

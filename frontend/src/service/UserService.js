@@ -365,6 +365,31 @@ export const deleteOwnAccount = async () => {
   }
 };
 
+/**
+ * Tells the backend which language this device is using.
+ *
+ * Push notification text is composed server-side and shown by the OS, so it
+ * never passes through the app's i18n bundle — the server needs to know which
+ * language to write in. Best-effort: a signed-out or offline device just keeps
+ * its local preference and reports it on the next sign-in.
+ */
+export const updateMyLanguage = async (language) => {
+  const token = await getAuthToken();
+  if (!token) return null;
+
+  try {
+    const response = await axios.put(
+      apiUrl(`/api/users/me/language`),
+      { language },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+  } catch (error) {
+    console.warn("⚠️ Could not report language preference:", error?.message || error);
+    return null;
+  }
+};
+
 export const updateUserProfile = async (userData) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");

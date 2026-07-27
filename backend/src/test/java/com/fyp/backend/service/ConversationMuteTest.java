@@ -59,7 +59,8 @@ class ConversationMuteTest {
                 .thenReturn(List.of(new ConversationMute(2L, 42L, "group")));
         when(pushTokenRepository.findByUserId(3L)).thenReturn(List.of());
 
-        pushNotificationService.sendPushNotification(List.of(2L, 3L), "body", "title", 42L, "group");
+        pushNotificationService.sendPushNotification(
+                List.of(2L, 3L), lang -> "body", lang -> "title", 42L, "group");
 
         verify(pushTokenRepository).findByUserId(3L);
         verify(pushTokenRepository, never()).findByUserId(2L);
@@ -69,7 +70,8 @@ class ConversationMuteTest {
     void nonChatPushesIgnoreMutes() {
         when(pushTokenRepository.findByUserId(2L)).thenReturn(List.of());
 
-        pushNotificationService.sendPushNotification(List.of(2L), "body", "title", 7L, "learning");
+        pushNotificationService.sendPushNotification(
+                List.of(2L), lang -> "body", lang -> "title", 7L, "learning");
 
         verify(pushTokenRepository).findByUserId(2L);
         verifyNoInteractions(conversationMuteRepository);

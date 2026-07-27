@@ -270,6 +270,37 @@ public class UserController {
         }
     }
 
+    /**
+     * Records the app language of the caller's device.
+     *
+     * Push notification text is composed server-side and rendered by the OS, so
+     * the backend has to know which language to write in; the app reports its
+     * current choice here on sign-in and whenever the user toggles it.
+     */
+    @PutMapping("/me/language")
+    public ResponseEntity<String> updateOwnLanguage(
+            @RequestHeader("Authorization") String authorizationHeader,
+            @RequestBody Map<String, String> body) {
+        Long userId = userService.getUserIdFromToken(authorizationHeader);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Unauthorized");
+        }
+
+        String requested = body == null ? null : body.get("language");
+        String language = requested == null ? "" : requested.trim().toLowerCase();
+        if (!language.equals("en") && !language.equals("zh")) {
+            return ResponseEntity.badRequest().body("Unsupported language.");
+        }
+
+        return userRepository.findById(userId)
+                .map(user -> {
+                    user.setLanguage(language);
+                    userRepository.save(user);
+                    return ResponseEntity.ok("Language updated.");
+                })
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found."));
+    }
+
     @DeleteMapping("/me")
     public ResponseEntity<String> deleteOwnAccount(@RequestHeader("Authorization") String authorizationHeader) {
         Long userId = userService.getUserIdFromToken(authorizationHeader);

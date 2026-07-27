@@ -37,6 +37,7 @@ public class UserProfileDto {
     private boolean deletedAccount;
     private Instant deletedAt;
     private String birthday;
+    private String language;
 
     public UserProfileDto(Long id, String firstName, String lastName, String email, String profileImage,
             boolean isVerifiedUser, boolean isAdmin, String birthday) {
@@ -83,6 +84,7 @@ public class UserProfileDto {
         dto.isInstructor = user.isInstructor();
         dto.deletedAccount = false;
         dto.deletedAt = user.getDeletedAt();
+        dto.language = user.getLanguage();
         return dto;
     }
 
@@ -173,5 +175,14 @@ public class UserProfileDto {
 
     public void setBirthday(String birthday) {
         this.birthday = birthday;
+    }
+
+    /** App language last reported by this user's device; drives push text. */
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
     }
 }

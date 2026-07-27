@@ -67,9 +67,15 @@ export const NotificationProvider = ({ children }) => {
           } else if (conversationType === "quiz-graded") {
             // "Quiz graded" learning notification: quizId rides on conversationId.
             navigation.navigate("QuizResults", { quizId: conversationId });
-          } else {
+          } else if (conversationType === "learning") {
+            // Enrolment, completion, quiz-passed, achievement and goal pushes
+            // carry no conversation — land the learner on their courses hub
+            // instead of an empty chat.
+            navigation.navigate("MyCourses");
+          } else if (conversationId != null) {
             navigation.navigate("Chat", { conversationId, conversationType });
           }
+          // Anything else (an unknown type carrying no id) just opens the app.
         });
 
         return () => {

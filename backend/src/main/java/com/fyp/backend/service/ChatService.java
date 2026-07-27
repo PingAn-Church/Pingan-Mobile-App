@@ -40,6 +40,7 @@ public class ChatService {
     private final PushNotificationService pushNotificationService;
     private final UserBlockService userBlockService;
     private final ContentSanitizer contentSanitizer;
+    private final PushMessages pushMessages;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -52,7 +53,8 @@ public class ChatService {
                        MessagePublisher messagePublisher,
                        PushNotificationService pushNotificationService,
                        UserBlockService userBlockService,
-                       ContentSanitizer contentSanitizer) {
+                       ContentSanitizer contentSanitizer,
+                       PushMessages pushMessages) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -65,6 +67,7 @@ public class ChatService {
         this.pushNotificationService = pushNotificationService;
         this.userBlockService = userBlockService;
         this.contentSanitizer = contentSanitizer;
+        this.pushMessages = pushMessages;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -198,31 +201,42 @@ public class ChatService {
         });
     }
 
-    private String getPushNotificationTitle(String conversationType, User sender, Long conversationId) {
+    /**
+     * The push title, resolved per recipient. A private chat shows the sender's
+     * name in the reader's own name order (Chinese puts the family name first);
+     * a group shows its name, which is the same for everyone. Both are read here,
+     * inside the transaction, so the deferred send never touches a detached entity.
+     */
+    private LocalizedText getPushNotificationTitle(String conversationType, User sender, Long conversationId) {
         if ("private".equals(conversationType)) {
-            // For private messages, use the sender's full name
-            return sender.getFirstName() + " " + sender.getLastName();  // Title with sender's name
+            return pushMessages.personName(sender.getFirstName(), sender.getLastName());
         } else if ("group".equals(conversationType)) {
-            // For group messages, use the group name
             GroupConversation group = groupConversationRepository.findById(conversationId)
                     .orElseThrow(() -> new RuntimeException("Group conversation not found"));
-            return group.getGroupName();  // Title with group name
+            return pushMessages.literal(group.getGroupName());
         }
-        return "New message";  // Default title if neither group nor private
+        return pushMessages.text("push.chat.newMessage");
     }
 
-    private String getPushNotificationBody(MessageDto messageDto) {
+    /**
+     * The push body. Text messages carry the sender's own words through
+     * untouched; the media placeholders are ours to write, so they follow the
+     * recipient's language.
+     */
+    private LocalizedText getPushNotificationBody(MessageDto messageDto) {
         if (messageDto == null) {
-            return "New message";
+            return pushMessages.text("push.chat.newMessage");
         }
 
         String messageType = messageDto.getType() == null ? "" : messageDto.getType().trim().toLowerCase();
         return switch (messageType) {
-            case "voice" -> "🎤 Voice message";
-            case "image" -> "🖼️ Photo";
+            case "voice" -> pushMessages.text("push.chat.voice");
+            case "image" -> pushMessages.text("push.chat.photo");
             default -> {
                 String content = messageDto.getContent();
-                yield (content == null || content.trim().isEmpty()) ? "New message" : content;
+                yield (content == null || content.trim().isEmpty())
+                        ? pushMessages.text("push.chat.newMessage")
+                        : pushMessages.literal(content);
             }
         };
     }
@@ -259,8 +273,8 @@ public class ChatService {
         createDeliveryStatuses(conversation, sender, message, timestamp);
 
         MessageDto savedMessage = buildResponseDto(message, conversation);
-        String notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
-        String notificationBody = getPushNotificationBody(savedMessage);
+        LocalizedText notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
+        LocalizedText notificationBody = getPushNotificationBody(savedMessage);
 
         // ✅ Defer messaging and notifications. Each recipient is isolated so a
         // Redis/RabbitMQ hiccup for one user cannot silently skip the rest of

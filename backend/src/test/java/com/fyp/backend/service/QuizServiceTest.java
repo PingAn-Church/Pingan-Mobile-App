@@ -159,7 +159,10 @@ class QuizServiceTest {
         assertEquals(false, data.get("gradesReleased"));
 
         // The course instructor is asked to review the held answers.
-        verify(pushNotificationService).notifyLearningEvent(eq(INSTRUCTOR), eq("Answers to review"), anyString());
+        verify(pushNotificationService).notifyLearningEvent(eq(INSTRUCTOR),
+                eq("push.learning.answersToReview.title"),
+                eq("push.learning.answersToReview.body"),
+                any());
     }
 
     @Test

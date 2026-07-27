@@ -81,4 +81,11 @@ public class User {
 
     @Column
     private String phone;
+
+    // App language last reported by this user's device ("en" / "zh"). The server
+    // composes push notification text, which the recipient never gets to see
+    // translated client-side, so it needs to know which locale to write in.
+    // Null for users who have not been seen since this was introduced.
+    @Column(length = 8)
+    private String language;
 }

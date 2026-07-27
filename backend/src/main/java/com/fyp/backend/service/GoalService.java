@@ -113,8 +113,8 @@ public class GoalService {
                 userRepository.save(u);
             });
         }
-        pushNotificationService.notifyLearningEvent(userId, "Goal reached",
-                "You completed your goal: \"" + g.getLabel() + "\".");
+        pushNotificationService.notifyLearningEvent(userId,
+                "push.learning.goalReached.title", "push.learning.goalReached.body", g.getLabel());
     }
 
     // ---- queries / mutations -------------------------------------------

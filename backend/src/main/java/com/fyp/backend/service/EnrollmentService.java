@@ -60,8 +60,8 @@ public class EnrollmentService {
             enrollment = enrollmentRepository.save(enrollment);
             course.setStudentCount((course.getStudentCount() == null ? 0 : course.getStudentCount()) + 1);
             courseRepository.save(course);
-            pushNotificationService.notifyLearningEvent(userId, "Enrolled",
-                    "You're enrolled in \"" + course.getTitle() + "\". Time to start learning!");
+            pushNotificationService.notifyLearningEvent(userId,
+                    "push.learning.enrolled.title", "push.learning.enrolled.body", course.getTitle());
         }
 
         List<CourseSection> sections = sectionRepository.findByCourseIdOrderByOrderIndexAsc(courseId);
@@ -204,8 +204,8 @@ public class EnrollmentService {
         if (!wasAlreadyComplete) {
             certificateService.issueForCompletion(userId, courseId);
             String title = courseRepository.findById(courseId).map(Course::getTitle).orElse("your course");
-            pushNotificationService.notifyLearningEvent(userId, "Course completed",
-                    "Congratulations! You completed \"" + title + "\" and earned a certificate.");
+            pushNotificationService.notifyLearningEvent(userId,
+                    "push.learning.courseCompleted.title", "push.learning.courseCompleted.body", title);
         }
 
         Map<String, Object> data = new LinkedHashMap<>();

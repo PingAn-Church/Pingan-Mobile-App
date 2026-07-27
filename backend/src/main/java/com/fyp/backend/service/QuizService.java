@@ -197,8 +197,9 @@ public class QuizService {
         // learner's submission.
         if (isPassed) {
             try {
-                pushNotificationService.notifyLearningEvent(userId, "Quiz passed",
-                        "You scored " + score + "% on \"" + quiz.getTitle() + "\". Well done!");
+                pushNotificationService.notifyLearningEvent(userId,
+                        "push.learning.quizPassed.title", "push.learning.quizPassed.body",
+                        String.valueOf(score), quiz.getTitle());
                 achievementService.evaluate(userId, quiz.getCourseId());
             } catch (Exception e) {
                 log.warn("Quiz pass side effects failed for user {} quiz {}: {}", userId, quizId, e.getMessage());
@@ -240,8 +241,8 @@ public class QuizService {
     private void notifyInstructorOfPendingReview(CourseQuiz quiz) {
         Course course = courseRepository.findById(quiz.getCourseId()).orElse(null);
         if (course == null || course.getInstructorId() == null) return;
-        pushNotificationService.notifyLearningEvent(course.getInstructorId(), "Answers to review",
-                "A learner submitted \"" + quiz.getTitle() + "\" — short answers are awaiting your review.");
+        pushNotificationService.notifyLearningEvent(course.getInstructorId(),
+                "push.learning.answersToReview.title", "push.learning.answersToReview.body", quiz.getTitle());
     }
 
     public Map<String, Object> getQuizResults(Long quizId, Long userId) {
@@ -489,10 +490,10 @@ public class QuizService {
         if (fullyGraded) {
             progressService.recomputeModuleCompletion(attempt.getUserId(), quiz.getCourseId(), quiz.getSectionId());
             progressService.recomputeCourseProgress(attempt.getUserId(), quiz.getCourseId());
-            pushNotificationService.notifyQuizGraded(attempt.getUserId(), "Quiz graded",
-                    "Your answers for \"" + quiz.getTitle() + "\" were reviewed. Score: " + score + "%"
-                            + (isPassed ? " — passed!" : "."),
-                    quiz.getId());
+            pushNotificationService.notifyQuizGraded(attempt.getUserId(), quiz.getId(),
+                    "push.learning.quizGraded.title",
+                    isPassed ? "push.learning.quizGraded.body.passed" : "push.learning.quizGraded.body.failed",
+                    quiz.getTitle(), String.valueOf(score));
             if (isPassed && !wasPassed) {
                 achievementService.evaluate(attempt.getUserId(), quiz.getCourseId());
             }

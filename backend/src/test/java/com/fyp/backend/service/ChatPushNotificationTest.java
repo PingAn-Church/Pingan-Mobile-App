@@ -12,6 +12,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -51,6 +52,7 @@ class ChatPushNotificationTest {
     @Mock private PushNotificationService pushNotificationService;
     @Mock private UserBlockService userBlockService;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
+    @Spy private PushMessages pushMessages = PushMessagesFixture.real();
 
     @InjectMocks private ChatService chatService;
 
@@ -97,8 +99,17 @@ class ChatPushNotificationTest {
             TransactionSynchronizationManager.clearSynchronization();
         }
 
+        ArgumentCaptor<LocalizedText> body = ArgumentCaptor.forClass(LocalizedText.class);
+        ArgumentCaptor<LocalizedText> title = ArgumentCaptor.forClass(LocalizedText.class);
         verify(pushNotificationService).sendPushNotification(
-                List.of(2L, 3L), "hello there", "Test Group", 42L, "group");
+                eq(List.of(2L, 3L)), body.capture(), title.capture(), eq(42L), eq("group"));
+
+        // The sender's own words and the group's name read the same in either language.
+        assertEquals("hello there", body.getValue().render("en"));
+        assertEquals("hello there", body.getValue().render("zh"));
+        assertEquals("Test Group", title.getValue().render("en"));
+        assertEquals("Test Group", title.getValue().render("zh"));
+
         verify(messagingTemplate, times(1))
                 .convertAndSend(eq("/user/1/queue/messages"), any(Object.class));
     }
