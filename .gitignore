@@ -16,3 +16,5 @@ build/
 # source apps for ref
 source-apps/
 *.tmp.out
+
+frontend/android/.kotlin/
