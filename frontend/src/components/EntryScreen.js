@@ -70,7 +70,7 @@ export default function EntryScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: BRAND_BG,
     alignItems: "center",
     justifyContent: "center",

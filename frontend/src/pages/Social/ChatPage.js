@@ -2895,7 +2895,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   webChatMenuBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: -1,
   },
   webChatMenuOption: {
@@ -3110,7 +3110,7 @@ const styles = StyleSheet.create({
   },
   // Dim + spinner shown over a photo while it is still uploading.
   imageUploadOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.35)",
@@ -3339,10 +3339,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   menuOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   menuBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   contextMenu: {
     position: "absolute",
