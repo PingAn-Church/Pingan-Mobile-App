@@ -148,20 +148,24 @@ export default function HomePage() {
     >
       <View style={[styles.responsiveWrapper, { width: contentWidth }]}>
 
-        {/* Section 1: Announcements */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{i18n.t("announcements")}</Text>
-          <View style={isDesktop ? styles.carouselWebContainer : null}>
-            <Carousel
-              data={announcements.map((announcement) => ({
-                key: announcement.id.toString(),
-                imageUrl: getImageForAnnouncement(announcement),
-                description: announcement.title,
-                link: announcement.announcementLink
-              }))}
-            />
+        {/* Section 1: Announcements. Hidden entirely when there are none, rather
+            than leaving a heading above an empty carousel. This also covers the
+            initial render, since announcements load asynchronously. */}
+        {announcements.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{i18n.t("announcements")}</Text>
+            <View style={isDesktop ? styles.carouselWebContainer : null}>
+              <Carousel
+                data={announcements.map((announcement) => ({
+                  key: announcement.id.toString(),
+                  imageUrl: getImageForAnnouncement(announcement),
+                  description: announcement.title,
+                  link: announcement.announcementLink
+                }))}
+              />
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Section 2: Quick Actions (Grid) */}
         <View style={styles.section}>
