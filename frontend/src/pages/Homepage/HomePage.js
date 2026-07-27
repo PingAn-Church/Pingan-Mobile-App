@@ -24,6 +24,7 @@ import CourseCoverImage from "../../learning/components/CourseCoverImage";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
+import { formatUserName } from "../../utils/formatName";
 
 // ==========================================
 // COMPONENT: HOME PAGE
@@ -31,6 +32,8 @@ import { UserContext } from "../../context/UserContext";
 export default function HomePage() {
   const navigation = useNavigation();
   const { user } = useContext(UserContext);
+  // Subscribing here re-renders the greeting (and every other label) on a language toggle.
+  const { language } = useContext(LanguageContext);
   const { width } = useWindowDimensions();
 
   // Breakpoint for Desktop vs Mobile
@@ -129,6 +132,15 @@ export default function HomePage() {
       : `https://v.qq.com/txp/iframe/player.html?vid=${videoId}`;
   };
 
+  // Greeting line: the Lord's Day gets its own blessing, other days a plain hello.
+  // getDay() reads the device's local calendar (0 = Sunday). Signed-out visitors see
+  // the bare greeting, with no dangling comma.
+  const greeting = i18n.t(new Date().getDay() === 0 ? "greetingSunday" : "greetingHello");
+  const greetingName = formatUserName(user, language);
+  const greetingLine = greetingName
+    ? i18n.t("greetingWithName", { greeting, name: greetingName })
+    : greeting;
+
   return (
     <ScrollView
       style={styles.mainScroll}
@@ -153,7 +165,7 @@ export default function HomePage() {
 
         {/* Section 2: Quick Actions (Grid) */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{i18n.t("orgInfo")}</Text>
+          <Text style={styles.sectionTitle}>{greetingLine}</Text>
           <ScrollView
             horizontal={!isDesktop}
             showsHorizontalScrollIndicator={false}
