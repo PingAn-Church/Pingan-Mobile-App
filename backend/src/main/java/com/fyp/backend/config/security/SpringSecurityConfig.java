@@ -75,6 +75,15 @@ public class SpringSecurityConfig {
                         // Liveness/readiness probe for deploys + CI image smoke test.
                         .requestMatchers("/actuator/health", "/actuator/health/**")
                         .permitAll()
+                        // Spring Security 6 filters the ERROR dispatch as well as REQUEST, so
+                        // without this every 404/400/500 is forwarded to /error, denied, and
+                        // returned as 403 — a missing endpoint is then indistinguishable from a
+                        // rejected token. Permitting the forward restores the real status codes.
+                        // Genuine authorization failures are still 403: they are rejected on the
+                        // REQUEST dispatch before ever reaching here, and Boot's default error
+                        // body carries only timestamp/status/path (message and stacktrace are
+                        // off by default), so nothing extra is exposed.
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
