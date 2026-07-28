@@ -1,6 +1,7 @@
 import { showAlert } from "../../utils/showAlert";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppState,
   View,
   TouchableOpacity,
   Text,
@@ -19,6 +20,11 @@ import {
 } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 
+// Hard ceiling on a single voice message. Reaching it stops the recording and
+// drops into the normal preview, so the clip is kept rather than lost — and a
+// recording whose press is never released still ends on its own.
+const MAX_RECORDING_SECONDS = 180;
+
 const VoiceRecorder = ({
   onRecordingComplete,
   iconSize = 24,
@@ -33,10 +39,12 @@ const VoiceRecorder = ({
   const [isSending, setIsSending] = useState(false);
 
   const durationTimerRef = useRef(null);
-  // Refs, not state: both are read inside async handlers that outlive the render
-  // they were created in, where `isRecording` would be stale.
+  // Refs, not state: all three are read inside async handlers and interval
+  // callbacks that outlive the render they were created in, where the matching
+  // state would be stale.
   const isRecordingRef = useRef(false);
   const pressActiveRef = useRef(false);
+  const elapsedRef = useRef(0);
   const controlSize = Math.max(40, buttonSize);
 
   // expo-audio's recorder and player are hooks, so they replace the imperative
@@ -58,13 +66,45 @@ const VoiceRecorder = ({
       ? 0
       : Math.min(1, Math.max(0, (previewStatus.currentTime || 0) / previewDuration));
 
-  useEffect(() => {
-    return () => {
-      if (durationTimerRef.current) {
-        clearInterval(durationTimerRef.current);
-      }
-    };
+  const clearDurationTimer = useCallback(() => {
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
   }, []);
+
+  /**
+   * Throws away an in-flight recording and releases the microphone.
+   *
+   * For the cases where the press can never be completed: the screen unmounts, or
+   * the app leaves the foreground. Discarding rather than saving is deliberate —
+   * there is no longer anyone in front of the preview to decide whether to send.
+   */
+  const cancelRecording = useCallback(() => {
+    pressActiveRef.current = false;
+    if (!isRecordingRef.current) return;
+
+    isRecordingRef.current = false;
+    elapsedRef.current = 0;
+    clearDurationTimer();
+    setIsRecording(false);
+    setRecordingDuration(0);
+
+    recorder.stop().catch(() => {});
+    setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+  }, [clearDurationTimer, recorder]);
+
+  // Backgrounding cannot be undone with a finger still on the button, so anything
+  // still recording is abandoned rather than left holding the mic open.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") cancelRecording();
+    });
+    return () => subscription.remove();
+  }, [cancelRecording]);
+
+  // Unmount: leaving the chat page mid-recording must not leave it running.
+  useEffect(() => cancelRecording, [cancelRecording]);
 
   const waveformBars = useMemo(() => [5, 9, 13, 17, 12, 8, 6, 10, 14, 18, 12, 8], []);
 
@@ -72,13 +112,6 @@ const VoiceRecorder = ({
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const clearDurationTimer = () => {
-    if (durationTimerRef.current) {
-      clearInterval(durationTimerRef.current);
-      durationTimerRef.current = null;
-    }
   };
 
   const resetPreviewState = async () => {
@@ -118,12 +151,21 @@ const VoiceRecorder = ({
       recorder.record();
 
       isRecordingRef.current = true;
+      elapsedRef.current = 0;
       setIsRecording(true);
       setRecordingDuration(0);
 
       clearDurationTimer();
       durationTimerRef.current = setInterval(() => {
-        setRecordingDuration((prev) => prev + 1);
+        elapsedRef.current += 1;
+        setRecordingDuration(elapsedRef.current);
+
+        // Ends the clip at the ceiling and hands it to the preview, so a press
+        // that is never released still produces something sendable instead of
+        // recording forever.
+        if (elapsedRef.current >= MAX_RECORDING_SECONDS) {
+          stopRecording();
+        }
       }, 1000);
     } catch {
       showAlert("Error", "Failed to start recording. Please try again.");
@@ -153,8 +195,12 @@ const VoiceRecorder = ({
 
       // The recorder exposes the finished file on itself rather than returning it.
       const uri = recorder.uri;
-      const duration = recordingDuration;
+      // From the ref, not recordingDuration: the auto-stop calls this from the
+      // interval callback, whose closure still holds the state value from the
+      // render that started the recording — always 0, which would discard the clip.
+      const duration = elapsedRef.current;
 
+      elapsedRef.current = 0;
       setRecordingDuration(0);
 
       if (!uri || duration <= 0) return;
@@ -248,7 +294,7 @@ const VoiceRecorder = ({
           >
             <View style={styles.recordDot} />
             <Text numberOfLines={1} style={styles.recordingBadgeText}>
-              Recording {formatDuration(recordingDuration)}
+              Recording {formatDuration(recordingDuration)} / {formatDuration(MAX_RECORDING_SECONDS)}
             </Text>
           </View>
         ) : null}
@@ -367,7 +413,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
-    minWidth: 120,
+    // Wide enough for "Recording 0:00 / 3:00" so the badge does not resize as
+    // the counter ticks past each digit boundary.
+    minWidth: 168,
     backgroundColor: "rgba(28, 28, 30, 0.92)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.2)",
