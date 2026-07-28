@@ -1,5 +1,6 @@
 import axios from "axios";
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
 import { getAuthToken } from "./TokenService";
 import { apiUrl } from "./apiConfig";
@@ -161,6 +162,28 @@ const inferContentTypeFromSignedUrl = (signedUrl) => {
   return null;
 };
 
+/**
+ * Web-only PUT. Browsers respect an explicit Content-Type on a Blob body, so the
+ * signed and sent types stay aligned; the blob is still re-typed first because
+ * some runtimes fall back to Blob.type when the header is absent.
+ * Returns the same { status, body } shape as FileSystem.uploadAsync.
+ */
+const uploadViaFetch = async (url, sourceUri, contentType) => {
+  const blob = await (await fetch(sourceUri)).blob();
+  const typedBlob =
+    blob?.type !== contentType && typeof blob?.slice === "function"
+      ? blob.slice(0, blob.size, contentType)
+      : blob;
+
+  const response = await fetch(url, {
+    method: "PUT",
+    body: typedBlob,
+    headers: { "Content-Type": contentType },
+  });
+
+  return { status: response.status, body: await response.text() };
+};
+
 export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride) => {
   try {
     const normalizedPresignedUrl = normalizePresignedUrl(presignedUrl);
@@ -178,37 +201,35 @@ export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride
         ? await compressImage(fileUri)
         : fileUri;
 
-    // Fetch the file as a blob
-    const fileResponse = await fetch(sourceUri);
-    const blob = await fileResponse.blob();
-    // Some runtimes derive Content-Type from Blob.type. Keep it aligned with presigned signature.
-    const uploadBlob =
-      blob?.type &&
-      contentType &&
-      blob.type !== contentType &&
-      typeof blob.slice === "function"
-        ? blob.slice(0, blob.size, contentType)
-        : blob;
+    // OSS signs the Content-Type into the presigned PUT, and verifies against the
+    // header the request actually carries — so the two must match exactly or it
+    // answers 403 SignatureDoesNotMatch with an empty Content-Type line in its
+    // StringToSign.
+    //
+    // On native we cannot get that guarantee from fetch. A Blob body is handled by
+    // React Native's BlobModule, which prefers the *blob's* own type over the
+    // header we set and, when that type won't parse as a media type, builds the
+    // request body with no media type at all — OkHttp then sends no Content-Type
+    // header and the signature can never match. uploadAsync streams the file
+    // straight from disk and passes these headers through untouched, so the
+    // signed and sent types stay identical.
+    //
+    // Browsers honour an explicit Content-Type on a Blob body, and
+    // expo-file-system has no web implementation, so web keeps using fetch.
+    const { status, body } = Platform.OS === "web"
+      ? await uploadViaFetch(normalizedPresignedUrl, sourceUri, contentType)
+      : await FileSystem.uploadAsync(normalizedPresignedUrl, sourceUri, {
+          httpMethod: "PUT",
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+          headers: { "Content-Type": contentType },
+        });
 
-    // Upload the file to OSS
-    const response = await fetch(normalizedPresignedUrl, {
-      method: "PUT",
-      body: uploadBlob,
-      headers: {
-        "Content-Type": contentType, // ✅ Must match the presigned URL signature
-      },
-    });
+    console.log("Upload response status:", status);
 
-    console.log("Upload response status:", response.status);
-    console.log("Upload response headers:", response.headers);
-    const responseBody = await response.text();
-    console.log("Upload response body:", responseBody);
-
-    if (response.ok) {
+    if (status >= 200 && status < 300) {
       return presignedUrl.split("?")[0]; // ✅ Return the file URL without query parameters
-    } else {
-      throw new Error(`Upload failed. Status: ${response.status}. Body: ${responseBody}`);
     }
+    throw new Error(`Upload failed. Status: ${status}. Body: ${body}`);
   } catch (error) {
     console.error("Upload error:", {
       message: error?.message,
