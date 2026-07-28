@@ -9,6 +9,8 @@
     "preandroid:windows": "node scripts/check-native-module-paths.js",
     "android:windows": "node scripts/run-android-windows.js",
     "ios": "expo run:ios",
+    "build:apk": "node scripts/build-android.js apk",
+    "build:aab": "node scripts/build-android.js aab",
     "web": "export NODE_OPTIONS=--openssl-legacy-provider && expo start --web -c",
     "update": "node scripts/update-version.js",
     "dir-link": "node scripts/set-download-links.js"

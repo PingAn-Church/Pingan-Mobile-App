@@ -1,0 +1,39 @@
+// Gradle init script: relocate the C++ build staging directory to a short path.
+//
+// Windows caps most paths at 260 characters and the ninja 1.10.2 that ships with
+// Android SDK CMake 3.22.1 cannot handle longer ones. The native modules here
+// (expo-modules-core, react-native-reanimated) generate object paths under
+// <module>/.cxx/<variant>/<hash>/<abi>/... that cross the limit and fail with:
+//
+//   ninja: error: manifest 'build.ninja' still dirty after 100 tries
+//
+// Release is worse than debug: the variant directory is "RelWithDebInfo" rather
+// than "Debug" and the ABI is "arm64-v8a" rather than "x86_64", which is about
+// twelve more characters on every path. Debug builds scrape under the limit;
+// release ones do not, so `assembleRelease` and `bundleRelease` fail on Windows
+// without this.
+//
+// Pointing buildStagingDirectory at a short root removes the problem outright.
+// Applied via -I, so it never touches the generated android/ project and
+// `expo prebuild --clean` cannot drop it. Only used by the npm build scripts;
+// EAS and CI build on Linux and are unaffected.
+//
+// Override the root with -PcxxBuildRoot=D:/somewhere if C: is not suitable.
+
+def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+def override = gradle.startParameter.projectProperties.get('cxxBuildRoot')
+def cxxRoot = override ?: (isWindows ? 'C:/cxx' : null)
+
+if (cxxRoot) {
+  allprojects { proj ->
+    ['com.android.application', 'com.android.library'].each { pluginId ->
+      proj.plugins.withId(pluginId) {
+        def androidExt = proj.extensions.findByName('android')
+        if (androidExt != null) {
+          androidExt.externalNativeBuild.cmake.buildStagingDirectory =
+              new File("$cxxRoot/${proj.name}")
+        }
+      }
+    }
+  }
+}
