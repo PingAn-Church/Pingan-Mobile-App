@@ -33,6 +33,10 @@ const VoiceRecorder = ({
   const [isSending, setIsSending] = useState(false);
 
   const durationTimerRef = useRef(null);
+  // Refs, not state: both are read inside async handlers that outlive the render
+  // they were created in, where `isRecording` would be stale.
+  const isRecordingRef = useRef(false);
+  const pressActiveRef = useRef(false);
   const controlSize = Math.max(40, buttonSize);
 
   // expo-audio's recorder and player are hooks, so they replace the imperative
@@ -89,14 +93,21 @@ const VoiceRecorder = ({
   };
 
   const startRecording = async () => {
-    if (isRecording) return;
+    if (isRecordingRef.current) return;
+    pressActiveRef.current = true;
 
     try {
       const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
+        pressActiveRef.current = false;
         showAlert("Permission Required", "Please allow microphone access to record voice messages.");
         return;
       }
+
+      // The permission dialog outlives the press: the finger lifts while it is up,
+      // so onPressOut has already run and found nothing to stop. Starting now would
+      // leave the microphone open with no gesture left to close it.
+      if (!pressActiveRef.current) return;
 
       await setAudioModeAsync({
         allowsRecording: true,
@@ -106,6 +117,7 @@ const VoiceRecorder = ({
       await recorder.prepareToRecordAsync();
       recorder.record();
 
+      isRecordingRef.current = true;
       setIsRecording(true);
       setRecordingDuration(0);
 
@@ -119,7 +131,14 @@ const VoiceRecorder = ({
   };
 
   const stopRecording = async () => {
-    if (!isRecording) return;
+    pressActiveRef.current = false;
+
+    // Read the ref, not isRecording. onPressOut can fire before React has
+    // re-rendered with the new state, and this closure would then capture a stale
+    // false and skip the stop entirely — leaving the recorder running and the
+    // duration counter climbing with no way to end it.
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
 
     try {
       clearDurationTimer();
