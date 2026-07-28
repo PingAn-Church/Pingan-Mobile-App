@@ -104,6 +104,9 @@ export const NotificationProvider = ({ children }) => {
         }
         // await registerPushTokenForLogin(pushToken, deviceType);  // Register token with backend for login
         } catch (error) {
+        // Nothing renders `error`, so without this a device that never obtained a
+        // token just silently receives no pushes for the whole session.
+        console.warn("⚠️ Push token registration failed (login):", error?.message || error);
         setError(error);
         }
     };
@@ -118,6 +121,7 @@ export const NotificationProvider = ({ children }) => {
             await registerPushTokenForRegister(pushToken, userId, deviceType, deviceId);  // Register token with backend for registration
         }
         } catch (error) {
+        console.warn("⚠️ Push token registration failed (signup):", error?.message || error);
         setError(error);
         }
     };

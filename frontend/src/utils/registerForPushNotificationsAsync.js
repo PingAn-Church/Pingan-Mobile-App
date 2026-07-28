@@ -13,38 +13,39 @@ export async function registerForPushNotificationsAsync() {
     });
   }
 
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") {
-      throw new Error(
-        "Permission not granted to get push token for push notification!"
-      );
-    }
+  // Device.isDevice is false on every emulator, but an Android AVD built on a
+  // Google Play system image (tag google_apis_playstore) runs Play services and
+  // FCM issues it a real token — rejecting those blocks the emulator most of our
+  // Android testing happens on. iOS simulators genuinely cannot get an APNs
+  // token, so they still bail. An Android image without Play services falls
+  // through to getExpoPushTokenAsync below and fails there, with a real reason.
+  if (!Device.isDevice && Platform.OS !== "android") {
+    throw new Error("Push notifications require a physical iOS device");
+  }
 
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== "granted") {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  if (finalStatus !== "granted") {
+    throw new Error(
+      "Permission not granted to get push token for push notification!"
+    );
+  }
 
-    if (!projectId) {
-      throw new Error("Project ID not found");
-    }
+  const projectId =
+    Constants?.expoConfig?.extra?.eas?.projectId ??
+    Constants?.easConfig?.projectId;
 
-    try {
-      const pushTokenString = (
-        await Notifications.getExpoPushTokenAsync({
-          projectId,
-        })
-      ).data;
-      return pushTokenString;
-    } catch (e) {
-      throw new Error(`${e}`);
-    }
-  } else {
-    throw new Error("Must use physical device for push notifications");
+  if (!projectId) {
+    throw new Error("Project ID not found");
+  }
+
+  try {
+    return (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+  } catch (e) {
+    throw new Error(`${e}`);
   }
 }
