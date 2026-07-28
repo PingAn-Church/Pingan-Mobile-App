@@ -62,11 +62,17 @@ class PushNotificationEncodingTest {
 
     @InjectMocks private PushNotificationService pushNotificationService;
 
-    /** Runs a send to one active Chinese-speaking device and returns the captured request. */
+    /** Runs a send to one active Chinese-speaking Android device. */
     private HttpEntity<?> capturePush(Runnable send) {
+        return capturePush("android", send);
+    }
+
+    /** As above, for a named device platform — the payload differs between the two. */
+    private HttpEntity<?> capturePush(String deviceType, Runnable send) {
         PushToken token = new PushToken();
         token.setToken("ExponentPushToken[abcdef123456]");
         token.setActive(true);
+        token.setDeviceType(deviceType);
         when(pushTokenRepository.findByUserId(RECIPIENT)).thenReturn(List.of(token));
         when(userRepository.findLanguageById(RECIPIENT)).thenReturn(Optional.of("zh"));
 
@@ -180,5 +186,70 @@ class PushNotificationEncodingTest {
 
         assertFalse(parse(entity).has("badge"), "learning pushes must not set a badge");
         verifyNoInteractions(unreadCountService);
+    }
+
+    /** Sends one chat message to a device of the given platform. */
+    private HttpEntity<?> captureChatPush(String deviceType) {
+        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "private"))
+                .thenReturn(List.of());
+        return capturePush(deviceType, () -> pushNotificationService.sendPushNotification(
+                List.of(RECIPIENT), pushMessages.literal("在吗？"),
+                pushMessages.personName("伟", "张"), 42L, "private"));
+    }
+
+    @Test
+    void androidChatPushCollapsesPerConversationWithATag() throws Exception {
+        // `tag` replaces the notification already on screen, so a burst in one
+        // conversation stays a single row showing the newest message.
+        JsonNode payload = parse(captureChatPush("android"));
+
+        assertEquals("private-42", payload.path("tag").asText());
+        // collapseId maps to FCM's collapse_key on Android: in-transit only, and
+        // capped at four distinct keys per device, so it is deliberately omitted.
+        assertFalse(payload.has("collapseId"), "Android must collapse via tag, not collapseId");
+    }
+
+    @Test
+    void iosChatPushCollapsesPerConversationWithACollapseId() throws Exception {
+        // iOS has no tag; apns-collapse-id is what replaces the displayed alert.
+        JsonNode payload = parse(captureChatPush("ios"));
+
+        assertEquals("private-42", payload.path("collapseId").asText());
+        assertFalse(payload.has("tag"), "tag is Android-only and would be dead weight on iOS");
+    }
+
+    @Test
+    void separateConversationsGetSeparateCollapseKeysSoTheyDoNotOverwriteEachOther() throws Exception {
+        when(conversationMuteRepository.findByConversationIdAndConversationType(99L, "group"))
+                .thenReturn(List.of());
+        HttpEntity<?> entity = capturePush("android", () -> pushNotificationService.sendPushNotification(
+                List.of(RECIPIENT), pushMessages.literal("hi"),
+                pushMessages.personName("Wei", "Zhang"), 99L, "group"));
+
+        assertEquals("group-99", parse(entity).path("tag").asText());
+    }
+
+    @Test
+    void learningPushIsNeverCollapsedSoDistinctEventsAllStay() throws Exception {
+        // Learning events reuse conversationId for course/quiz ids. Collapsing on
+        // that would let an achievement silently replace a graded-quiz notice.
+        JsonNode payload = parse(capturePush(() -> pushNotificationService.notifyLearningEvent(
+                RECIPIENT, "push.learning.achievement.title", "push.learning.achievement.body",
+                "Faithful Reader")));
+
+        assertFalse(payload.has("tag"), "learning events are distinct and must not replace each other");
+        assertFalse(payload.has("collapseId"), "learning events are distinct and must not replace each other");
+    }
+
+    @Test
+    void androidPushNamesTheChannelTheAppConfigured() throws Exception {
+        // Without channelId Android drops the notification on its own default
+        // channel, ignoring the importance/vibration/light the app set up.
+        assertEquals("default", parse(captureChatPush("android")).path("channelId").asText());
+    }
+
+    @Test
+    void iosPushOmitsTheAndroidOnlyChannelId() throws Exception {
+        assertFalse(parse(captureChatPush("ios")).has("channelId"));
     }
 }

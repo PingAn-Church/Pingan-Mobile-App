@@ -408,7 +408,7 @@ public class PushNotificationService {
      * rendered against the language their device last reported.
      */
     public void sendPushNotification(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long conversationId, String conversationType) {
-        boolean isChat = "private".equals(conversationType) || "group".equals(conversationType);
+        boolean isChat = isChatConversation(conversationId, conversationType);
 
         for (Long userId : filterMutedRecipients(recipientIds, conversationId, conversationType)) {
             List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
@@ -427,7 +427,8 @@ public class PushNotificationService {
             for (PushToken token : tokens) {
                 // Only send notification if the token is active
                 if (token.isActive()) {
-                    sendPushToDevice(token.getToken(), localizedBody, localizedTitle, conversationId, conversationType, badge);
+                    sendPushToDevice(token.getToken(), localizedBody, localizedTitle, conversationId, conversationType,
+                            badge, token.getDeviceType());
                 }
             }
         }
@@ -438,9 +439,18 @@ public class PushNotificationService {
      * filtered — learning/quiz pushes reuse conversationId for other ids and
      * must never be muted by a conversation setting.
      */
+    /**
+     * True only for real chat pushes. Learning events reuse conversationId to carry
+     * unrelated ids (course, quiz), so the type has to be checked alongside it —
+     * otherwise they would be muted, badged and collapsed as if they were messages.
+     */
+    private static boolean isChatConversation(Long conversationId, String conversationType) {
+        return conversationId != null
+                && ("private".equals(conversationType) || "group".equals(conversationType));
+    }
+
     private List<Long> filterMutedRecipients(List<Long> recipientIds, Long conversationId, String conversationType) {
-        if (conversationId == null
-                || !("private".equals(conversationType) || "group".equals(conversationType))) {
+        if (!isChatConversation(conversationId, conversationType)) {
             return recipientIds;
         }
         Set<Long> muted = conversationMuteRepository
@@ -472,7 +482,8 @@ public class PushNotificationService {
      * already there alone — a learning notification must not wipe someone's unread
      * message count.
      */
-    private void sendPushToDevice(String token, String message, String title, Long conversationId, String conversationType, Integer badge) {
+    private void sendPushToDevice(String token, String message, String title, Long conversationId,
+            String conversationType, Integer badge, String deviceType) {
         // conversationId is absent for learning pushes; omit the key rather than
         // shipping the literal string "null" the concatenated payload produced.
         Map<String, Object> data = new LinkedHashMap<>();
@@ -490,6 +501,39 @@ public class PushNotificationService {
         if (badge != null) {
             payload.put("badge", badge);
         }
+
+        // Anything that isn't explicitly iOS is treated as Android: both keys below
+        // are ignored by the other platform, so an unrecognised deviceType degrades
+        // to today's behaviour rather than misrouting.
+        boolean isAndroid = !"ios".equalsIgnoreCase(deviceType);
+
+        // Android drops a remote notification onto its default channel unless the
+        // payload names one, so the "default" channel the app creates at
+        // registration (importance MAX, vibration pattern, light colour) was never
+        // being applied. See registerForPushNotificationsAsync on the client.
+        if (isAndroid) {
+            payload.put("channelId", "default");
+        }
+
+        // Collapse per conversation: a burst of messages in one chat shows a single
+        // notification carrying the newest, instead of one row per message.
+        if (isChatConversation(conversationId, conversationType)) {
+            String collapseKey = conversationType + "-" + conversationId;
+            if (isAndroid) {
+                // `tag` replaces what is already on screen. Deliberately not also
+                // sending collapseId here: on Android that maps to FCM's
+                // collapse_key, which only coalesces in transit and is capped at
+                // four distinct keys per device — someone active in more
+                // conversations than that could silently lose queued notifications
+                // while offline.
+                payload.put("tag", collapseKey);
+            } else {
+                // iOS has no tag; collapseId (apns-collapse-id) both coalesces in
+                // transit and replaces the notification already displayed.
+                payload.put("collapseId", collapseKey);
+            }
+        }
+
         payload.put("data", data);
 
         HttpHeaders headers = new HttpHeaders();
