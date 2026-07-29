@@ -3,11 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
@@ -143,13 +145,21 @@ export default function GradingScreen() {
   const attempts = data?.pages.flatMap((page) => page.items) ?? [];
 
   // A page can filter down to zero cards server-side (e.g. every manual question
-  // already graded but unreleased) while later pages still have work. An empty
-  // list never triggers onEndReached, so keep fetching until something renders.
+  // already graded but unreleased) while later pages still have work. Nothing
+  // scrolls when the list is empty, so keep fetching until something renders.
   useEffect(() => {
     if (!isLoading && !isFetchingNextPage && hasNextPage && attempts.length === 0) {
       fetchNextPage();
     }
   }, [isLoading, isFetchingNextPage, hasNextPage, attempts.length, fetchNextPage]);
+
+  // Replaces FlatList's onEndReached, using the same 0.3-of-a-viewport trigger.
+  const onScroll = ({ nativeEvent }: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const fromEnd = contentSize.height - contentOffset.y - layoutMeasurement.height;
+    if (fromEnd < layoutMeasurement.height * 0.3) fetchNextPage();
+  };
 
   return (
     <View style={styles.container}>
@@ -167,19 +177,26 @@ export default function GradingScreen() {
           <Text style={styles.empty}>{i18n.t("gradingAllCaughtUp")}</Text>
         </View>
       ) : (
-        <FlatList
-          data={attempts}
-          keyExtractor={(item) => item.attemptId}
+        // Points and feedback inputs sit near the bottom of every card, so a
+        // focused one is usually behind the keyboard. This is a scroll view
+        // rather than a FlatList because KeyboardAwareScrollView sets its own
+        // onLayout, which would clobber the one FlatList needs to measure its
+        // viewport — so it cannot be supplied via renderScrollComponent. The
+        // queue is an instructor's outstanding-marking list and pages in 20 at a
+        // time, so it stays small enough to render unvirtualised.
+        <KeyboardAwareScrollView
           contentContainerStyle={styles.list}
-          onEndReached={() => {
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-          }}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
-            isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} /> : null
-          }
-          renderItem={({ item }) => <AttemptCard item={item} onGraded={onGraded} />}
-        />
+          bottomOffset={24}
+          keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+        >
+          {attempts.map((item) => (
+            <AttemptCard key={item.attemptId} item={item} onGraded={onGraded} />
+          ))}
+          {isFetchingNextPage ? (
+            <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} />
+          ) : null}
+        </KeyboardAwareScrollView>
       )}
     </View>
   );

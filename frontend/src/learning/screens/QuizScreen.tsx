@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Colors } from "@/constants";
@@ -167,7 +167,16 @@ export default function QuizScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 18, paddingBottom: 60 }}>
+    // Short-answer questions sit anywhere in the list, so a focused one is often
+    // behind the keyboard. KeyboardAwareScrollView lifts whichever input has
+    // focus; keyboardShouldPersistTaps lets the next option or Submit register on
+    // the first tap instead of being eaten by the dismiss.
+    <KeyboardAwareScrollView
+      style={styles.container}
+      contentContainerStyle={{ padding: 18, paddingBottom: 60 }}
+      bottomOffset={24}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>{quiz.title}</Text>
       <Text style={styles.muted}>{i18n.t("passMark", { score: quiz.passingScore })}</Text>
 
@@ -183,7 +192,7 @@ export default function QuizScreen() {
       <TouchableOpacity style={styles.primaryBtn} onPress={handleSubmit} disabled={submitting}>
         <Text style={styles.primaryBtnText}>{submitting ? i18n.t("submitting") : i18n.t("submitQuiz")}</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
