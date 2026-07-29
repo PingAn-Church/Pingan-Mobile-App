@@ -147,27 +147,6 @@ const NewGroupScreen = () => {
     }
   };
 
-  //   const renderUser = ({ item }) => {
-  //     const isSelected = selectedParticipants.includes(item);
-  //     return (
-  //       <TouchableOpacity
-  //         onPress={() => {
-  //           if (isSelected) {
-  //             setSelectedParticipants(selectedParticipants.filter((u) => u.id !== item.id));
-  //           } else {
-  //             setSelectedParticipants([...selectedParticipants, item]);
-  //           }
-  //         }}
-  //         style={styles.userRow}
-  //       >
-  //         <Text style={styles.userText}>
-  //           {item.firstName} {item.lastName}
-  //           {isSelected ? "  ✅" : ""}
-  //         </Text>
-  //       </TouchableOpacity>
-  //     );
-  //   };
-
   const renderUser = ({ item }) => {
     const isSelected = selectedParticipants.some((u) => u.id === item.id);
     return (

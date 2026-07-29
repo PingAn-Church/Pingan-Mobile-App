@@ -14,7 +14,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { registerUser } from "../../service/AuthService";
-// import { getPresignedUploadUrl } from "../../service/S3Service";  // Assuming S3Service handles URL requests
 import {
   getPresignedUploadUrl,
   uploadFileToOSS,

@@ -186,24 +186,6 @@ const DetailedPrivateChatPage = ({ route }) => {
   }
 
   return (
-    // <SafeAreaView style={styles.container}>
-    //   {/* 🔹 Profile Image and Name */}
-    //   <View style={styles.headerContainer}>
-    //     {/* <Image source={{ uri: participantDetails.profileImageUrl }} style={styles.profileImage} /> */}
-    //     <Image
-    //       source={
-    //         participantDetails.profileImageUrl
-    //           ? { uri: participantDetails.profileImageUrl }
-    //           : defaultProfileImage
-    //       }
-    //       style={styles.profileImage}
-    //     />
-    //     <Text style={styles.participantName}>
-    //       {participantDetails.firstName} {participantDetails.lastName}
-    //     </Text>
-    //     {/* <Text style={styles.bio}>{participantDetails.bio || "No bio available."}</Text> */}
-    //   </View>
-    // </SafeAreaView>
     <SafeAreaView style={styles.container}>
       <View style={styles.centeredContent}>
         <Image
@@ -311,37 +293,3 @@ const styles = StyleSheet.create({
     backgroundColor: "#2E7D32",
   },
 });
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     backgroundColor: "#fff",
-//     padding: 20,
-//   },
-//   loadingContainer: {
-//     flex: 1,
-//     justifyContent: "center",
-//     alignItems: "center",
-//   },
-//   headerContainer: {
-//     alignItems: "center",
-//     marginBottom: 20,
-//   },
-//   profileImage: {
-//     width: 120,
-//     height: 120,
-//     borderRadius: 60,
-//     marginBottom: 10,
-//   },
-//   participantName: {
-//     fontSize: 22,
-//     fontWeight: "bold",
-//   },
-//   // bio: {
-//   //   fontSize: 16,
-//   //   color: "#555",
-//   //   marginTop: 5,
-//   //   textAlign: "center",
-//   //   paddingHorizontal: 20,
-//   // },
-// });

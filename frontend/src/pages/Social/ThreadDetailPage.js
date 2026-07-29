@@ -1,18 +1,4 @@
 // // src/pages/Social/ThreadDetailPage.js
-// import React, { useState } from "react";
-// import {
-//   View,
-//   Text,
-//   FlatList,
-//   TextInput,
-//   Button,
-//   StyleSheet,
-//   KeyboardAvoidingView,
-//   Platform,
-// } from "react-native";
-// import { useEffect } from "react";
-// import { fetchReplies, postReply } from "../../service/ThreadService";
-// import { Alert } from "react-native";
 
 // const ThreadDetailPage = ({ route }) => {
 //   const { thread } = route.params;
@@ -84,81 +70,9 @@
 //         )}
 //       />
 
-//       <View style={styles.replyBox}>
-//         <TextInput
-//           placeholder="Write a reply..."
-//           value={newReply}
-//           onChangeText={setNewReply}
-//           style={styles.input}
-//         />
-//         <Button title="Reply" onPress={handleReply} />
-//       </View>
-//     </KeyboardAvoidingView>
-//   );
-// };
-
-// const styles = StyleSheet.create({
-//     container: { flex: 1, backgroundColor: "#fff" },
-//     threadTitle: {
-//       fontSize: 24,
-//       fontWeight: "bold",
-//       marginBottom: 4,
-//       marginTop: 16,
-//       marginHorizontal: 16,
-//     },
-//     threadAuthor: {
-//       fontSize: 14,
-//       color: "gray",
-//       marginBottom: 16,
-//       marginHorizontal: 16,
-//     },
-//     replyItem: {
-//       backgroundColor: "#f9f9f9",
-//       borderRadius: 10,
-//       padding: 12,
-//       marginHorizontal: 16,
-//       marginBottom: 10,
-//       borderWidth: 1,
-//       borderColor: "#e5e5e5",
-//     },
-//     replyAuthor: { fontWeight: "600", marginBottom: 4, fontSize: 14 },
-//     replyText: { fontSize: 16, color: "#333" },
-//     replyBox: {
-//       flexDirection: "row",
-//       alignItems: "center",
-//       padding: 12,
-//       borderTopWidth: 1,
-//       borderColor: "#ddd",
-//       backgroundColor: "#fafafa",
-//     },
-//     input: {
-//       flex: 1,
-//       backgroundColor: "#fff",
-//       borderWidth: 1,
-//       borderColor: "#ccc",
-//       borderRadius: 8,
-//       paddingHorizontal: 12,
-//       paddingVertical: 8,
-//       marginRight: 8,
-//     },
-// });
-
 // export default ThreadDetailPage;
 
 // src/pages/Social/ThreadDetailPage.js
-// import React, { useEffect, useState, useRef } from "react";
-// import {
-//   View,
-//   Text,
-//   FlatList,
-//   TextInput,
-//   Button,
-//   StyleSheet,
-//   KeyboardAvoidingView,
-//   Platform,
-//   Alert,
-// } from "react-native";
-// import { fetchReplies, postReply } from "../../service/ThreadService";
 
 // // Format ISO date to readable
 // const formatDateTime = (isoDate) => {
@@ -207,67 +121,9 @@
 //   }
 // };
 
-//   return (
-//     <KeyboardAvoidingView
-//       style={styles.container}
-//       behavior={Platform.select({ ios: "padding", android: undefined })}
-//     >
-//       <View style={styles.threadBox}>
-//         <Text style={styles.threadTitle}>{thread.title}</Text>
-//         <Text style={styles.threadMeta}>
-//           by {thread.createdByName} • {formatDateTime(thread.createdAt)}
-//         </Text>
-//         <Text style={styles.threadContent}>{thread.content}</Text>
-//       </View>
-
 //       <Text style={styles.repliesHeader}>Replies</Text>
 
-//       <FlatList
-//         ref={flatListRef}
-//         data={replies}
-//         keyExtractor={(item) => item.id.toString()}
-//         contentContainerStyle={{ paddingBottom: 16 }}
-//         renderItem={({ item }) => (
-//           <View style={styles.replyItem}>
-//             <Text style={styles.replyAuthor}>
-//               {item.authorName} • {formatDateTime(item.createdAt)}
-//             </Text>
-//             <Text style={styles.replyText}>{item.content}</Text>
-//           </View>
-//         )}
 //       />
-
-//       <View style={styles.replyBox}>
-//         <TextInput
-//           placeholder="Write a reply..."
-//           value={newReply}
-//           onChangeText={setNewReply}
-//           style={styles.input}
-//         />
-//         <Button title="Reply" onPress={handleReply} />
-//       </View>
-//     </KeyboardAvoidingView>
-//   );
-// };
-
-// import React, { useEffect, useState, useRef } from "react";
-// import {
-//   View,
-//   Text,
-//   FlatList,
-//   TextInput,
-//   Button,
-//   StyleSheet,
-//   KeyboardAvoidingView,
-//   Platform,
-//   Alert,
-//   RefreshControl,
-// } from "react-native";
-// import {
-//   fetchReplies,
-//   postReply,
-//   fetchThreadById,
-// } from "../../service/ThreadService";
 
 // const formatDateTime = (isoDate) => {
 //   const date = new Date(isoDate);
@@ -284,19 +140,6 @@
 //   useEffect(() => {
 //     loadThreadAndReplies();
 //   }, [thread.id]);
-
-//   const loadThreadAndReplies = async () => {
-//     try {
-//       const [updatedThread, fetchedReplies] = await Promise.all([
-//         fetchThreadById(thread.id),
-//         fetchReplies(thread.id),
-//       ]);
-//       setThread(updatedThread);
-//       setReplies(fetchedReplies);
-//     } catch (error) {
-//       showAlert("Error", "Failed to load thread or replies");
-//     }
-//   };
 
 //   const handleRefresh = async () => {
 //     setRefreshing(true);
@@ -321,80 +164,12 @@
 //     }
 //   };
 
-//   return (
-//     <KeyboardAvoidingView
-//       style={styles.container}
-//       behavior={Platform.select({ ios: "padding", android: undefined })}
-//     >
-//       <View style={styles.threadBox}>
-//         <Text style={styles.threadTitle}>{thread.title}</Text>
-//         <Text style={styles.threadMeta}>
-//           by {thread.createdByName} • {formatDateTime(thread.createdAt)}
-//         </Text>
-//         <Text style={styles.threadContent}>{thread.content}</Text>
-//       </View>
-
 //       <Text style={styles.repliesHeader}>Replies</Text>
 
-//       <FlatList
-//         ref={flatListRef}
-//         data={replies}
-//         keyExtractor={(item) => item.id.toString()}
-//         contentContainerStyle={{ paddingBottom: 16 }}
-//         refreshControl={
-//           <RefreshControl
-//             refreshing={refreshing}
-//             onRefresh={handleRefresh}
-//             colors={["#3b82f6"]}
-//             tintColor="#3b82f6"
-//           />
-//         }
-//         renderItem={({ item }) => (
-//           <View style={styles.replyItem}>
-//             <Text style={styles.replyAuthor}>
-//               {item.authorName} • {formatDateTime(item.createdAt)}
-//             </Text>
-//             <Text style={styles.replyText}>{item.content}</Text>
-//           </View>
-//         )}
 //       />
-
-//       <View style={styles.replyBox}>
-//         <TextInput
-//           placeholder="Write a reply..."
-//           value={newReply}
-//           onChangeText={setNewReply}
-//           style={styles.input}
-//         />
-//         <Button title="Reply" onPress={handleReply} />
-//       </View>
-//     </KeyboardAvoidingView>
-//   );
-// };
 
 // const styles = StyleSheet.create({
 //   container: { flex: 1, backgroundColor: "#fff" },
-
-//   threadBox: {
-//     padding: 16,
-//     borderBottomWidth: 1,
-//     borderBottomColor: "#eee",
-//     backgroundColor: "#fdfdfd",
-//   },
-//   threadTitle: {
-//     fontSize: 24,
-//     fontWeight: "bold",
-//     marginBottom: 4,
-//   },
-//   threadMeta: {
-//     fontSize: 13,
-//     color: "#777",
-//     marginBottom: 10,
-//   },
-//   threadContent: {
-//     fontSize: 16,
-//     color: "#333",
-//   },
 
 //   repliesHeader: {
 //     fontSize: 20,
@@ -403,46 +178,6 @@
 //     marginHorizontal: 16,
 //     marginBottom: 8,
 //   },
-
-//   replyItem: {
-//     backgroundColor: "#f9f9f9",
-//     borderRadius: 10,
-//     padding: 12,
-//     marginHorizontal: 16,
-//     marginBottom: 10,
-//     borderWidth: 1,
-//     borderColor: "#e5e5e5",
-//   },
-//   replyAuthor: {
-//     fontWeight: "600",
-//     marginBottom: 4,
-//     fontSize: 13,
-//     color: "#444",
-//   },
-//   replyText: {
-//     fontSize: 15,
-//     color: "#333",
-//   },
-
-//   replyBox: {
-//     flexDirection: "row",
-//     alignItems: "center",
-//     padding: 12,
-//     borderTopWidth: 1,
-//     borderColor: "#ddd",
-//     backgroundColor: "#fafafa",
-//   },
-//   input: {
-//     flex: 1,
-//     backgroundColor: "#fff",
-//     borderWidth: 1,
-//     borderColor: "#ccc",
-//     borderRadius: 8,
-//     paddingHorizontal: 12,
-//     paddingVertical: 8,
-//     marginRight: 8,
-//   },
-// });
 
 // export default ThreadDetailPage;
 
@@ -483,7 +218,6 @@ import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
-
 
 const formatDateTime = (isoDate) => {
   const date = new Date(isoDate);

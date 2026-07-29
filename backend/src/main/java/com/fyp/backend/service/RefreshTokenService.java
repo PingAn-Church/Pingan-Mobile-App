@@ -23,21 +23,6 @@ public class RefreshTokenService {
         this.refreshTokenRepository = refreshTokenRepository;
     }
 
-//    public void saveRefreshToken(String email, String deviceId, String refreshToken, long expirationMillis) {
-//        String hashedToken = hashToken(refreshToken);
-//        Instant now = Instant.now();
-//
-//        RefreshToken tokenEntity = RefreshToken.builder()
-//                .userEmail(email)
-//                .deviceId(deviceId)
-//                .refreshTokenHash(hashedToken)
-//                .createdAt(now)
-//                .expiresAt(now.plusMillis(expirationMillis))
-//                .build();
-//
-//        refreshTokenRepository.save(tokenEntity);
-//    }
-
     public void saveRefreshToken(String email, String deviceId, String refreshToken, long expirationMillis) {
         // 1. Delete any old token for same email + device
         refreshTokenRepository.deleteByUserEmailAndDeviceId(email, deviceId);
@@ -56,7 +41,6 @@ public class RefreshTokenService {
 
         refreshTokenRepository.save(tokenEntity);
     }
-
 
     public boolean validateRefreshToken(String email, String deviceId, String incomingToken) {
         Optional<RefreshToken> optionalToken = refreshTokenRepository.findByUserEmailAndDeviceId(email, deviceId);

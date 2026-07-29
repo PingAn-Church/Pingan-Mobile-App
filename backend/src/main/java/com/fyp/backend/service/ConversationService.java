@@ -115,8 +115,6 @@ public class ConversationService {
         return conversations;
     }
 
-
-
     public ConversationDto getConversationById(Long conversationId) {
         Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
         if (groupConversationOpt.isPresent()) {
@@ -141,7 +139,6 @@ public class ConversationService {
         throw new IllegalArgumentException("Conversation not found");
     }
 
-
     public boolean isUserPartOfConversation(Long conversationId, Long userId) {
         Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
         if (groupConversationOpt.isPresent()) {
@@ -156,7 +153,6 @@ public class ConversationService {
         return false;
     }
 
-
     public String getConversationType(Long conversationId) {
         if (groupConversationRepository.findById(conversationId).isPresent()) {
             return "group";
@@ -168,56 +164,6 @@ public class ConversationService {
     }
 
 //    @Transactional
-//    public ConversationDto createGroupConversation(ConversationDto conversationDto, Long creatorId) {
-//        // Validate creator
-//        User creator = userRepository.findById(creatorId)
-//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//
-//        // Create new group conversation
-//        GroupConversation groupConversation = new GroupConversation();
-//        groupConversation.setGroupName(conversationDto.getGroupName());
-//        groupConversation.setGroupIcon(conversationDto.getGroupIcon());
-//
-//        List<User> participants = new ArrayList<>();
-//        participants.add(creator);
-//
-//        // Add other participants
-//        if (conversationDto.getParticipants() != null) {
-//            for (Long userId : conversationDto.getParticipants()) {
-//                User user = userRepository.findById(userId)
-//                        .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//                participants.add(user);
-//            }
-//        }
-//
-//        groupConversation.setParticipants(participants);
-//        System.out.println("GROUP CONVO" + groupConversation);
-//        groupConversation.setCreatedAt(now());
-//        groupConversation.setUpdatedAt(now());
-//
-//        groupConversation = groupConversationRepository.save(groupConversation);
-//
-//        // Set creator as admin
-//        groupConversation.setAdmins(new ArrayList<>());
-//        groupConversation.getAdmins().add(creator);
-//
-//        groupConversationRepository.save(groupConversation);
-//
-//        // Prepare the response DTO
-//        ConversationDto conversationDtoResponse = new ConversationDto(groupConversation);
-//
-//        System.out.println("FINAL Participants" + conversationDtoResponse);
-//
-//        // Notify participants
-//        for (Long participantId : conversationDtoResponse.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(), // Notify participants using their userId
-//                    "/queue/conversations", conversationDtoResponse
-//            );
-//        }
-//
-//        return conversationDtoResponse;
-//    }
 
     @Transactional
     public ConversationDto createGroupConversation(ConversationDto conversationDto, Long creatorId) {
@@ -276,7 +222,6 @@ public class ConversationService {
 
         return response;
     }
-
 
     @Transactional
     public ConversationDto createPrivateConversation(ConversationDto conversationDto, Long creatorId) {
@@ -367,18 +312,6 @@ public class ConversationService {
         });
 
 //        // ✅ Notify existing participants
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/participant-updates", updatedConversation
-//            );
-//        }
-//
-//        // ✅ Notify the newly added user
-//        messagingTemplate.convertAndSendToUser(
-//                userId.toString(),
-//                "/queue/conversations", updatedConversation
-//        );
 
         return updatedConversation;
     }
@@ -437,128 +370,13 @@ public class ConversationService {
         });
 
 //        // Notify remaining participants
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/participant-updates", updatedConversation
-//            );
-//        }
-//
-//        // Notify removed participant
-//        messagingTemplate.convertAndSendToUser(
-//                userId.toString(),
-//                "/queue/conversations", updatedConversation
-//        );
 
         return updatedConversation;
     }
 
+//    @Transactional
 
 //    @Transactional
-//    public ConversationDto leaveGroup(Long conversationId, Long currentUserId) {
-//        // Fetch the group conversation from the repository
-//        GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
-//                .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
-//
-//        // Fetch the current user
-//        User currentUser = userRepository.findById(currentUserId)
-//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//
-//        // Ensure the current user is part of the group
-//        if (!groupConversation.getParticipants().contains(currentUser)) {
-//            throw new IllegalArgumentException("User is not part of this group.");
-//        }
-//
-//        // Prevent the user from leaving if they are the only participant
-//        if (groupConversation.getParticipants().size() == 1) {
-//            throw new IllegalArgumentException("A group cannot exist with a single participant.");
-//        }
-//
-//        // Remove the current user from the participants list
-//        groupConversation.getParticipants().remove(currentUser);
-//
-//        // Save the updated conversation
-//        groupConversationRepository.save(groupConversation);
-//
-//        // Prepare the updated conversation DTO for response
-//        ConversationDto updatedConversation = new ConversationDto(groupConversation);
-//
-//        // Notify remaining participants about the participant removal
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/participant-updates", updatedConversation
-//            );
-//        }
-//
-//        // Notify the removed participant (current user) about their removal and updated conversation
-//        messagingTemplate.convertAndSendToUser(
-//                currentUserId.toString(),
-//                "/queue/conversations", updatedConversation
-//        );
-//
-//        return updatedConversation;
-//    }
-
-//    @Transactional
-//    public ConversationDto leaveGroup(Long conversationId, Long currentUserId) {
-//        // Fetch the group conversation from the repository
-//        GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
-//                .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
-//
-//        // Fetch the current user
-//        User currentUser = userRepository.findById(currentUserId)
-//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//
-//        // Ensure the current user is part of the group
-//        if (!groupConversation.getParticipants().contains(currentUser)) {
-//            throw new IllegalArgumentException("User is not part of this group.");
-//        }
-//
-//        // Remove the current user from the participants list
-//        groupConversation.getParticipants().remove(currentUser);
-//        groupConversation.getAdmins().remove(currentUser);
-//
-//        // Modify updatedAt
-//        groupConversation.setUpdatedAt(now());
-//
-//        // ✅ Case 1: Last participant left — delete the group
-//        if (groupConversation.getParticipants().isEmpty()) {
-//            performConversationCleanup(groupConversation);
-//            groupConversationRepository.delete(groupConversation);
-//
-//            // ✅ Notify the user and any previous participants
-//            messagingTemplate.convertAndSendToUser(
-//                    currentUserId.toString(),
-//                    "/queue/conversations",
-//                    Map.of(
-//                            "conversationId", conversationId,
-//                            "deleted", true
-//                    )
-//            );
-//            return null;
-//        }
-//
-//        // ✅ Case 2: Others still in the group — update and notify
-//        groupConversationRepository.save(groupConversation);
-//        ConversationDto updatedConversation = new ConversationDto(groupConversation);
-//
-//        // Notify remaining participants
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/participant-updates", updatedConversation
-//            );
-//        }
-//
-//        // Notify the leaving user (for cleanup on frontend)
-//        messagingTemplate.convertAndSendToUser(
-//                currentUserId.toString(),
-//                "/queue/conversations", updatedConversation
-//        );
-//
-//        return updatedConversation;
-//    }
 
     @Transactional
     public ConversationDto leaveGroup(Long conversationId, Long currentUserId) {
@@ -638,8 +456,6 @@ public class ConversationService {
 
         return updatedConversation;
     }
-
-
 
     // Add an admin to a group conversation
     @Transactional
@@ -755,7 +571,6 @@ public class ConversationService {
 
         return updatedConversation;
     }
-
 
     @Transactional
     public ConversationDto updateGroupIcon(Long conversationId, String newGroupIconUrl, Long userId) {
@@ -873,63 +688,7 @@ public class ConversationService {
         }
     }
 
-
-
 //    @Transactional
-//    public void deleteConversation(Long conversationId, Long requestingUserId) {
-//        Conversation conversation = getConversationEntityById(conversationId);
-//
-//        if (conversation instanceof PrivateConversation privateConversation) {
-//            boolean isParticipant = privateConversation.getParticipants().stream()
-//                    .anyMatch(user -> user.getId().equals(requestingUserId));
-//            if (!isParticipant) {
-//                throw new AccessDeniedException("You are not a participant in this private conversation.");
-//            }
-//
-//            performConversationCleanup(privateConversation);
-//            privateConversationRepository.delete(privateConversation);
-//
-//        } else if (conversation instanceof GroupConversation groupConversation) {
-//            boolean isAdmin = groupConversation.getAdmins().stream()
-//                    .anyMatch(admin -> admin.getId().equals(requestingUserId));
-//            if (!isAdmin) {
-//                throw new AccessDeniedException("Only group admins can delete the conversation.");
-//            }
-//
-//            performConversationCleanup(groupConversation);
-//
-//            groupConversation.getParticipants().clear();
-//            groupConversation.getAdmins().clear();
-//            groupConversationRepository.save(groupConversation); // Ensures join table cleanup
-//
-//            groupConversationRepository.delete(groupConversation);
-//
-//            System.out.println("DELETION 1");
-//
-//        } else {
-//            throw new IllegalArgumentException("Unknown conversation type.");
-//        }
-//
-//        System.out.println("CHECKPOINT 2" + conversation.getParticipants());
-//
-//        for (User participant : conversation.getParticipants()) {
-////            messagingTemplate.convertAndSendToUser(
-////                    participant.getId().toString(),
-////                    "/queue/conversation-deleted",
-////                    conversationId
-////            );
-//            System.out.println("SENDING DELETION INFO");
-//            messagingTemplate.convertAndSendToUser(
-//                    participant.getId().toString(),
-//                    "/queue/conversations",
-//                    Map.of(
-//                            "conversationId", conversationId,
-//                            "deleted", true
-//                    )
-//            );
-//
-//        }
-//    }
 
     @Transactional
     public void deleteConversation(Long conversationId, Long requestingUserId) {
@@ -992,6 +751,5 @@ public class ConversationService {
 //            );
 //        }
     }
-
 
 }

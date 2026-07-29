@@ -1,17 +1,5 @@
 import { showAlert } from "../../utils/showAlert";
 // // src/pages/Social/ThreadHomePage.js
-// import React, { useState, useEffect } from "react";
-// import {
-//   View,
-//   Text,
-//   FlatList,
-//   Button,
-//   ActivityIndicator,
-//   TouchableOpacity,
-//   StyleSheet,
-// } from "react-native";
-// import { fetchThreads } from "../../service/ThreadService";
-// import { useNavigation } from "@react-navigation/native";
 
 // // Dummy data (replace this with API call later)
 // // const mockThreads = [
@@ -64,46 +52,6 @@ import { showAlert } from "../../utils/showAlert";
 //   };
 
 //   if (loading) return <ActivityIndicator size="large" color="blue" />;
-
-//   return (
-//     <View style={styles.container}>
-//       <Text style={styles.header}>Threads</Text>
-//       <FlatList
-//         data={threads}
-//         keyExtractor={(item) => item.id.toString()}
-//         renderItem={({ item }) => (
-//           <TouchableOpacity
-//             style={styles.threadItem}
-//             onPress={() => handleThreadPress(item)}
-//           >
-//             <Text style={styles.threadTitle}>{item.title}</Text>
-//             <Text style={styles.threadMeta}>by {item.createdByName}</Text>
-//           </TouchableOpacity>
-//         )}
-//       />
-//       <Button title="Create New Thread" onPress={handleCreateThread} />
-//     </View>
-//   );
-// };
-
-// const styles = StyleSheet.create({
-//   container: { flex: 1, padding: 16, backgroundColor: "#fff" },
-//   header: { fontSize: 26, fontWeight: "bold", marginBottom: 20 },
-//   threadItem: {
-//     padding: 16,
-//     backgroundColor: "#ffffff",
-//     marginBottom: 12,
-//     borderRadius: 10,
-//     borderWidth: 1,
-//     borderColor: "#e0e0e0",
-//     shadowColor: "#000",
-//     shadowOpacity: 0.05,
-//     shadowRadius: 4,
-//     shadowOffset: { width: 0, height: 2 },
-//   },
-//   threadTitle: { fontSize: 18, fontWeight: "600", marginBottom: 4 },
-//   threadMeta: { fontSize: 14, color: "#666" },
-// });
 
 // export default ThreadHomePage;
 
@@ -167,19 +115,6 @@ const ThreadHomePage = () => {
   const handleCreateThread = () => {
     navigation.navigate("CreateThread");
   };
-
-  // useFocusEffect(
-  //   useCallback(() => {
-  //     const loadThreads = async () => {
-  //       try {
-  //         const data = await fetchThreads();
-  //         setThreads(data);
-  //       } catch (error) {
-  //         showAlert("Error", "Failed to load threads");
-  //       } finally {
-  //         setLoading(false);
-  //       }
-  //     };
 
   //     loadThreads();
   //   }, [])

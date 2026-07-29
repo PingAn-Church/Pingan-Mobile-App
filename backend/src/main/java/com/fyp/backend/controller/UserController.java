@@ -55,58 +55,12 @@ public class UserController {
     @Autowired
     private UserAccountDeletionService userAccountDeletionService;
 
-    // @GetMapping("/profile")
-    // public ResponseEntity<UserProfileDto>
-    // getUserProfile(@RequestHeader("Authorization") String authorizationHeader) {
-    // // Extract token from Authorization header
-    // String token = authorizationHeader.substring(7); // Remove "Bearer " prefix
-    // String email = jwtUtil.extractEmail(token); // Extract the email from the
-    // token
-    //
-    // // Find the user by email
-    // Optional<User> userOptional = userRepository.findByEmail(email);
-    // if (userOptional.isPresent()) {
-    // User user = userOptional.get();
-    //
-    // // Create and return the UserProfileDto
-    // UserProfileDto userProfile = new UserProfileDto(
-    // user.getId(),
-    // user.getFirstName(),
-    // user.getLastName(),
-    // user.getEmail(),
-    // user.getProfileImage(),
-    // user.isVerifiedUser(),
-    // user.isAdmin()
-    // );
-    // return ResponseEntity.ok(userProfile);
-    // } else {
-    // return ResponseEntity.status(404).body(null); // User not found
-    // }
-    // }
-
-//    @GetMapping("/profile")
-//    public ResponseEntity<UserProfileDto> getUserProfile(@RequestHeader("Authorization") String authorizationHeader) {
-//        return userService.getUserFromToken(authorizationHeader)
-//                .map(user -> new UserProfileDto(
-//                        user.getId(),
-//                        user.getFirstName(),
-//                        user.getLastName(),
-//                        user.getEmail(),
-//                        user.getProfileImage(),
-//                        user.isVerifiedUser(),
-//                        user.isAdmin(),
-//                        user.getBirthday()))
-//                .map(ResponseEntity::ok)
-//                .orElse(ResponseEntity.status(404).body(null));
-//    }
-
     @GetMapping("/profile")
     public ResponseEntity<UserProfileDto> getUserProfile(@RequestHeader("Authorization") String authorizationHeader) {
         return userService.getUserProfileFromHeader(authorizationHeader)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.status(404).body(null));
     }
-
 
     @GetMapping("/{userId}")
     public ResponseEntity<UserProfileDto> getUserById(@PathVariable Long userId) {

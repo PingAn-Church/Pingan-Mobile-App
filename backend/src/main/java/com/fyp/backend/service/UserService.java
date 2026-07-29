@@ -37,20 +37,6 @@ public class UserService {
      * @param token The JWT authorization token.
      * @return UserProfileDto if found, otherwise null.
      */
-//    public Optional<UserProfileDto> getUserProfile(String token) {
-//        String email = jwtUtil.extractEmail(token);
-//        Optional<User> userOptional = userRepository.findByEmail(email);
-//
-//        return userOptional.map(user -> new UserProfileDto(
-//                user.getId(),
-//                user.getFirstName(),
-//                user.getLastName(),
-//                user.getEmail(),
-//                user.getProfileImage(),
-//                user.isVerifiedUser(),
-//                user.isAdmin(),
-//                user.getBirthday()));
-//    }
 
     public Optional<UserProfileDto> getUserProfileFromHeader(String authorizationHeader) {
         String email = jwtUtil.extractEmailFromHeader(authorizationHeader);
@@ -59,7 +45,6 @@ public class UserService {
         return userRepository.findByEmail(email)
                 .map(UserProfileDto::from);
     }
-
 
     /**
      * Retrieves a user's profile by user ID.

@@ -5,43 +5,6 @@
 // export default function WelcomePage() {
 //   const navigation = useNavigation(); // Use the hook to access navigation
 
-//   return (
-//     <SafeAreaView style={styles.container}>
-//       <Text style={styles.title}>Welcome to Our App</Text>
-//       {/* <Button title="Go to Chat" onPress={() => navigation.navigate("Chat")} /> */}
-//       <View style={styles.button}>
-//         <Button
-//           title="Go to Register"
-//           onPress={() => navigation.navigate("Register")}
-//         />
-//       </View>
-//       <View style={styles.button}>
-//         <Button
-//           title="Go to Login"
-//           onPress={() => navigation.navigate("Login")}
-//         />
-//       </View>
-//     </SafeAreaView>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     justifyContent: "center",
-//     alignItems: "center",
-//     padding: 20,
-//   },
-//   title: {
-//     fontSize: 24,
-//     marginBottom: 20,
-//   },
-//   button: {
-//     marginVertical: 10,
-//     marginTop: 20,
-//   },
-// });
-
 // import React, { useContext, useEffect } from "react";
 // import { Button, View, Text, SafeAreaView, StyleSheet, ActivityIndicator } from "react-native";
 // import { useNavigation } from "@react-navigation/native";
@@ -65,36 +28,6 @@
 //       </SafeAreaView>
 //     );
 //   }
-
-//   return (
-//     <SafeAreaView style={styles.container}>
-//       <Text style={styles.title}>Welcome to Our App</Text>
-//       <View style={styles.button}>
-//         <Button title="Go to Register" onPress={() => navigation.navigate("Register")} />
-//       </View>
-//       <View style={styles.button}>
-//         <Button title="Go to Login" onPress={() => navigation.navigate("Login")} />
-//       </View>
-//     </SafeAreaView>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     justifyContent: "center",
-//     alignItems: "center",
-//     padding: 20,
-//   },
-//   title: {
-//     fontSize: 24,
-//     marginBottom: 20,
-//   },
-//   button: {
-//     marginVertical: 10,
-//     marginTop: 20,
-//   },
-// });
 
 import React, { useContext, useEffect } from "react";
 import {

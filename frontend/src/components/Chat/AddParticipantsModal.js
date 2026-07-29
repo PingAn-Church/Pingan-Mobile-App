@@ -1,15 +1,3 @@
-// import React, { useEffect, useState } from "react";
-// import {
-//   Modal,
-//   SafeAreaView,
-//   Text,
-//   FlatList,
-//   TextInput,
-//   TouchableOpacity,
-//   StyleSheet,
-//   View,
-// } from "react-native";
-// import { getAllUsers, addParticipantToGroup } from "../../service/UserService";
 
 // const AddParticipantsModal = ({ visible, onClose, conversationId, existingParticipants, setParticipantDetails }) => {
 //   const [allUsers, setAllUsers] = useState([]);
@@ -47,43 +35,12 @@
 //     }
 //   };
 
-//   return (
-//     <Modal visible={visible} animationType="slide">
-//       <SafeAreaView style={styles.modalContainer}>
-//         {/* Header */}
-//         <View style={styles.header}>
-//           <TouchableOpacity onPress={onClose}>
-//             <Text style={styles.headerButton}>Cancel</Text>
-//           </TouchableOpacity>
-//           <Text style={styles.headerTitle}>Add Participants</Text>
-//           <TouchableOpacity onPress={handleAddParticipants}>
-//             <Text style={styles.headerButton}>Done</Text>
-//           </TouchableOpacity>
-//         </View>
-
 //         <TextInput
 //           style={styles.searchBar}
 //           placeholder="Search users..."
 //           value={searchQuery}
 //           onChangeText={setSearchQuery}
 //         />
-
-//         <FlatList
-//           data={filteredUsers}
-//           keyExtractor={(item) => item.id.toString()}
-//           renderItem={({ item }) => (
-//             <TouchableOpacity
-//               style={[styles.userItem, selectedUsers.includes(item) && styles.selectedUser]}
-//               onPress={() => setSelectedUsers((prev) => (prev.includes(item) ? prev.filter((u) => u !== item) : [...prev, item]))}
-//             >
-//               <Text style={styles.userText}>{item.firstName} {item.lastName}</Text>
-//             </TouchableOpacity>
-//           )}
-//         />
-//       </SafeAreaView>
-//     </Modal>
-//   );
-// };
 
 // export default AddParticipantsModal;
 
@@ -136,19 +93,6 @@ const AddParticipantsModal = ({
   const availableUsers = results.filter(
     (u) => !existingParticipants.some((p) => String(p.id) === String(u.id))
   );
-
-  //   const handleAddParticipants = async () => {
-  //     try {
-  //       for (const user of selectedUsers) {
-  //         const addedParticipant = await addParticipantToGroup(conversationId, user.id);
-  //         const stompClient = getStompClient();
-  //         if (stompClient && stompClient.connected) {
-  //         stompClient.publish({
-  //             destination: "/app/participantAdded",
-  //             body: JSON.stringify(response.data),
-  //         });
-  //         console.log("📡 WebSocket: Published Group Update:", response.data);
-  //     }
 
   //       }
   //       setParticipantDetails([...existingParticipants, ...selectedUsers]);
@@ -220,21 +164,6 @@ const AddParticipantsModal = ({
   //             }
 
   //             // ✅ Fetch full participant details
-  //             const fullParticipants = await Promise.all(
-  //                 updatedConversation.participants.map(async (participantId) => {
-  //                     try {
-  //                         const userData = await getUserById(participantId);
-  //                         return {
-  //                             id: participantId,
-  //                             ...userData,
-  //                             profileImageUrl: await fetchViewingPresignedUrl(userData.profileImage, "profile"),
-  //                         };
-  //                     } catch (error) {
-  //                         console.error(`❌ Error fetching user ${participantId}:`, error);
-  //                         return null;
-  //                     }
-  //                 })
-  //             );
 
   //             // ✅ Remove null values (failed fetches)
   //             const filteredParticipants = fullParticipants.filter(Boolean);
@@ -243,20 +172,6 @@ const AddParticipantsModal = ({
   //             setParticipantDetails(filteredParticipants);
 
   //             // ✅ Publish WebSocket event
-  //             const stompClient = getStompClient();
-  //             if (stompClient && stompClient.connected) {
-  //                 stompClient.publish({
-  //                     destination: "/app/participantAdded",
-  //                     body: JSON.stringify(updatedConversation),
-  //                 });
-  //                 console.log("📡 WebSocket: Published Participant Update:", updatedConversation);
-  //             }
-  //         }
-  //         onClose();
-  //     } catch (error) {
-  //         console.error("❌ Error adding participants:", error);
-  //     }
-  // };
 
   // const handleAddParticipants = async () => {
   //     try {

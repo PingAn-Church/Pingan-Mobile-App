@@ -79,26 +79,6 @@ export default function ProfilePage() {
   //       setProfileImage(iconUrl);
 
   //       setUserDetails([
-  //         {
-  //           key: "1",
-  //           icon: "person-outline",
-  //           label: "name",
-  //           value: data.firstName + " " + data.lastName,
-  //         },
-  //         {
-  //           key: "2",
-  //           icon: "mail-outline",
-  //           label: "email",
-  //           value: data.email,
-  //         },
-  //       ]);
-  //     } catch (error) {
-  //       console.error("Error fetching user data:", error);
-  //     }
-  //   };
-  //   fetchUserData();
-  //   console.log("profile image: ", profileImage);
-  // }, [user.id]);
 
   useFocusEffect(
     useCallback(() => {

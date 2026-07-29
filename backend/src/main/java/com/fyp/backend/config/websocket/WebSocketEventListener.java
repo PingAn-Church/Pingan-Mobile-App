@@ -25,26 +25,6 @@ public class WebSocketEventListener {
     @Autowired private UserRepository userRepository;
 
 //    /**
-//     * Handle WebSocket connection: mark user as "online" for that specific device,
-//     * and broadcast if it's their first device online.
-//     */
-//    @EventListener
-//    public void handleWebSocketConnectListener(SessionConnectEvent event) {
-//        StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
-//        String email = (String) headerAccessor.getSessionAttributes().get("userEmail");
-//        String deviceId = (String) headerAccessor.getSessionAttributes().get("deviceId");
-//
-//        if (email != null && deviceId != null) {
-//            redisService.setUserOnline(email, deviceId);
-//            System.out.println("✅ User online: " + email + " (Device: " + deviceId + ")");
-//
-//            // Check if the user had any devices online before
-//            if (!redisService.isUserOnlineAnywhere(email)) {
-//                // If this is the first device, broadcast the user's status as online
-//                broadcastUserStatus(email, "online");
-//            }
-//        }
-//    }
 
     /**
      * Handle WebSocket connection: mark user as "online" for that specific device,
