@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import i18n from "../../../i18n";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -221,6 +222,20 @@ export default function ImageViewer({ visible, uri, actions = [], onClose }) {
           </View>
         )}
 
+        {/* An explicit way out. Tapping the backdrop also closes, but that is not
+            discoverable, and once zoomed in a single finger pans instead — so
+            without this there is no obvious exit from a zoomed photo. */}
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={close}
+          accessibilityRole="button"
+          accessibilityLabel={i18n.t("close")}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+
         {zoomed && (
           <TouchableOpacity style={styles.resetHint} onPress={springHome} activeOpacity={0.8}>
             <Ionicons name="contract-outline" size={16} color="#FFFFFF" />
@@ -270,6 +285,17 @@ const styles = StyleSheet.create({
   },
   actionTextDanger: {
     color: "#FF6B6B",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 48,
+    left: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
   },
   resetHint: {
     position: "absolute",

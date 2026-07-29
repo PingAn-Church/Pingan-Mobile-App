@@ -280,7 +280,13 @@ const fitImageWithinBubble = (naturalWidth, naturalHeight) => {
 // the network (the "flashing" in conversation history). At module scope the type is
 // stable, so loaded images survive the chat's frequent re-renders. React.memo skips
 // re-rendering rows whose props are unchanged.
-const ChatImage = React.memo(function ChatImage({ message, isMe, resolveUri, onPress }) {
+const ChatImage = React.memo(function ChatImage({
+  message,
+  isMe,
+  resolveUri,
+  onPress,
+  onLongPress,
+}) {
   // Source priority: the local file (sender's own freshly-sent image — instant and
   // survives the optimistic -> persisted swap), then the on-device media cache, then
   // the remote presigned URL. peekCachedMedia seeds the first render synchronously so
@@ -333,7 +339,15 @@ const ChatImage = React.memo(function ChatImage({ message, isMe, resolveUri, onP
   }
 
   return (
-    <TouchableOpacity activeOpacity={0.92} onPress={() => onPress(message, uri)}>
+    // The long press lives here rather than on the surrounding bubble: this
+    // Touchable claims the touch first, so a handler on the parent would never
+    // fire for a press that lands on the photo.
+    <TouchableOpacity
+      activeOpacity={0.92}
+      onPress={() => onPress(message, uri)}
+      onLongPress={onLongPress ? (event) => onLongPress(message, event) : undefined}
+      delayLongPress={300}
+    >
       <Image
         source={{ uri }}
         style={[
@@ -1647,7 +1661,6 @@ export default function ChatPage({ route }) {
     if (!target) return [];
 
     const isOwn = target.senderId === currentUser?.id;
-    const isReal = !target.pending && !target.failed && !isLocalOnlyMessage(target);
     const items = [];
 
     items.push({
@@ -1706,18 +1719,9 @@ export default function ChatPage({ route }) {
       });
     }
 
-    if (!isOwn && isReal) {
-      items.push({
-        key: "report",
-        icon: "flag-outline",
-        label: i18n.t("report"),
-        destructive: true,
-        onPress: () => {
-          closeImageViewer();
-          submitReport(target);
-        },
-      });
-    }
+    // Report is deliberately absent: it fires immediately with no confirmation,
+    // and a mis-tap in a full-screen view is far too easy. It stays on the
+    // long-press menu, which takes a deliberate gesture to reach.
 
     return items;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2168,8 +2172,11 @@ export default function ChatPage({ route }) {
 
           return (
             <TouchableOpacity
+              // Images handle their own long press inside <ChatImage>, but the
+              // bubble has padding around the photo — catching it here too means a
+              // press on the margin still opens the menu.
               onLongPress={
-                Platform.OS === "web" || isImage || isShadowHidden
+                Platform.OS === "web" || isShadowHidden
                   ? undefined
                   : (event) => openContextMenu(item, event)
               }
@@ -2202,6 +2209,9 @@ export default function ChatPage({ route }) {
                   isMe={isMe}
                   resolveUri={resolveImageUrl}
                   onPress={openImageViewer}
+                  onLongPress={
+                    Platform.OS === "web" || isShadowHidden ? undefined : openContextMenu
+                  }
                 />
               ) : isVoice ? (
                 (() => {
