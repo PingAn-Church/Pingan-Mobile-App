@@ -11,6 +11,12 @@ const PAGE_SIZE = 20;
  * - Results are paginated; call `loadMore()` (e.g. from a list's onEndReached)
  *   to append the next page — no manual button needed.
  * - `excludeId` filters a user out of results (typically the current user).
+ *
+ * Unverified accounts are dropped: chat is for admin-verified users only. The
+ * search endpoint filters them server-side too, but this keeps the pickers
+ * correct against a server that predates that filter. Only an explicit `false`
+ * hides a row, so a payload without the flag still lists everyone rather than
+ * showing an empty picker.
  */
 export default function useUserSearch({ excludeId } = {}) {
   const [query, setQuery] = useState("");
@@ -33,7 +39,9 @@ export default function useUserSearch({ excludeId } = {}) {
         const res = await searchUsers(term, pageToLoad, PAGE_SIZE);
         if (requestId !== requestIdRef.current) return; // superseded by a newer request
         const list = (res?.data || []).filter(
-          (u) => excludeId == null || String(u.id) !== String(excludeId)
+          (u) =>
+            u?.verifiedUser !== false &&
+            (excludeId == null || String(u.id) !== String(excludeId))
         );
         setResults((prev) => (append ? [...prev, ...list] : list));
         setHasMore(Boolean(res?.pagination?.hasMore));

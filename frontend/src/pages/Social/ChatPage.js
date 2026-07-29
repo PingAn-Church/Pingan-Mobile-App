@@ -1856,8 +1856,14 @@ export default function ChatPage({ route }) {
           profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
         }))
       );
+      // Same rule as useUserSearch: chat is verified-only, and an explicit false
+      // is what hides a row so an older server's payload still lists everyone.
       setNewChatUsers(
-        resolvedUsers.filter((u) => String(u?.id) !== String(currentUser?.id))
+        resolvedUsers.filter(
+          (u) =>
+            u?.verifiedUser !== false &&
+            String(u?.id) !== String(currentUser?.id)
+        )
       );
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("cantFetchUsers"), [{ text: i18n.t("ok") }]);

@@ -58,6 +58,27 @@ public class ConversationService {
         return new Timestamp(System.currentTimeMillis());
     }
 
+    /**
+     * Resolves a user who is about to be put into a conversation, refusing anyone
+     * an admin has not verified.
+     *
+     * Chat is verified-only: the pickers already hide unverified accounts
+     * (UserController#searchUsers) and the Social tab is gated on the same flag,
+     * but both are presentation. A stale client, a cached list or a hand-made
+     * request can still name a user by id, so every path that adds someone to a
+     * conversation — private, group, or a later invite — resolves them here.
+     *
+     * Inactive and deleted accounts are refused for the same reason.
+     */
+    private User requireChatEligible(Long userId, String notFoundMessage) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException(notFoundMessage));
+        if (!user.isVerifiedUser() || !user.isActive() || user.isDeletedAccount()) {
+            throw new AccessDeniedException("Only admin-verified users can take part in chats.");
+        }
+        return user;
+    }
+
     public Long getUserIdByEmail(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
@@ -202,8 +223,7 @@ public class ConversationService {
     public ConversationDto createGroupConversation(ConversationDto conversationDto, Long creatorId) {
         System.out.println("🚀 [GroupCreate] Request received for group: " + conversationDto.getGroupName());
 
-        User creator = userRepository.findById(creatorId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User creator = requireChatEligible(creatorId, "User not found");
 
         GroupConversation groupConversation = new GroupConversation();
         groupConversation.setGroupName(conversationDto.getGroupName());
@@ -214,9 +234,7 @@ public class ConversationService {
 
         if (conversationDto.getParticipants() != null) {
             for (Long userId : conversationDto.getParticipants()) {
-                User user = userRepository.findById(userId)
-                        .orElseThrow(() -> new IllegalArgumentException("User not found"));
-                participants.add(user);
+                participants.add(requireChatEligible(userId, "User not found"));
             }
         }
 
@@ -263,8 +281,7 @@ public class ConversationService {
     @Transactional
     public ConversationDto createPrivateConversation(ConversationDto conversationDto, Long creatorId) {
         // Validate creator
-        User creator = userRepository.findById(creatorId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User creator = requireChatEligible(creatorId, "User not found");
 
         // Check that only one other participant exists for a private conversation
         if (conversationDto.getParticipants() == null || conversationDto.getParticipants().size() != 1) {
@@ -272,8 +289,7 @@ public class ConversationService {
         }
 
         Long otherParticipantId = conversationDto.getParticipants().get(0);
-        User otherUser = userRepository.findById(otherParticipantId)
-                .orElseThrow(() -> new IllegalArgumentException("Other participant not found"));
+        User otherUser = requireChatEligible(otherParticipantId, "Other participant not found");
 
         // Create a private conversation
         PrivateConversation privateConversation = new PrivateConversation();
@@ -310,10 +326,8 @@ public class ConversationService {
         GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
 
-        User userToAdd = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        User currentUser = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Current user not found"));
+        User userToAdd = requireChatEligible(userId, "User not found");
+        User currentUser = requireChatEligible(currentUserId, "Current user not found");
 
         if (!groupConversation.getAdmins().contains(currentUser)) {
             throw new AccessDeniedException("Only admins can add participants.");
