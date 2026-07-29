@@ -65,6 +65,7 @@ import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { setActiveConversation, clearActiveConversation } from "../../utils/activeConversation";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import VoicePlayer from "../../components/Chat/VoicePlayer";
+import ImageViewer from "../../components/Chat/ImageViewer";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
@@ -250,6 +251,29 @@ const getConversationPreview = (conversation, currentUserId) => {
 
 const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
 
+// Bounds a chat photo is drawn inside. Wide enough to read, short enough that one
+// tall screenshot doesn't push the rest of the conversation off screen.
+const IMAGE_BUBBLE_MAX_WIDTH = 240;
+const IMAGE_BUBBLE_MAX_HEIGHT = 320;
+
+/**
+ * Largest box with the photo's own proportions that fits the bounds above, so
+ * nothing is cropped. Replaces the fixed square, which cut the sides off
+ * panoramas and the top and bottom off tall shots.
+ */
+const fitImageWithinBubble = (naturalWidth, naturalHeight) => {
+  const ratio = naturalWidth / naturalHeight;
+  let width = IMAGE_BUBBLE_MAX_WIDTH;
+  let height = width / ratio;
+
+  if (height > IMAGE_BUBBLE_MAX_HEIGHT) {
+    height = IMAGE_BUBBLE_MAX_HEIGHT;
+    width = height * ratio;
+  }
+
+  return { width: Math.round(width), height: Math.round(height) };
+};
+
 // Defined at module scope (NOT inside ChatPage) on purpose: a component declared
 // inside another component is a brand-new type on every parent render, so React
 // unmounts and remounts it each time — which makes every chat <Image> reload from
@@ -264,6 +288,7 @@ const ChatImage = React.memo(function ChatImage({ message, isMe, resolveUri, onP
   const [uri, setUri] = useState(
     () => message.localPreviewUri || peekCachedMedia(message.content) || null
   );
+  const [displaySize, setDisplaySize] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -284,15 +309,38 @@ const ChatImage = React.memo(function ChatImage({ message, isMe, resolveUri, onP
     };
   }, [message.content, message.localPreviewUri, resolveUri]);
 
+  // Sized from the photo's own proportions rather than a fixed square, so a tall
+  // or panoramic shot is shown whole instead of centre-cropped. Until getSize
+  // answers, styles.chatImage's square stands in.
+  useEffect(() => {
+    if (!uri) return undefined;
+    let active = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (active && width > 0 && height > 0) setDisplaySize(fitImageWithinBubble(width, height));
+      },
+      // Unreadable dimensions just keep the fallback box.
+      () => {}
+    );
+    return () => {
+      active = false;
+    };
+  }, [uri]);
+
   if (!uri) {
     return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
   }
 
   return (
-    <TouchableOpacity activeOpacity={0.92} onPress={(event) => onPress(message, event)}>
+    <TouchableOpacity activeOpacity={0.92} onPress={() => onPress(message, uri)}>
       <Image
         source={{ uri }}
-        style={[styles.chatImage, isMe ? styles.chatImageSent : styles.chatImageReceived]}
+        style={[
+          styles.chatImage,
+          displaySize,
+          isMe ? styles.chatImageSent : styles.chatImageReceived,
+        ]}
       />
       {message.pending ? (
         <View style={styles.imageUploadOverlay}>
@@ -392,6 +440,10 @@ export default function ChatPage({ route }) {
     message: null,
   });
   const [contextMenuSize, setContextMenuSize] = useState({ width: 0, height: 0 });
+  // Tapping a photo opens it full screen. The resolved uri is carried alongside
+  // the message because ChatImage may be showing a local or cached file rather
+  // than message.content, and the viewer should show exactly what the bubble did.
+  const [imageViewer, setImageViewer] = useState({ visible: false, message: null, uri: null });
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const webDesktopSidebarWidth = windowWidth > 1600 ? 600 : windowWidth > 1400 ? 400 : 300;
@@ -798,6 +850,49 @@ export default function ChatPage({ route }) {
   const closeContextMenu = () => {
     setContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   };
+
+  const openImageViewer = useCallback((message, resolvedUri) => {
+    if (!resolvedUri) return;
+    setImageViewer({ visible: true, message, uri: resolvedUri });
+  }, []);
+
+  const closeImageViewer = useCallback(() => {
+    setImageViewer({ visible: false, message: null, uri: null });
+  }, []);
+
+  // Shared by the context menu and the full-screen photo view so the two cannot
+  // drift — reporting also has to shadow-hide the message locally, which is more
+  // than a single service call.
+  const submitReport = useCallback(
+    async (selected) => {
+      if (!selected?.messageId) return;
+      try {
+        await reportMessage(selected.messageId);
+        // Shadow-hide immediately for the reporter; other viewers pick the flag
+        // up from the server on their next history fetch.
+        setConversations((prev) =>
+          prev.map((conv) =>
+            conv.conversationId === conversationId
+              ? {
+                  ...conv,
+                  chatHistory: (conv.chatHistory || []).map((msg) =>
+                    msg.messageId === selected.messageId ? { ...msg, reported: true } : msg
+                  ),
+                }
+              : conv
+          )
+        );
+        showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
+      } catch (error) {
+        if (error?.response?.status === 409) {
+          showAlert(i18n.t("error"), i18n.t("alreadyReported"));
+        } else {
+          showAlert(i18n.t("error"), i18n.t("reportFailed"));
+        }
+      }
+    },
+    [conversationId, setConversations]
+  );
 
   const openContextMenu = useCallback(
     (message, event) => {
@@ -1545,6 +1640,89 @@ export default function ChatPage({ route }) {
     !contextMessage.failed &&
     !isLocalOnlyMessage(contextMessage);
 
+  // Actions offered along the bottom of the full-screen photo. Same operations the
+  // context menu exposes for an image, minus edit and translate, which are text-only.
+  const imageViewerActions = useMemo(() => {
+    const target = imageViewer.message;
+    if (!target) return [];
+
+    const isOwn = target.senderId === currentUser?.id;
+    const isReal = !target.pending && !target.failed && !isLocalOnlyMessage(target);
+    const items = [];
+
+    items.push({
+      key: "copy",
+      icon: "copy-outline",
+      label: i18n.t("copy"),
+      onPress: async () => {
+        closeImageViewer();
+        try {
+          await copyImageMessage(target);
+          showAlert(i18n.t("success"), i18n.t("copied"));
+        } catch {
+          showAlert(i18n.t("error"), i18n.t("copyFailed"));
+        }
+      },
+    });
+
+    items.push({
+      key: "download",
+      icon: "download-outline",
+      label: i18n.t("download"),
+      onPress: async () => {
+        closeImageViewer();
+        try {
+          await downloadImageMessage(target);
+          showAlert(i18n.t("success"), i18n.t("saveImageSuccess"));
+        } catch (error) {
+          showAlert(
+            i18n.t("error"),
+            error?.message === "Media library permission denied"
+              ? i18n.t("needPhotoAccess")
+              : i18n.t("saveImageFailed")
+          );
+        }
+      },
+    });
+
+    if (isOwn && !target.pending) {
+      items.push({
+        key: "delete",
+        icon: "trash-outline",
+        label: i18n.t("delete"),
+        destructive: true,
+        onPress: async () => {
+          closeImageViewer();
+          const confirmed = await confirmAction({
+            title: i18n.t("delete"),
+            message: i18n.t("areYouSure"),
+            confirmText: i18n.t("delete"),
+            cancelText: i18n.t("cancel"),
+            destructive: true,
+          });
+          if (!confirmed) return;
+          await handleDeleteMessage(target);
+        },
+      });
+    }
+
+    if (!isOwn && isReal) {
+      items.push({
+        key: "report",
+        icon: "flag-outline",
+        label: i18n.t("report"),
+        destructive: true,
+        onPress: () => {
+          closeImageViewer();
+          submitReport(target);
+        },
+      });
+    }
+
+    return items;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageViewer.message, currentUser?.id, language]);
+
   const activeConversationIcon =
     conversationIconUrls[String(conversationId)] || "";
 
@@ -2023,7 +2201,7 @@ export default function ChatPage({ route }) {
                   message={item}
                   isMe={isMe}
                   resolveUri={resolveImageUrl}
-                  onPress={openContextMenu}
+                  onPress={openImageViewer}
                 />
               ) : isVoice ? (
                 (() => {
@@ -2229,36 +2407,10 @@ export default function ChatPage({ route }) {
             {contextCanReport && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
-                onPress={async () => {
+                onPress={() => {
                   const selected = contextMenu.message;
                   closeContextMenu();
-
-                  try {
-                    await reportMessage(selected.messageId);
-                    // Shadow-hide immediately for the reporter; other viewers pick
-                    // the flag up from the server on their next history fetch.
-                    setConversations((prev) =>
-                      prev.map((conv) =>
-                        conv.conversationId === conversationId
-                          ? {
-                              ...conv,
-                              chatHistory: (conv.chatHistory || []).map((msg) =>
-                                msg.messageId === selected.messageId
-                                  ? { ...msg, reported: true }
-                                  : msg
-                              ),
-                            }
-                          : conv
-                      )
-                    );
-                    showAlert(i18n.t("success"), i18n.t("reportSuccessMessage"));
-                  } catch (error) {
-                    if (error?.response?.status === 409) {
-                      showAlert(i18n.t("error"), i18n.t("alreadyReported"));
-                    } else {
-                      showAlert(i18n.t("error"), i18n.t("reportFailed"));
-                    }
-                  }
+                  submitReport(selected);
                 }}
               >
                 <Text
@@ -2274,6 +2426,13 @@ export default function ChatPage({ route }) {
           </View>
         </View>
       </Modal>
+
+      <ImageViewer
+        visible={imageViewer.visible}
+        uri={imageViewer.uri}
+        actions={imageViewerActions}
+        onClose={closeImageViewer}
+      />
 
       {Platform.OS === "android" ? (
         <KeyboardStickyView>{composerContent}</KeyboardStickyView>
