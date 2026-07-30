@@ -47,10 +47,12 @@ export const ChatProvider = ({ children }) => {
   const sentDeliveryReceiptsRef = useRef(new Set());
 
   useEffect(() => {
-    if (userReady && user?.id) {
+    if (userReady && user?.id && user?.verifiedUser) {
       fetchInitialData();
+    } else if (userReady) {
+      resetChat();
     }
-  }, [userReady]);
+  }, [userReady, user?.id, user?.verifiedUser]);
 
   useEffect(() => {
     if (!user) {
@@ -65,7 +67,7 @@ export const ChatProvider = ({ children }) => {
   
 
   const fetchConversations = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !user?.verifiedUser) return;
     try {
       setLoading(true);
       const fetched = await getConversations(user.id);

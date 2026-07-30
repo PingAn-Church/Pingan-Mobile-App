@@ -147,7 +147,9 @@ public class ChatController {
                 return ResponseEntity.status(403).body("You are not part of this conversation.");
             }
 
-            // ✅ Send message via ChatService
+            // Identity is server-owned. Never trust a sender id supplied by the client.
+            messageDto.setSenderId(loggedInUserId);
+            messageDto.setConversationType(conversationType);
             MessageDto sentMessage = chatService.sendMessageAndBroadcast(messageDto, conversationType);
             return ResponseEntity.ok(sentMessage);
 

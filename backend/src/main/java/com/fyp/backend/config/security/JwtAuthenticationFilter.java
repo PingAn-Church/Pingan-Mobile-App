@@ -37,6 +37,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        String logoutPath = (contextPath == null ? "" : contextPath) + "/auth/logout";
+        return logoutPath.equals(requestUri);
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
@@ -55,8 +63,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String email = jwtUtil.extractEmail(jwt);
 
-        if (email != null) {
-            authenticateUser(email, jwt, request, response);
+        if (email == null) {
+            LOGGER.warn("❌ Invalid or expired JWT token on request to {}", request.getRequestURI());
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
+            return;
+        }
+        if (!authenticateUser(email, jwt, request, response)) {
+            return;
         }
 
         chain.doFilter(request, response);
@@ -76,7 +89,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /**
      * Authenticates the user based on the JWT token.
      */
-    private void authenticateUser(String email, String jwt, HttpServletRequest request, HttpServletResponse response)
+    private boolean authenticateUser(String email, String jwt, HttpServletRequest request, HttpServletResponse response)
             throws IOException {
 
         Optional<User> userOptional = userRepository.findByEmail(email);
@@ -84,27 +97,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (userOptional.isEmpty()) {
             LOGGER.warn("❌ User not found: {}", email);
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User not found");
-            return;
+            return false;
         }
 
         User user = userOptional.get();
 
-        if (jwtUtil.isTokenExpired(jwt)) {
-            LOGGER.warn("❌ Access token expired for user: {}", email);
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Access token expired");
-            return;
+        if (!user.isActive() || user.isDeletedAccount()) {
+            LOGGER.warn("❌ Disabled account attempted to use an access token: {}", email);
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Account is disabled");
+            return false;
         }
 
         if (!jwtUtil.validateToken(jwt, user.getEmail())) {
             LOGGER.warn("❌ Invalid JWT token for user: {}", email);
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
-            return;
+            return false;
         }
 
         // ✅ Skip re-authentication if user is already set in SecurityContext
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
             setAuthentication(user, request);
         }
+        return true;
     }
 
     /**

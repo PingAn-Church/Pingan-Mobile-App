@@ -38,6 +38,10 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
     private static final Pattern CONVERSATION_TOPIC = Pattern.compile("^/topic/conversation-(\\d+)$");
     private static final String STATUS_BROADCAST = "/user/queue/status";
     private static final String MODERATION_TOPIC = "/topic/content-moderation";
+    private static final java.util.Set<String> ALLOWED_SEND_DESTINATIONS = java.util.Set.of(
+            "/app/heartbeat",
+            "/app/updateDeliveryStatus",
+            "/app/user-ready");
 
     private final UserRepository userRepository;
     private final GroupConversationRepository groupConversationRepository;
@@ -54,6 +58,15 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
+        if (StompCommand.SEND.equals(accessor.getCommand())) {
+            String destination = accessor.getDestination();
+            String email = sessionAttribute(accessor, "userEmail");
+            if (email != null && ALLOWED_SEND_DESTINATIONS.contains(destination)) {
+                return message;
+            }
+            LOGGER.warn("⛔ Blocked WebSocket send to {} by {}", destination, email);
+            return null;
+        }
         if (!StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
             return message;
         }

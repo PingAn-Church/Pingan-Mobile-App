@@ -1,6 +1,5 @@
 package com.fyp.backend.controller;
 
-import com.fyp.backend.dto.ConversationDto;
 import com.fyp.backend.dto.DeliveryStatusUpdateDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.mq.ManualMessageConsumer;
@@ -11,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
 import java.util.List;
@@ -42,31 +42,40 @@ public class WebSocketController {
     }
 
     @MessageMapping("/updateDeliveryStatus")
-    public void updateDeliveryStatus(@Payload DeliveryStatusUpdateDto statusUpdateDto) {
+    public void updateDeliveryStatus(@Payload DeliveryStatusUpdateDto statusUpdateDto,
+                                     StompHeaderAccessor accessor) {
         if (statusUpdateDto.getMessageId() == null || statusUpdateDto.getConversationId() == null) {
             LOGGER.warn("⚠️ Invalid delivery status update: Missing messageId or conversationId");
             return;
         }
 
-        // One malformed key must not abort the remaining updates.
-        for (Map.Entry<String, String> entry : statusUpdateDto.getDeliveryStatus().entrySet()) {
-            final Long recipientId;
-            try {
-                recipientId = Long.parseLong(entry.getKey());
-            } catch (NumberFormatException e) {
-                LOGGER.warn("⚠️ Skipping delivery status with non-numeric recipient id: {}", entry.getKey());
-                continue;
-            }
-            String status = entry.getValue();
-
-            chatService.updateMessageStatus(statusUpdateDto.getMessageId(), recipientId, status);
+        Long currentUserId = sessionUserId(accessor);
+        if (currentUserId == null || statusUpdateDto.getDeliveryStatus() == null) {
+            LOGGER.warn("⚠️ Delivery status update has no authenticated session user");
+            return;
+        }
+        String status = statusUpdateDto.getDeliveryStatus().get(String.valueOf(currentUserId));
+        if (!"READ".equals(status) && !"DELIVERED".equals(status)) {
+            LOGGER.warn("⚠️ Rejected delivery status {} for user {}", status, currentUserId);
+            return;
         }
 
-        // Fetch all participants using conversationType
+        final String conversationType;
+        try {
+            conversationType = chatService.updateMessageStatusAuthorized(
+                    statusUpdateDto.getMessageId(),
+                    statusUpdateDto.getConversationId(),
+                    currentUserId,
+                    status);
+        } catch (RuntimeException e) {
+            LOGGER.warn("⚠️ Rejected delivery update from user {}: {}", currentUserId, e.getMessage());
+            return;
+        }
+
+        statusUpdateDto.setConversationType(conversationType);
+        statusUpdateDto.setDeliveryStatus(Map.of(String.valueOf(currentUserId), status));
         List<User> participants = chatService.getConversationParticipants(
-                statusUpdateDto.getConversationId(),
-                statusUpdateDto.getConversationType()
-        );
+                statusUpdateDto.getConversationId(), conversationType);
 
         for (User participant : participants) {
             messagingTemplate.convertAndSendToUser(
@@ -77,32 +86,9 @@ public class WebSocketController {
         }
     }
 
-    @MessageMapping("/participantAdded")
-    public void notifyParticipantAdded(ConversationDto updatedConversation) {
-        if (updatedConversation == null || updatedConversation.getConversationId() == null) {
-            LOGGER.error("❌ Invalid participant update received, missing conversationId.");
-            return;
-        }
-
-        LOGGER.info("🔔 WebSocket: Notifying all members about participant addition in {}", updatedConversation.getConversationId());
-
-        // Notify all existing participants about the participant update
-        for (Long participantId : updatedConversation.getParticipants()) {
-            messagingTemplate.convertAndSendToUser(
-                    participantId.toString(), "/queue/participant-updates", updatedConversation
-            );
-        }
-
-        // Notify the newly added participant separately about their new conversation
-        Long newlyAddedParticipantId = updatedConversation.getParticipants().get(updatedConversation.getParticipants().size() - 1);
-        messagingTemplate.convertAndSendToUser(
-                newlyAddedParticipantId.toString(), "/queue/conversations", updatedConversation
-        );
-    }
-
     @MessageMapping("/user-ready")
-    public void onUserReady(@Payload Map<String, String> payload) {
-        String email = payload.get("email");
+    public void onUserReady(StompHeaderAccessor accessor) {
+        String email = sessionEmail(accessor);
         if (email == null || email.isBlank()) {
             LOGGER.warn("❌ Received empty email in /user-ready");
             return;
@@ -113,5 +99,17 @@ public class WebSocketController {
         } catch (Exception e) {
             LOGGER.error("❌ Failed to drain message queue for {}: {}", email, e.getMessage());
         }
+    }
+
+    private Long sessionUserId(StompHeaderAccessor accessor) {
+        Object value = accessor.getSessionAttributes() == null
+                ? null : accessor.getSessionAttributes().get("userId");
+        return value instanceof Long ? (Long) value : null;
+    }
+
+    private String sessionEmail(StompHeaderAccessor accessor) {
+        Object value = accessor.getSessionAttributes() == null
+                ? null : accessor.getSessionAttributes().get("userEmail");
+        return value instanceof String ? (String) value : null;
     }
 }

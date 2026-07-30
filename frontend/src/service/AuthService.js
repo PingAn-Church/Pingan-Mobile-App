@@ -104,9 +104,6 @@ export const loginUser = async (loginDetails) => {
 
 
 export const logoutUser = async () => {
-  // Read the access token directly: going through getAuthToken() here would
-  // try to refresh, and a rejected refresh calls logoutUser again (recursion).
-  const authToken = await AsyncStorage.getItem("accessToken");
   const refreshToken = await AsyncStorage.getItem("refreshToken"); // Get the stored refresh token
 
   if (!refreshToken) {
@@ -129,7 +126,6 @@ export const logoutUser = async () => {
       { refreshToken },  // Request body contains the refreshToken
       {
         params: { deviceId },  // properly-encoded query parameter
-        headers: { Authorization: `Bearer ${authToken}` },  // Include the authorization header
       }
     );
 

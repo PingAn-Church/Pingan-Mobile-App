@@ -3,17 +3,22 @@ package com.fyp.backend.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -35,6 +40,8 @@ import com.fyp.backend.dto.ReportResolutionDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.AppReleaseService;
+import com.fyp.backend.service.ConversationService;
+import com.fyp.backend.service.MediaReferenceService;
 import com.fyp.backend.service.MediaTokenService;
 import com.fyp.backend.service.MessageReportService;
 import com.fyp.backend.service.OSSService;
@@ -68,6 +75,15 @@ class WebSecurityRulesTest {
     @MockBean private UserAccountDeletionService userAccountDeletionService;
     @MockBean private MessageReportService messageReportService;
     @MockBean private UserBlockService userBlockService;
+    @MockBean private ConversationService conversationService;
+    @MockBean private MediaReferenceService mediaReferenceService;
+
+    @BeforeEach
+    void authenticatedUser() {
+        when(userRepository.findByEmail("user"))
+                .thenReturn(Optional.of(userWithEmail(7L, "user")));
+        when(conversationService.isUserPartOfConversation(42L, 7L)).thenReturn(true);
+    }
 
     private User userWithEmail(long id, String email) {
         User u = new User();
@@ -187,9 +203,42 @@ class WebSecurityRulesTest {
     }
 
     @Test
+    @WithMockUser(roles = "ADMIN")
+    void ossDeleteRejectsReferencedMedia() throws Exception {
+        when(mediaReferenceService.isReferenced("profile", "x.jpg")).thenReturn(true);
+
+        mockMvc.perform(delete("/oss/delete")
+                        .param("fileName", "x.jpg")
+                        .param("fileType", "profile"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void ossListIsBlockedForAnonymous() throws Exception {
         mockMvc.perform(get("/oss/list-pictures").param("fileType", "event"))
                 .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser
+    void eventPictureListIsAllowedForAuthenticatedUser() throws Exception {
+        Map<String, Object> page = new java.util.HashMap<>();
+        page.put("data", List.of());
+        page.put("pagination", Map.of("hasMore", false, "nextMarker", ""));
+        when(ossService.listObjectsPage("event", 20, null)).thenReturn(page);
+
+        mockMvc.perform(get("/oss/list-pictures").param("fileType", "event"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void anonymousCleanupRejectsMalformedFileBeforeReferenceLookup() throws Exception {
+        mockMvc.perform(delete("/oss/anonymous-upload")
+                        .param("fileName", "anon_a")
+                        .param("fileType", "profile"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(mediaReferenceService);
     }
 
     // ---- minting temporary download URLs requires a login -------------------
@@ -283,6 +332,19 @@ class WebSecurityRulesTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contentType\": \"THREAD\", \"contentId\": 9}"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser
+    void profileEmailChangeReturnsBadRequest() throws Exception {
+        doThrow(new IllegalArgumentException("Email changes require a dedicated verification flow."))
+                .when(userService).updateUserProfile(anyString(), any());
+
+        mockMvc.perform(put("/api/users/profile")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"new@example.com\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

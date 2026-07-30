@@ -1,5 +1,7 @@
 package com.fyp.backend.config.websocket;
 
+import com.fyp.backend.model.User;
+import com.fyp.backend.repository.UserRepository;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +24,9 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
     @Autowired
     private RedisService redisService;
 
+    @Autowired
+    private UserRepository userRepository;
+
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler, Map<String, Object> attributes) {
         URI uri = request.getURI();
@@ -37,8 +42,14 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
 
             if (token != null && deviceId != null) {
                 String email = jwtUtil.extractEmail(token);
-                if (email != null && jwtUtil.validateToken(token, email)) {
+                User user = email == null ? null : userRepository.findByEmail(email).orElse(null);
+                if (user != null
+                        && user.isActive()
+                        && !user.isDeletedAccount()
+                        && user.isVerifiedUser()
+                        && jwtUtil.validateToken(token, user.getEmail())) {
                     attributes.put("userEmail", email);
+                    attributes.put("userId", user.getId());
                     attributes.put("deviceId", deviceId);
                     redisService.setUserOnline(email, deviceId);
                     return true;

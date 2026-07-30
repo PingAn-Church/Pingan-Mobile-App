@@ -55,6 +55,8 @@ public class SpringSecurityConfig {
                         // the controller rejects all other anonymous upload types.
                         .requestMatchers(HttpMethod.GET, "/oss/presigned-upload-url")
                         .permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/oss/anonymous-upload")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/oss/presigned-download-url",
                                 "/oss/conversations/presigned-download-url",
                                 "/oss/conversations/presigned-upload-url")
@@ -63,11 +65,6 @@ public class SpringSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/oss/list-pictures").authenticated()
                         .requestMatchers("/oss/**").authenticated()
                         .requestMatchers("/ws/**", "/auth/**")
-                        .permitAll()
-                        // Push-token registration happens at signup, before the user has a JWT;
-                        // the token is stored inactive. Everything else under push-notifications
-                        // requires auth + ownership (checked in the controller).
-                        .requestMatchers(HttpMethod.POST, "/api/push-notifications/register")
                         .permitAll()
                         // App update checks must work before login so unsupported builds can be blocked.
                         .requestMatchers(HttpMethod.GET, "/api/app-releases/**")

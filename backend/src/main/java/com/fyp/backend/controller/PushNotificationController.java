@@ -26,20 +26,6 @@ public class PushNotificationController {
         return authUserId == null || !authUserId.equals(userId);
     }
 
-    // Register a push token when user registers. Deliberately unauthenticated:
-    // it is called right after signup, before the user has a JWT. The token is
-    // stored INACTIVE and only activated on an authenticated login.
-    @PostMapping("/register")
-    public ResponseEntity<?> registerPushTokenForNewUser(
-            @RequestParam Long userId,
-            @RequestParam String token,
-            @RequestParam String deviceType,
-            @RequestParam String deviceId) {
-        String decodedToken = URLDecoder.decode(token, StandardCharsets.UTF_8);
-        pushNotificationService.registerPushTokenForNewUser(userId, decodedToken, deviceType, deviceId);
-        return ResponseEntity.ok("Push token registered successfully (inactive for new user)");
-    }
-
     // Handle push token registration on user login (activate token)
     @PostMapping("/login")
     public ResponseEntity<?> registerPushTokenForLogin(

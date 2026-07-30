@@ -16,6 +16,7 @@ import com.fyp.backend.dto.UserProfileDto;
 import com.fyp.backend.exception.ApiException;
 import com.fyp.backend.model.User;
 import com.fyp.backend.service.AuthService;
+import com.fyp.backend.service.PushNotificationService;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.util.JwtUtil;
 
@@ -29,13 +30,16 @@ public class AuthController {
     private final RedisService redisService;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
+    private final PushNotificationService pushNotificationService;
 
     @Autowired
-    public AuthController(AuthService authService, JwtUtil jwtUtil, RedisService redisService, RefreshTokenService refreshTokenService) {
+    public AuthController(AuthService authService, JwtUtil jwtUtil, RedisService redisService,
+            RefreshTokenService refreshTokenService, PushNotificationService pushNotificationService) {
         this.authService = authService;
         this.jwtUtil = jwtUtil;
         this.redisService = redisService;
         this.refreshTokenService = refreshTokenService;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @PostMapping("/login")
@@ -95,11 +99,13 @@ public class AuthController {
         String refreshToken = requestBody.get("refreshToken");
         String email = jwtUtil.extractEmail(refreshToken);
 
-        if (email == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid refresh token.");
+        if (email == null
+                || !refreshTokenService.validateRefreshToken(email, deviceId, refreshToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid refresh token.");
         }
 
         refreshTokenService.deleteRefreshToken(email, deviceId);
+        pushNotificationService.deactivatePushTokensForDevice(email, deviceId);
         redisService.setDeviceOffline(email, deviceId);
 
         return ResponseEntity.ok("Logged out from device.");

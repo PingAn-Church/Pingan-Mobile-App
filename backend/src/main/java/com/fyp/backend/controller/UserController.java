@@ -295,6 +295,8 @@ public class UserController {
         try {
             userService.updateUserProfile(authorizationHeader, userDto);
             return ResponseEntity.ok("Profile updated successfully!");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             return ResponseEntity.status(403).body(e.getMessage());
         }

@@ -26,24 +26,6 @@ export const registerPushTokenForLogin = async (token, deviceType, deviceId) => 
     }
   };
 
-// Send the push token to the backend for registration (inactive)
-export const registerPushTokenForRegister = async (token, userId, deviceType, deviceId) => {
-  try {
-    const encodedToken = encodeURIComponent(token); // Encode the token to handle special characters
-
-    const response = await axios.post(
-      apiUrl(`/api/push-notifications/register`),  // Endpoint for registration
-      null,
-      {
-        params: { token: encodedToken, userId: userId, deviceType, deviceId },
-      }
-    );
-    console.log("Push Token registered for registration:", response.data);
-  } catch (error) {
-    console.error("Failed to register push token for registration:", error);
-  }
-};
-
 // Deactivate the push token (set as inactive)
 export const deactivatePushToken = async (token) => {
   const authToken = await getAuthToken();  // Ensure the user is authenticated

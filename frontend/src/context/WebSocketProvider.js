@@ -10,6 +10,7 @@ const WebSocketProvider = ({ children }) => {
   const chat = useContext(ChatContext);
   const appState = useRef(AppState.currentState);
   const isConnectedRef = useRef(false);
+  const socketEligible = Boolean(userReady && user?.verifiedUser);
 
   const handleModerationEvent = (event) => {
     chat.handleModerationEvent(event);
@@ -34,7 +35,7 @@ const WebSocketProvider = ({ children }) => {
       appState.current = nextState;
 
       if (prevState.match(/inactive|background/) && nextState === "active") {
-        if (userReady && !isConnectedRef.current) {
+        if (socketEligible && !isConnectedRef.current) {
           await connectWebSocket(buildHandlers(), () => {
             chat.fetchInitialData();
             isConnectedRef.current = true;
@@ -50,11 +51,15 @@ const WebSocketProvider = ({ children }) => {
 
     const subscription = AppState.addEventListener("change", onAppStateChange);
     return () => subscription.remove();
-  }, [user, userReady]);
+  }, [socketEligible, user?.id]);
 
   // Initial connection once the user session is restored.
   useEffect(() => {
-    if (!userReady || !user) return;
+    if (!socketEligible) {
+      disconnectWebSocket();
+      isConnectedRef.current = false;
+      return;
+    }
 
     connectWebSocket(buildHandlers(), () => {
       chat.fetchInitialData();
@@ -65,7 +70,7 @@ const WebSocketProvider = ({ children }) => {
       disconnectWebSocket();
       isConnectedRef.current = false;
     };
-  }, [userReady]);
+  }, [socketEligible, user?.id]);
 
   return <>{children}</>;
 };

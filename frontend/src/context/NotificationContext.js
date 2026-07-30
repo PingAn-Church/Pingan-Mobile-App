@@ -8,7 +8,7 @@ useRef,
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { registerForPushNotificationsAsync } from "../utils/registerForPushNotificationsAsync";
-import { registerPushTokenForLogin, registerPushTokenForRegister, unregisterPushToken, deactivatePushToken } from "../service/PushNotificationService";
+import { registerPushTokenForLogin, unregisterPushToken, deactivatePushToken } from "../service/PushNotificationService";
 import { useNavigation } from "@react-navigation/native";
 import { UserContext } from "./UserContext";
 
@@ -111,21 +111,6 @@ export const NotificationProvider = ({ children }) => {
         }
     };
 
-    // Handle push token registration for registration (without authToken, inactive)
-    const handleRegisterPushToken = async (userId) => {
-        try {
-        const pushToken = await registerForPushNotificationsAsync();  // Get Expo push token
-        setExpoPushToken(pushToken);  // Set token in state
-        const deviceType = Platform.OS === "android" ? "android" : "ios"; // Dynamically determine device type
-        if (deviceId) {
-            await registerPushTokenForRegister(pushToken, userId, deviceType, deviceId);  // Register token with backend for registration
-        }
-        } catch (error) {
-        console.warn("⚠️ Push token registration failed (signup):", error?.message || error);
-        setError(error);
-        }
-    };
-
     const handleDeactivatePushToken = () => {
         if (expoPushToken) {
           deactivatePushToken(expoPushToken)  // Deactivate the token on backend
@@ -143,7 +128,7 @@ export const NotificationProvider = ({ children }) => {
       };
 
     return (
-        <NotificationContext.Provider value={{ expoPushToken, notification, error, handleLoginPushToken, handleRegisterPushToken, handleDeactivatePushToken,
+        <NotificationContext.Provider value={{ expoPushToken, notification, error, handleLoginPushToken, handleDeactivatePushToken,
             handleUnregisterPushToken, }}>
         {children}
         </NotificationContext.Provider>

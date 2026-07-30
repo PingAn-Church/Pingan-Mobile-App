@@ -14,6 +14,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.LinkedHashMap;
@@ -48,31 +49,6 @@ public class PushNotificationService {
     private RestTemplate restTemplate = new RestTemplate();
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    // Register a push token for a new user (inactive initially)
-    public PushToken registerPushTokenForNewUser(Long userId, String token, String deviceType, String deviceId) {
-        // Fetch the user based on userId
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // Check if the token already exists for this user and deviceId
-        Optional<PushToken> existingPushToken = pushTokenRepository.findByUserIdAndTokenAndDeviceId(userId, token, deviceId);
-
-        // If the token exists, just return it (inactive)
-        if (existingPushToken.isPresent()) {
-            return existingPushToken.get();  // No need to modify, as it’s inactive
-        }
-
-        // If the token doesn't exist, create a new PushToken and set it inactive
-        PushToken pushToken = new PushToken();
-        pushToken.setUser(user);
-        pushToken.setToken(token);
-        pushToken.setDeviceType(deviceType);
-        pushToken.setDeviceId(deviceId);  // Store the deviceId
-        pushToken.setActive(false);  // Inactive by default on registration
-
-        return pushTokenRepository.save(pushToken);
-    }
 
     // Register a push token for a user logging in (set it active if not already)
     public PushToken registerPushTokenForLogin(Long userId, String token, String deviceType, String deviceId) {
@@ -116,6 +92,11 @@ public class PushNotificationService {
 
         pushToken.setActive(false);
         return pushTokenRepository.save(pushToken);
+    }
+
+    @Transactional
+    public int deactivatePushTokensForDevice(String email, String deviceId) {
+        return pushTokenRepository.deactivateByUserEmailAndDeviceId(email, deviceId);
     }
 
     // Unregister a push token (e.g., app uninstalled)
