@@ -31,6 +31,9 @@ public class UserService {
     @Autowired
     private RedisService redisService;
 
+    @Autowired
+    private OssCleanupService ossCleanupService;
+
     /**
      * Retrieves the user profile of the currently authenticated user.
      * 
@@ -214,20 +217,26 @@ public class UserService {
         if (user.isDeletedAccount()) {
             throw new RuntimeException("Deleted accounts cannot be edited.");
         }
+        if (userDto.getEmail() != null && !user.getEmail().equalsIgnoreCase(userDto.getEmail().trim())) {
+            throw new IllegalArgumentException("Email changes require a dedicated verification flow.");
+        }
 
         // Update fields except password
         if (userDto.getFirstName() != null)
             user.setFirstName(userDto.getFirstName());
         if (userDto.getLastName() != null)
             user.setLastName(userDto.getLastName());
-        if (userDto.getEmail() != null)
-            user.setEmail(userDto.getEmail());
         if (userDto.getBirthday() != null)
             user.setBirthday(userDto.getBirthday());
+        String previousProfileImage = user.getProfileImage();
         if (userDto.getProfileImage() != null)
             user.setProfileImage(userDto.getProfileImage());
 
         userRepository.save(user);
+        if (userDto.getProfileImage() != null
+                && !java.util.Objects.equals(previousProfileImage, user.getProfileImage())) {
+            ossCleanupService.deleteAfterCommit(previousProfileImage);
+        }
     }
 
     /** Demoting the last remaining admin is refused so the system can't lock itself out. */

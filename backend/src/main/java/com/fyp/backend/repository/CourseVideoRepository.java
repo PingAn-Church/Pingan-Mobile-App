@@ -11,6 +11,7 @@ import com.fyp.backend.model.CourseVideo;
 
 @Repository
 public interface CourseVideoRepository extends JpaRepository<CourseVideo, Long> {
+    boolean existsByVideoUrlContainingOrThumbnailUrlContaining(String videoFragment, String thumbnailFragment);
     List<CourseVideo> findByCourseIdOrderByOrderIndexAsc(Long courseId);
 
     List<CourseVideo> findBySectionIdOrderByOrderIndexAsc(Long sectionId);

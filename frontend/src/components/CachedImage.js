@@ -34,9 +34,17 @@ const isManaged = (url) =>
  *
  * @param uri            stored object URL/path (the cache identity)
  * @param type           OSS file type for presigning ("profile" | "group" | "course" | ...)
+ * @param conversationId Required when resolving a group icon.
  * @param fallbackSource RN Image source shown when there's no resolved uri (e.g. a default avatar)
  */
-export default function CachedImage({ uri, type, fallbackSource = null, style, ...rest }) {
+export default function CachedImage({
+  uri,
+  type,
+  conversationId = undefined,
+  fallbackSource = null,
+  style,
+  ...rest
+}) {
   const managed = isManaged(uri);
   const [resolved, setResolved] = useState(() => ({
     key: uri || null,
@@ -67,20 +75,22 @@ export default function CachedImage({ uri, type, fallbackSource = null, style, .
     // presigned URL only if it couldn't be cached.
     setResolved({ key: uri, uri: null });
     (async () => {
-      const local = await getCachedMedia(uri, (u) => resolvePresignedAssetUrl(u, type));
+      const local = await getCachedMedia(uri, (u) =>
+        resolvePresignedAssetUrl(u, type, { conversationId })
+      );
       if (!active) return;
       if (local) {
         setResolved({ key: uri, uri: local });
         return;
       }
-      const remote = await resolvePresignedAssetUrl(uri, type);
+      const remote = await resolvePresignedAssetUrl(uri, type, { conversationId });
       if (active) setResolved({ key: uri, uri: remote || null });
     })();
 
     return () => {
       active = false;
     };
-  }, [uri, type, managed]);
+  }, [uri, type, conversationId, managed]);
 
   const currentKey = uri || null;
   const resolvedUri = resolved.key === currentKey ? resolved.uri : null;

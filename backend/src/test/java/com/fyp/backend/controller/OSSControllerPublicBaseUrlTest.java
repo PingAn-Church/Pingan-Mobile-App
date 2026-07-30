@@ -9,9 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -23,7 +25,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fyp.backend.config.security.JwtAuthenticationFilter;
 import com.fyp.backend.config.security.SpringSecurityConfig;
+import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.ConversationService;
+import com.fyp.backend.service.MediaReferenceService;
 import com.fyp.backend.service.MediaTokenService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.util.JwtUtil;
@@ -51,6 +56,17 @@ class OSSControllerPublicBaseUrlTest {
     @MockBean private OSSService ossService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private UserRepository userRepository;
+    @MockBean private ConversationService conversationService;
+    @MockBean private MediaReferenceService mediaReferenceService;
+
+    @BeforeEach
+    void authenticatedUser() {
+        User user = new User();
+        user.setId(7L);
+        user.setEmail("user");
+        user.setActive(true);
+        when(userRepository.findByEmail("user")).thenReturn(Optional.of(user));
+    }
 
     private void assertValidPublicGatewayUrl(String url, String expectedObjectKey) {
         Matcher matcher = PUBLIC_GATEWAY_URL.matcher(url);
@@ -76,7 +92,7 @@ class OSSControllerPublicBaseUrlTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "ADMIN")
     void listPicturesUsesConfiguredPublicBaseUrl() throws Exception {
         Map<String, Object> page = new LinkedHashMap<>();
         page.put("success", true);

@@ -26,17 +26,19 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
     private final RedisService redisService;
+    private final OssCleanupService ossCleanupService;
     // Serializes the pending sign-up blob stored in Redis until the code is confirmed.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
-            EmailService emailService, RedisService redisService) {
+            EmailService emailService, RedisService redisService, OssCleanupService ossCleanupService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.emailService = emailService;
         this.redisService = redisService;
+        this.ossCleanupService = ossCleanupService;
     }
 
     /**
@@ -74,7 +76,12 @@ public class AuthService {
             }
             throw new IllegalArgumentException("An account with this email already exists.");
         }
+        if (userDto.getProfileImage() != null && !userDto.getProfileImage().isBlank()
+                && !isAnonymousRegistrationMedia(userDto.getProfileImage())) {
+            throw new IllegalArgumentException("Invalid registration profile image.");
+        }
 
+        String previousProfileImage = pendingProfileImage(userDto.getEmail());
         PendingRegistration pending = new PendingRegistration();
         pending.firstName = userDto.getFirstName();
         pending.lastName = userDto.getLastName();
@@ -86,6 +93,13 @@ public class AuthService {
         try {
             // Overwrites any earlier pending record for this email (e.g. a retry).
             redisService.savePendingRegistration(userDto.getEmail(), objectMapper.writeValueAsString(pending));
+            redisService.markPendingRegistrationMedia(mediaFileName(pending.profileImage));
+            if (previousProfileImage != null
+                    && isAnonymousRegistrationMedia(previousProfileImage)
+                    && !java.util.Objects.equals(previousProfileImage, pending.profileImage)) {
+                redisService.clearPendingRegistrationMedia(mediaFileName(previousProfileImage));
+                ossCleanupService.deleteAfterCommit(previousProfileImage);
+            }
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Could not process registration. Please try again.", e);
         }
@@ -223,8 +237,35 @@ public class AuthService {
 
         // Single-use: invalidate the code and drop the now-consumed pending record.
         redisService.deletePendingRegistration(email);
+        redisService.clearPendingRegistrationMedia(mediaFileName(user.getProfileImage()));
         redisService.clearOtpState(email);
         return user;
+    }
+
+    private String mediaFileName(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String clean = url.split("\\?", 2)[0];
+        int slash = clean.lastIndexOf('/');
+        return slash >= 0 ? clean.substring(slash + 1) : clean;
+    }
+
+    private boolean isAnonymousRegistrationMedia(String url) {
+        String fileName = mediaFileName(url);
+        return fileName != null && fileName.startsWith("anon_");
+    }
+
+    private String pendingProfileImage(String email) {
+        String pendingJson = redisService.getPendingRegistration(email);
+        if (pendingJson == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(pendingJson, PendingRegistration.class).profileImage;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     public void changeUserPassword(String email, String currentPassword, String newPassword) {

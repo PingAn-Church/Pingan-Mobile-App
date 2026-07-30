@@ -21,7 +21,7 @@ import {
   getPresignedDownloadUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
-  deletePicture,
+  deleteOwnUpload,
 } from "../../service/OSSService";
 import i18n from "../../../i18n";
 import { Ionicons } from "@expo/vector-icons";
@@ -127,8 +127,6 @@ const EditProfile = () => {
         fileName,
         fileType
       );
-      console.log("Presigned URL:", presignedUploadUrl);
-
       // Step 2: Upload image to OSS
       const uploadedFileUrl = await uploadFileToOSS(
         profileImage,
@@ -167,24 +165,11 @@ const EditProfile = () => {
     }
 
     setSubmitting(true);
+    let profileImageUrl = null;
     try {
-      let profileImageUrl = null;
       // ensure picture changed
       if (profileImage && profileImage !== originalProfileImage) {
-        console.log("changed pic!");
-
-        // Upload the new avatar FIRST; only delete the old one once the new upload
-        // succeeds, so a failed upload can't leave the user with no picture.
         profileImageUrl = await uploadImageUsingPresignedUrl("profile", email); // Pass the file type as 'profile'
-
-        if (profileImageUrl && originalProfileImage) {
-          try {
-            const fileName = originalProfileImage.split("/").pop().split("?")[0];
-            await deletePicture(fileName, "profile");
-          } catch (err) {
-            console.warn("Failed to delete old profile picture:", err);
-          }
-        }
       }
 
       const userData = {
@@ -206,6 +191,13 @@ const EditProfile = () => {
         ]);
       }
     } catch (error) {
+      if (profileImageUrl) {
+        try {
+          await deleteOwnUpload(profileImageUrl, "profile");
+        } catch (cleanupError) {
+          console.warn("Failed to clean up unreferenced profile upload:", cleanupError);
+        }
+      }
       showAlert(i18n.t("error"), i18n.t("updateProfileFailed"), [
         { text: i18n.t("ok") },
       ]);
@@ -269,7 +261,7 @@ const EditProfile = () => {
       />
 
       <Text style={styles.label}>{i18n.t("email")}</Text>
-      <TextInput style={styles.input} value={email} onChangeText={setEmail} />
+      <TextInput style={styles.input} value={email} editable={false} />
 
       <Text style={styles.label}>{i18n.t("birthday")}</Text>
       <TouchableOpacity onPress={() => setShowDatePicker(true)}>

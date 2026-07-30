@@ -18,7 +18,7 @@ import {
   resolvePresignedAssetUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
-  deletePicture,
+  deleteOwnUpload,
 } from "../../service/OSSService";
 import { confirmAction } from "../../utils/confirmAction";
 import { showAlert } from "../../utils/showAlert";
@@ -83,12 +83,7 @@ export default function ManageAnnouncementsPage() {
     if (!confirmed) return;
 
     try {
-      const fileName = announcement.imageUrl.split("/").pop().split("?")[0];
-
-      // Delete image from OSS
-      await deletePicture(fileName, "announcement");
-
-      // Delete announcement from database
+      // The backend removes the image only after the DB delete commits.
       await deleteAnnouncement(announcement.id);
 
       // Update UI
@@ -205,6 +200,7 @@ export function AddAnnouncementPage() {
     }
 
     setUploading(true);
+    let uploadedImageUrl = null;
     try {
       const fileName = `announcement_${Date.now()}.jpeg`;
 
@@ -215,7 +211,7 @@ export function AddAnnouncementPage() {
       );
 
       // Upload Image to OSS
-      const uploadedImageUrl = await uploadFileToOSS(image, presignedUrl);
+      uploadedImageUrl = await uploadFileToOSS(image, presignedUrl);
 
       // Save Announcement in DB
       await createAnnouncement(trimmedTitle, uploadedImageUrl, normalizedLink);
@@ -225,6 +221,13 @@ export function AddAnnouncementPage() {
       ]);
       navigation.goBack();
     } catch (error) {
+      if (uploadedImageUrl) {
+        try {
+          await deleteOwnUpload(uploadedImageUrl, "announcement");
+        } catch (cleanupError) {
+          console.warn("Failed to clean up unreferenced announcement upload:", cleanupError);
+        }
+      }
       console.error("Error adding announcement:", error);
       const backendMessage =
         error?.response?.data?.message ||

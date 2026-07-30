@@ -56,8 +56,9 @@ public class User {
     @Column(nullable = false)
     private boolean active = true;
 
-    // Irreversible self-deletion tombstone. The row stays only to preserve
-    // shared UGC foreign keys such as chat messages and forum posts.
+    // Irreversible self-deletion marker used while account cleanup and audit
+    // checks complete. This app deletes the user's Chat/Thread content instead
+    // of retaining shared UGC through this row.
     @ColumnDefault("false")
     @Column(nullable = false)
     private boolean deletedAccount = false;

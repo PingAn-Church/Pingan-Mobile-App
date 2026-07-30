@@ -11,8 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fyp.backend.model.Certificate;
 import com.fyp.backend.model.CourseEnrollment;
@@ -55,9 +53,9 @@ import com.fyp.backend.repository.UserVideoProgressRepository;
  * admin hard-delete ({@code DELETE /api/users/{id}}) run the same irreversible
  * {@link #hardDeleteUser} sweep: every user-generated item and the {@code users}
  * row itself are removed, along with the related OSS objects (avatar, chat media,
- * certificate files). Authored courses are detached (kept for enrolled students)
- * and moderation reports are anonymized (the record stays, this user's PII does
- * not) — shared content other users depend on is preserved, not destroyed.
+ * certificate files). Authored courses are detached and moderation reports are
+ * anonymized. Shared Chat/Thread content is intentionally deleted as part of the
+ * account-erasure product policy, including dependent replies/conversation history.
  */
 @Service
 public class UserAccountDeletionService {
@@ -67,7 +65,7 @@ public class UserAccountDeletionService {
     private static final int MEDIA_URL_PAGE_SIZE = 500;
 
     @Autowired private UserRepository userRepository;
-    @Autowired private OSSService ossService;
+    @Autowired private OssCleanupService ossCleanupService;
     @Autowired private RedisService redisService;
     @Autowired private ReviewService reviewService;
 
@@ -132,8 +130,8 @@ public class UserAccountDeletionService {
 
     /**
      * User-requested permanent deletion. Removes the account and everything the user
-     * generated; an admin must downgrade first (an admin cannot delete themselves
-     * while still an admin).
+     * generated, including shared Chat/Thread history; an admin must downgrade first
+     * (an admin cannot delete themselves while still an admin).
      *
      * @throws RuntimeException if the user is missing or is an admin.
      */
@@ -155,14 +153,16 @@ public class UserAccountDeletionService {
      * conversations and messages (with media), forum threads/replies, device and
      * auth tokens, blocks, applications, event check-ins, learning records, avatar,
      * and finally the {@code users} row. Reports are anonymized and authored courses
-     * detached so shared content survives.
+     * are detached; shared Chat/Thread content is deliberately not retained.
      */
     private void hardDeleteUser(User user) {
         Long userId = user.getId();
         String email = user.getEmail();
         String profileImage = user.getProfileImage();
         Set<Long> affectedCourseIds = collectLearningCourseIds(userId);
-        deleteCertificateAssets(userId, affectedCourseIds);
+        List<String> accountAssetUrls = new ArrayList<>();
+        accountAssetUrls.add(profileImage);
+        collectCertificateAssets(userId, affectedCourseIds, accountAssetUrls);
 
         for (PrivateConversation pc : privateConversationRepository.findByUserId(userId)) {
             purgeConversationMessages(pc.getId());
@@ -205,9 +205,9 @@ public class UserAccountDeletionService {
         detachAuthoredCourses(userId);
         deleteLearningRows(userId);
 
-        ossService.deleteObjectByUrl(profileImage);
         userRepository.deleteById(userId);
         recomputeAffectedCourses(affectedCourseIds);
+        deleteObjectsAfterCommit(accountAssetUrls);
     }
 
     private Set<Long> collectLearningCourseIds(Long userId) {
@@ -221,12 +221,12 @@ public class UserAccountDeletionService {
         return courseIds;
     }
 
-    private void deleteCertificateAssets(Long userId, Set<Long> affectedCourseIds) {
+    private void collectCertificateAssets(Long userId, Set<Long> affectedCourseIds, List<String> assetUrls) {
         for (Certificate c : certificateRepository.findByUserId(userId)) {
             if (c.getCourseId() != null) {
                 affectedCourseIds.add(c.getCourseId());
             }
-            ossService.deleteObjectByUrl(c.getCredentialUrl());
+            assetUrls.add(c.getCredentialUrl());
         }
     }
 
@@ -390,27 +390,6 @@ public class UserAccountDeletionService {
     }
 
     private void deleteObjectsAfterCommit(List<String> objectUrls) {
-        if (objectUrls.isEmpty()) {
-            return;
-        }
-        Runnable delete = () -> objectUrls.stream()
-                .distinct()
-                .forEach(url -> {
-                    try {
-                        ossService.deleteObjectByUrl(url);
-                    } catch (Exception e) {
-                        LOGGER.warning("Failed to delete OSS object after account cleanup: " + e.getMessage());
-                    }
-                });
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    delete.run();
-                }
-            });
-        } else {
-            delete.run();
-        }
+        ossCleanupService.deleteAfterCommit(objectUrls);
     }
 }

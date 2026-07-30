@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,7 +70,7 @@ public class AuthoringService {
     @Autowired private ResourceProgressRepository resourceProgressRepository;
     @Autowired private UserModuleProgressRepository moduleProgressRepository;
     @Autowired private CourseService courseService;
-    @Autowired private OSSService ossService;
+    @Autowired private OssCleanupService ossCleanupService;
     @Autowired private ObjectMapper objectMapper;
 
     // ---- courses --------------------------------------------------------
@@ -95,6 +96,7 @@ public class AuthoringService {
     public Map<String, Object> updateCourse(Long courseId, Map<String, Object> body) {
         Course c = courseRepository.findById(courseId)
                 .orElseThrow(() -> ApiException.notFound("Course not found"));
+        String previousThumbnail = c.getThumbnailUrl();
         if (body.containsKey("title")) c.setTitle(requireString(body, "title"));
         if (body.containsKey("description")) c.setDescription(str(body, "description", ""));
         if (body.containsKey("category") || body.containsKey("categoryId") || body.containsKey("categoryName")) {
@@ -107,6 +109,9 @@ public class AuthoringService {
         if (body.containsKey("isFeatured")) c.setFeatured(bool(body, "isFeatured", false));
         c.setUpdatedAt(java.time.Instant.now());
         courseRepository.save(c);
+        if (!Objects.equals(previousThumbnail, c.getThumbnailUrl())) {
+            ossCleanupService.deleteAfterCommit(previousThumbnail);
+        }
         return courseService.courseSummaryMap(c);
     }
 
@@ -128,6 +133,10 @@ public class AuthoringService {
         List<String> orphanedAssetUrls = new ArrayList<>();
         orphanedAssetUrls.add(c.getThumbnailUrl());
         resources.forEach(r -> orphanedAssetUrls.add(r.getResourceUrl()));
+        videos.forEach(v -> {
+            orphanedAssetUrls.add(v.getVideoUrl());
+            orphanedAssetUrls.add(v.getThumbnailUrl());
+        });
         List<Long> videoIds = videos.stream().map(CourseVideo::getId).collect(Collectors.toList());
         List<Long> resourceIds = resources.stream().map(CourseResource::getId).collect(Collectors.toList());
         if (!videoIds.isEmpty()) videoProgressRepository.deleteByVideoIdIn(videoIds);
@@ -144,8 +153,7 @@ public class AuthoringService {
         sectionRepository.deleteAll(sectionRepository.findByCourseIdOrderByOrderIndexAsc(courseId));
         courseRepository.delete(c);
 
-        // DB deletes succeeded; remove the now-unreferenced OSS assets (best-effort).
-        orphanedAssetUrls.forEach(ossService::deleteObjectByUrl);
+        ossCleanupService.deleteAfterCommit(orphanedAssetUrls);
     }
 
     @Transactional
@@ -300,12 +308,25 @@ public class AuthoringService {
     public void deleteSection(Long id) {
         CourseSection s = sectionRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Section not found"));
-        videoRepository.deleteAll(videoRepository.findBySectionIdOrderByOrderIndexAsc(id));
-        resourceRepository.deleteAll(resourceRepository.findBySectionIdOrderByOrderIndexAsc(id));
+        List<CourseVideo> videos = videoRepository.findBySectionIdOrderByOrderIndexAsc(id);
+        List<CourseResource> resources = resourceRepository.findBySectionIdOrderByOrderIndexAsc(id);
+        List<String> mediaUrls = new ArrayList<>();
+        videos.forEach(video -> {
+            mediaUrls.add(video.getVideoUrl());
+            mediaUrls.add(video.getThumbnailUrl());
+        });
+        resources.forEach(resource -> mediaUrls.add(resource.getResourceUrl()));
+        List<Long> videoIds = videos.stream().map(CourseVideo::getId).toList();
+        List<Long> resourceIds = resources.stream().map(CourseResource::getId).toList();
+        if (!videoIds.isEmpty()) videoProgressRepository.deleteByVideoIdIn(videoIds);
+        if (!resourceIds.isEmpty()) resourceProgressRepository.deleteByResourceIdIn(resourceIds);
+        videoRepository.deleteAll(videos);
+        resourceRepository.deleteAll(resources);
         for (CourseQuiz quiz : quizRepository.findBySectionIdOrderByOrderIndexAsc(id)) {
             deleteQuizCascade(quiz.getId());
         }
         sectionRepository.delete(s);
+        ossCleanupService.deleteAfterCommit(mediaUrls);
     }
 
     // ---- quizzes & questions -------------------------------------------
@@ -349,9 +370,13 @@ public class AuthoringService {
     }
 
     private void deleteQuizCascade(Long quizId) {
+        List<String> questionImages = questionRepository.findByQuizIdOrderByOrderIndexAsc(quizId).stream()
+                .map(QuizQuestion::getImageUrl)
+                .toList();
         attemptRepository.deleteAll(attemptRepository.findByQuizIdIn(List.of(quizId)));
         questionRepository.deleteByQuizId(quizId);
         quizRepository.deleteById(quizId);
+        ossCleanupService.deleteAfterCommit(questionImages);
     }
 
     public Map<String, Object> createQuestion(Map<String, Object> body) {
@@ -365,18 +390,26 @@ public class AuthoringService {
         return questionMap(q);
     }
 
+    @Transactional
     public Map<String, Object> updateQuestion(Long id, Map<String, Object> body) {
         QuizQuestion q = questionRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Question not found"));
+        String previousImage = q.getImageUrl();
         applyQuestionBody(q, body, false);
         if (body.containsKey("orderIndex")) q.setOrderIndex(intVal(body, "orderIndex", q.getOrderIndex()));
         questionRepository.save(q);
+        if (!Objects.equals(previousImage, q.getImageUrl())) {
+            ossCleanupService.deleteAfterCommit(previousImage);
+        }
         return questionMap(q);
     }
 
+    @Transactional
     public void deleteQuestion(Long id) {
-        if (!questionRepository.existsById(id)) throw ApiException.notFound("Question not found");
-        questionRepository.deleteById(id);
+        QuizQuestion question = questionRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Question not found"));
+        questionRepository.delete(question);
+        ossCleanupService.deleteAfterCommit(question.getImageUrl());
     }
 
     private void applyQuestionBody(QuizQuestion q, Map<String, Object> body, boolean create) {
@@ -408,9 +441,12 @@ public class AuthoringService {
         return videoMap(v);
     }
 
+    @Transactional
     public Map<String, Object> updateVideo(Long id, Map<String, Object> body) {
         CourseVideo v = videoRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Video not found"));
+        String previousVideo = v.getVideoUrl();
+        String previousThumbnail = v.getThumbnailUrl();
         if (body.containsKey("title")) v.setTitle(requireString(body, "title"));
         if (body.containsKey("description")) v.setDescription(str(body, "description", ""));
         if (body.containsKey("videoUrl")) v.setVideoUrl(str(body, "videoUrl", ""));
@@ -420,12 +456,22 @@ public class AuthoringService {
         if (body.containsKey("orderIndex")) v.setOrderIndex(intVal(body, "orderIndex", v.getOrderIndex()));
         if (body.containsKey("sectionId")) v.setSectionId(optLong(body, "sectionId"));
         videoRepository.save(v);
+        List<String> replacedMedia = new ArrayList<>();
+        if (!Objects.equals(previousVideo, v.getVideoUrl())) replacedMedia.add(previousVideo);
+        if (!Objects.equals(previousThumbnail, v.getThumbnailUrl())) replacedMedia.add(previousThumbnail);
+        ossCleanupService.deleteAfterCommit(replacedMedia);
         return videoMap(v);
     }
 
+    @Transactional
     public void deleteVideo(Long id) {
-        if (!videoRepository.existsById(id)) throw ApiException.notFound("Video not found");
-        videoRepository.deleteById(id);
+        CourseVideo video = videoRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Video not found"));
+        videoProgressRepository.deleteByVideoIdIn(List.of(id));
+        videoRepository.delete(video);
+        ossCleanupService.deleteAfterCommit(List.of(
+                Objects.toString(video.getVideoUrl(), ""),
+                Objects.toString(video.getThumbnailUrl(), "")));
     }
 
     // ---- resources ------------------------------------------------------
@@ -449,9 +495,11 @@ public class AuthoringService {
         return resourceMap(r);
     }
 
+    @Transactional
     public Map<String, Object> updateResource(Long id, Map<String, Object> body) {
         CourseResource r = resourceRepository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("Resource not found"));
+        String previousResource = r.getResourceUrl();
         if (body.containsKey("title")) r.setTitle(requireString(body, "title"));
         if (body.containsKey("description")) r.setDescription(str(body, "description", ""));
         if (body.containsKey("resourceUrl")) r.setResourceUrl(str(body, "resourceUrl", ""));
@@ -464,12 +512,19 @@ public class AuthoringService {
         r.setEstimatedReadMinutes(estimateReadMinutes(r.getFileSizeBytes(), r.getEstimatedReadMinutes()));
         r.setUpdatedAt(java.time.Instant.now());
         resourceRepository.save(r);
+        if (!Objects.equals(previousResource, r.getResourceUrl())) {
+            ossCleanupService.deleteAfterCommit(previousResource);
+        }
         return resourceMap(r);
     }
 
+    @Transactional
     public void deleteResource(Long id) {
-        if (!resourceRepository.existsById(id)) throw ApiException.notFound("Resource not found");
-        resourceRepository.deleteById(id);
+        CourseResource resource = resourceRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Resource not found"));
+        resourceProgressRepository.deleteByResourceIdIn(List.of(id));
+        resourceRepository.delete(resource);
+        ossCleanupService.deleteAfterCommit(resource.getResourceUrl());
     }
 
     // ---- helpers --------------------------------------------------------

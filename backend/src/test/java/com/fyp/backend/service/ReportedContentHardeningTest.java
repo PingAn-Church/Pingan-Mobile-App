@@ -51,7 +51,7 @@ class ReportedContentHardeningTest {
     @Mock private UserRepository userRepository;
     @Mock private MessageDeliveryStatusRepository deliveryStatusRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
-    @Mock private OSSService ossService;
+    @Mock private OssCleanupService ossCleanupService;
     @Mock private RedisService redisService;
     @Mock private MessagePublisher messagePublisher;
     @Mock private PushNotificationService pushNotificationService;

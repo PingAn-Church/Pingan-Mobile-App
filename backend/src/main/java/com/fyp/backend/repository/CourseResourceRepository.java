@@ -9,6 +9,7 @@ import com.fyp.backend.model.CourseResource;
 
 @Repository
 public interface CourseResourceRepository extends JpaRepository<CourseResource, Long> {
+    boolean existsByResourceUrlContaining(String fragment);
     List<CourseResource> findByCourseIdOrderByOrderIndexAsc(Long courseId);
 
     List<CourseResource> findBySectionIdOrderByOrderIndexAsc(Long sectionId);

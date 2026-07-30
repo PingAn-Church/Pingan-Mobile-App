@@ -14,6 +14,7 @@ import jakarta.persistence.LockModeType;
 
 @Repository
 public interface MessageRepository extends JpaRepository<Message, Long> {
+    boolean existsByContentContaining(String fragment);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT m FROM Message m WHERE m.id = :id")
     Optional<Message> findByIdForUpdate(@Param("id") Long id);

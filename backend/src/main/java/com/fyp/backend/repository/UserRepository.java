@@ -16,6 +16,7 @@ import com.fyp.backend.model.User;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {
+    boolean existsByProfileImageContaining(String fragment);
 
     /** Active users, paginated — backs the directory picker's empty-query page. */
     Page<User> findByActiveTrue(Pageable pageable);

@@ -47,6 +47,7 @@ class AuthServiceTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private EmailService emailService;
     @Mock private RedisService redisService;
+    @Mock private OssCleanupService ossCleanupService;
 
     @InjectMocks private AuthService authService;
 
@@ -136,6 +137,33 @@ class AuthServiceTest {
         // The account row is NOT created here — only a pending record in Redis.
         verify(redisService).savePendingRegistration(eq(EMAIL), anyString());
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void replacingPendingSignupCleansPreviousAnonymousProfileImage() {
+        UserDto dto = registerDto();
+        dto.setProfileImage("https://oss.example.com/userProfilePictures/anon_new.jpg");
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed");
+        when(redisService.getPendingRegistration(EMAIL)).thenReturn(
+                "{\"firstName\":\"Old\",\"lastName\":\"User\",\"email\":\"" + EMAIL
+                        + "\",\"passwordHash\":\"hash\",\"profileImage\":"
+                        + "\"https://oss.example.com/userProfilePictures/anon_old.jpg\","
+                        + "\"birthday\":null}");
+
+        authService.registerUser(dto);
+
+        verify(redisService).clearPendingRegistrationMedia("anon_old.jpg");
+        verify(ossCleanupService).deleteAfterCommit(
+                "https://oss.example.com/userProfilePictures/anon_old.jpg");
+    }
+
+    @Test
+    void registrationRejectsProfileMediaNotIssuedForAnonymousSignup() {
+        UserDto dto = registerDto();
+        dto.setProfileImage("https://oss.example.com/userProfilePictures/u99_avatar.jpg");
+
+        assertThrows(IllegalArgumentException.class, () -> authService.registerUser(dto));
+        verify(redisService, never()).savePendingRegistration(anyString(), anyString());
     }
 
     // ---- OTP verification: lockout, single-use, account materialisation ------

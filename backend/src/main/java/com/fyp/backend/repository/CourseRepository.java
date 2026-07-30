@@ -15,6 +15,7 @@ import com.fyp.backend.model.Course;
 
 @Repository
 public interface CourseRepository extends JpaRepository<Course, Long>, JpaSpecificationExecutor<Course> {
+    boolean existsByThumbnailUrlContaining(String fragment);
     // Paginated variants used by the published-course listing (DB-side paging/sort).
     Page<Course> findByIsPublishedTrue(Pageable pageable);
 

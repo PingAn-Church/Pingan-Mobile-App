@@ -58,6 +58,8 @@ import {
   getPresignedUploadUrl,
   resolvePresignedAssetUrl,
   uploadFileToOSS,
+  deleteOwnUpload,
+  deleteOwnConversationUpload,
 } from "../../service/OSSService";
 import { getStompClient } from "../../service/WebSocketService";
 import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../../service/UserService";
@@ -609,8 +611,10 @@ export default function ChatPage({ route }) {
     navigation.replace("Chat", { conversationId: firstConversationId });
   }, [conversationId, conversations, navigation]);
 
-  const fetchViewingPresignedUrl = async (imageUrl, type) => {
-    return resolvePresignedAssetUrl(imageUrl, type);
+  const fetchViewingPresignedUrl = async (imageUrl, type, mediaConversationId) => {
+    return resolvePresignedAssetUrl(imageUrl, type, {
+      conversationId: mediaConversationId,
+    });
   };
 
   useEffect(() => {
@@ -622,7 +626,11 @@ export default function ChatPage({ route }) {
           let iconUrl = null;
 
           if (conv?.conversationType === "group") {
-            iconUrl = await fetchViewingPresignedUrl(conv?.groupIcon, "group");
+            iconUrl = await fetchViewingPresignedUrl(
+              conv?.groupIcon,
+              "group",
+              conv?.conversationId
+            );
           } else {
             const otherParticipantId = (conv?.participants || []).find(
               (participantId) => String(participantId) !== String(currentUser?.id)
@@ -1503,10 +1511,11 @@ export default function ChatPage({ route }) {
 
     setAckTimeout(localId);
 
+    let uploadedUrl = null;
     try {
       const fileName = `chat_${Date.now()}.jpg`;
       const uploadUrl = await getConversationUploadUrl(fileName, conversationId);
-      const uploadedUrl = await uploadFileToOSS(imageUri, uploadUrl);
+      uploadedUrl = await uploadFileToOSS(imageUri, uploadUrl);
 
       updateConversationHistory((history) =>
         history.map((msg) =>
@@ -1534,6 +1543,15 @@ export default function ChatPage({ route }) {
         clearAckTimeout(localId);
       }
     } catch (error) {
+      if (uploadedUrl) {
+        try {
+          await deleteOwnConversationUpload(uploadedUrl, conversationId);
+        } catch (cleanupError) {
+          if (cleanupError?.response?.status !== 409) {
+            console.warn("Failed to clean up unreferenced chat image:", cleanupError);
+          }
+        }
+      }
       updateConversationHistory((history) =>
         history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
       );
@@ -1573,11 +1591,12 @@ export default function ChatPage({ route }) {
 
     setAckTimeout(localId);
 
+    let uploadedUrl = null;
     try {
       const { contentType: voiceContentType, fileExtension: voiceFileExtension } = getVoiceUploadConfig(audioUri);
       const fileName = `voice_${conversationId}_${Date.now()}.${voiceFileExtension}`;
       const uploadUrl = await getConversationUploadUrl(fileName, conversationId, voiceContentType);
-      const uploadedUrl = await uploadFileToOSS(audioUri, uploadUrl, voiceContentType);
+      uploadedUrl = await uploadFileToOSS(audioUri, uploadUrl, voiceContentType);
       const voiceContent = `${uploadedUrl}|${durationInSeconds}`;
 
       updateConversationHistory((history) =>
@@ -1606,6 +1625,15 @@ export default function ChatPage({ route }) {
         clearAckTimeout(localId);
       }
     } catch (error) {
+      if (uploadedUrl) {
+        try {
+          await deleteOwnConversationUpload(uploadedUrl, conversationId);
+        } catch (cleanupError) {
+          if (cleanupError?.response?.status !== 409) {
+            console.warn("Failed to clean up unreferenced voice upload:", cleanupError);
+          }
+        }
+      }
       updateConversationHistory((history) =>
         history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
       );
@@ -1966,9 +1994,10 @@ export default function ChatPage({ route }) {
       return;
     }
 
+    let uploadedGroupIcon = null;
     try {
       setCreatingNewGroup(true);
-      const uploadedGroupIcon = await uploadNewGroupImageIfNeeded();
+      uploadedGroupIcon = await uploadNewGroupImageIfNeeded();
 
       const response = await startGroupChat({
         groupName: String(newGroupName || "").trim(),
@@ -1982,6 +2011,15 @@ export default function ChatPage({ route }) {
       setShowWebNewChatPanel(false);
       navigation.navigate("Chat", { conversationId: createdConversationId });
     } catch (error) {
+      if (uploadedGroupIcon) {
+        try {
+          await deleteOwnUpload(uploadedGroupIcon, "group");
+        } catch (cleanupError) {
+          if (cleanupError?.response?.status !== 409) {
+            console.warn("Failed to clean up unreferenced group icon:", cleanupError);
+          }
+        }
+      }
       showAlert(i18n.t("error"), error?.message || i18n.t("createGroupFailed"), [
         { text: i18n.t("ok") },
       ]);

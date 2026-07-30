@@ -243,13 +243,21 @@ export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride
 /**
  * Fetches a presigned download URL for viewing images securely.
  */
-export const getPresignedDownloadUrl = async (fileName, fileType) => {
+export const getPresignedDownloadUrl = async (
+  fileName,
+  fileType,
+  { conversationId } = {}
+) => {
   try {
     const token = await getAuthToken();
     const response = await axios.get(
       apiUrl(`/oss/presigned-download-url`),
       {
-        params: { fileName, fileType },
+        params: {
+          fileName,
+          fileType,
+          ...(conversationId != null ? { conversationId } : {}),
+        },
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
@@ -272,7 +280,11 @@ export const getPublicDownloadUrl = async (fileName, fileType) => {
   }
 };
 
-export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
+export const resolvePresignedAssetUrl = async (
+  assetUrl,
+  fileType,
+  options = {}
+) => {
   try {
     const rawUrl = String(assetUrl || "").trim();
     if (!rawUrl) return null;
@@ -282,7 +294,7 @@ export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
 
     return ["course", "announcement"].includes(fileType)
       ? await getPublicDownloadUrl(fileName, fileType)
-      : await getPresignedDownloadUrl(fileName, fileType);
+      : await getPresignedDownloadUrl(fileName, fileType, options);
   } catch (error) {
     console.error(`Error resolving presigned asset URL for ${fileType}:`, error);
     return null;
@@ -290,20 +302,15 @@ export const resolvePresignedAssetUrl = async (assetUrl, fileType) => {
 };
 
 export const fetchPictures = async (fileType, { size = 20, marker } = {}) => {
-  try {
-    const token = await getAuthToken();
-    const response = await axios.get(
-      apiUrl(`/oss/list-pictures`),
-      {
-        params: { fileType, size, ...(marker ? { marker } : {}) },
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching pictures:", error);
-    return { success: false, data: [], pagination: { hasMore: false, nextMarker: null } };
-  }
+  const token = await getAuthToken();
+  const response = await axios.get(
+    apiUrl(`/oss/list-pictures`),
+    {
+      params: { fileType, size, ...(marker ? { marker } : {}) },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }
+  );
+  return response.data;
 };
 
 export const deletePicture = async (fileName, fileType) => {
@@ -317,6 +324,30 @@ export const deletePicture = async (fileName, fileType) => {
     console.error("Error deleting picture:", error);
     throw error;
   }
+};
+
+const fileNameFromObjectUrl = (objectUrl) => {
+  const clean = String(objectUrl || "").split("?")[0].split("#")[0];
+  return decodeURIComponent(clean.split("/").pop() || "");
+};
+
+export const deleteOwnUpload = async (objectUrl, fileType) => {
+  const fileName = fileNameFromObjectUrl(objectUrl);
+  if (!fileName) return;
+  const token = await getAuthToken();
+  if (!token) return;
+  await axios.delete(apiUrl(`/oss/own-upload`), {
+    params: { fileName, fileType },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+export const deleteAnonymousUpload = async (objectUrl) => {
+  const fileName = fileNameFromObjectUrl(objectUrl);
+  if (!fileName) return;
+  await axios.delete(apiUrl(`/oss/anonymous-upload`), {
+    params: { fileName, fileType: "profile" },
+  });
 };
 
 export const getConversationUploadUrl = async (fileName, conversationId, contentType = "image/jpeg") => {
@@ -369,4 +400,15 @@ export const getConversationDownloadUrl = async (fileName, conversationId) => {
     console.error("Error fetching conversation download URL:", error);
     return null;
   }
+};
+
+export const deleteOwnConversationUpload = async (objectUrl, conversationId) => {
+  const fileName = fileNameFromObjectUrl(objectUrl);
+  if (!fileName) return;
+  const token = await getAuthToken();
+  if (!token) return;
+  await axios.delete(apiUrl(`/oss/conversations/own-upload`), {
+    params: { fileName, conversationId },
+    headers: { Authorization: `Bearer ${token}` },
+  });
 };

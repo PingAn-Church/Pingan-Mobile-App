@@ -3,7 +3,6 @@ package com.fyp.backend.service;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,7 +61,7 @@ import com.fyp.backend.repository.UserVideoProgressRepository;
 class UserAccountDeletionServiceTest {
 
     @Mock private UserRepository userRepository;
-    @Mock private OSSService ossService;
+    @Mock private OssCleanupService ossCleanupService;
     @Mock private RedisService redisService;
     @Mock private ReviewService reviewService;
     @Mock private PrivateConversationRepository privateConversationRepository;
@@ -156,7 +155,7 @@ class UserAccountDeletionServiceTest {
         verify(courseEnrollmentRepository).deleteByUserId(ID);
         verify(userPreferencesRepository).deleteByUserId(ID);
         // The avatar is removed from OSS.
-        verify(ossService).deleteObjectByUrl(AVATAR);
+        verify(ossCleanupService).deleteAfterCommit(any(java.util.Collection.class));
     }
 
     @Test
@@ -177,7 +176,7 @@ class UserAccountDeletionServiceTest {
         verify(pushTokenRepository).deleteByUserId(ID);
         verify(refreshTokenRepository).deleteByUserEmail(EMAIL);
         verify(redisService).clearUserOnlineStatus(EMAIL);
-        verify(ossService).deleteObjectByUrl(AVATAR);
+        verify(ossCleanupService).deleteAfterCommit(any(java.util.Collection.class));
     }
 
     @Test
@@ -187,7 +186,7 @@ class UserAccountDeletionServiceTest {
         assertThrows(RuntimeException.class, () -> service.deleteOwnAccount(ID));
 
         verify(userRepository, never()).deleteById(anyLong());
-        verify(ossService, never()).deleteObjectByUrl(anyString());
+        verify(ossCleanupService, never()).deleteAfterCommit(any(java.util.Collection.class));
     }
 
     @Test
@@ -197,7 +196,7 @@ class UserAccountDeletionServiceTest {
         assertThrows(RuntimeException.class, () -> service.deleteUserCompletely(ID));
 
         verify(userRepository, never()).deleteById(anyLong());
-        verify(ossService, never()).deleteObjectByUrl(anyString());
+        verify(ossCleanupService, never()).deleteAfterCommit(any(java.util.Collection.class));
     }
 
     @Test

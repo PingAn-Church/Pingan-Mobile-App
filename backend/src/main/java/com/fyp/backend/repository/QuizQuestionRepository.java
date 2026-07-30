@@ -9,6 +9,7 @@ import com.fyp.backend.model.QuizQuestion;
 
 @Repository
 public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Long> {
+    boolean existsByImageUrlContaining(String fragment);
     List<QuizQuestion> findByQuizIdOrderByOrderIndexAsc(Long quizId);
 
     List<QuizQuestion> findByQuizIdInOrderByQuizIdAscOrderIndexAsc(List<Long> quizIds);

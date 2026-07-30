@@ -34,6 +34,7 @@ public class ConversationService {
     private final MessageRepository messageRepository;
     private final MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     private final ConversationMuteRepository conversationMuteRepository;
+    private final OssCleanupService ossCleanupService;
 
     @Autowired
     public ConversationService(GroupConversationRepository groupConversationRepository,
@@ -43,7 +44,8 @@ public class ConversationService {
                                OSSService ossService,
                                MessageRepository messageRepository,
                                MessageDeliveryStatusRepository messageDeliveryStatusRepository,
-                               ConversationMuteRepository conversationMuteRepository) {
+                               ConversationMuteRepository conversationMuteRepository,
+                               OssCleanupService ossCleanupService) {
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
         this.userRepository = userRepository;
@@ -52,6 +54,7 @@ public class ConversationService {
         this.messageRepository = messageRepository;
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
         this.conversationMuteRepository = conversationMuteRepository;
+        this.ossCleanupService = ossCleanupService;
     }
 
     private Timestamp now() {
@@ -584,20 +587,13 @@ public class ConversationService {
             throw new IllegalArgumentException("Only admins can update the group icon.");
         }
 
-        // 🧹 Delete old image from OSS if it exists
         String oldIcon = groupConversation.getGroupIcon();
-        if (oldIcon != null && !oldIcon.isBlank()) {
-            try {
-                String fileName = oldIcon.substring(oldIcon.lastIndexOf("/") + 1);
-                ossService.deleteObject("groupProfilePictures/" + fileName);
-            } catch (Exception e) {
-                System.err.println("⚠️ Failed to delete old group icon: " + e.getMessage());
-            }
-        }
-
         groupConversation.setGroupIcon(newGroupIconUrl);
         groupConversation.setUpdatedAt(now());
         groupConversationRepository.save(groupConversation);
+        if (!java.util.Objects.equals(oldIcon, newGroupIconUrl)) {
+            ossCleanupService.deleteAfterCommit(oldIcon);
+        }
 
         ConversationDto updated = new ConversationDto(groupConversation);
 
@@ -664,28 +660,7 @@ public class ConversationService {
     }
 
     private void deleteObjectsAfterCommit(List<String> objectUrls) {
-        if (objectUrls.isEmpty()) {
-            return;
-        }
-        Runnable delete = () -> objectUrls.stream()
-                .distinct()
-                .forEach(url -> {
-                    try {
-                        ossService.deleteObjectByUrl(url);
-                    } catch (Exception e) {
-                        System.err.println("Failed to delete OSS object after conversation cleanup: " + e.getMessage());
-                    }
-                });
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    delete.run();
-                }
-            });
-        } else {
-            delete.run();
-        }
+        ossCleanupService.deleteAfterCommit(objectUrls);
     }
 
 //    @Transactional

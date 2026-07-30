@@ -35,7 +35,6 @@ import * as ImagePicker from "expo-image-picker";
 import {
   getPresignedUploadUrl,
   uploadFileToOSS,
-  resolvePresignedAssetUrl,
 } from "../../service/OSSService";
 import { getStompClient } from "../../service/WebSocketService";
 import defaultProfileImage from "../../../assets/user.png";
@@ -188,10 +187,6 @@ const ChatHomePage = () => {
     }
   }, []);
 
-  const fetchViewingPresignedUrl = async (imageUrl, type) => {
-    return resolvePresignedAssetUrl(imageUrl, type);
-  };
-
   const handleSearch = (query) => {
     setSearchQuery(query);
   };
@@ -338,6 +333,7 @@ const ChatHomePage = () => {
           <CachedImage
             uri={rawIconUri}
             type={isGroupIcon ? "group" : "profile"}
+            conversationId={isGroupIcon ? item.conversationId : undefined}
             fallbackSource={defaultProfileImage}
             style={styles.profileImage}
           />

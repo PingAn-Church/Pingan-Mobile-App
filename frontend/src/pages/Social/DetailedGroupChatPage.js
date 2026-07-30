@@ -25,6 +25,7 @@ import {
   getPresignedDownloadUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
+  deleteOwnUpload,
 } from "../../service/OSSService";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -84,7 +85,7 @@ const DetailedGroupChatPage = ({ route }) => {
       // if (!imageUrl) return "https://via.placeholder.com/50"; // Fallback for missing images
       if (!imageUrl) return null;
       const fileName = imageUrl.split("/").pop();
-      return await getPresignedDownloadUrl(fileName, type);
+      return await getPresignedDownloadUrl(fileName, type, { conversationId });
     } catch (error) {
       console.error(`Error getting presigned URL for ${type}:`, error);
       // return "https://via.placeholder.com/50";
@@ -115,6 +116,7 @@ const DetailedGroupChatPage = ({ route }) => {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
+      let uploadedUrl = null;
       try {
         const fileUri = result.assets[0].uri;
         const fileName = `group_${conversationId}_${Date.now()}.jpg`;
@@ -123,7 +125,7 @@ const DetailedGroupChatPage = ({ route }) => {
         const presignedUrl = await getPresignedUploadUrl(fileName, "group");
 
         // Step 2: Upload to OSS
-        const uploadedUrl = await uploadFileToOSS(fileUri, presignedUrl);
+        uploadedUrl = await uploadFileToOSS(fileUri, presignedUrl);
 
         // Step 3: Update group icon in backend
         const updatedConversation = await updateGroupIcon(
@@ -146,6 +148,15 @@ const DetailedGroupChatPage = ({ route }) => {
           { text: i18n.t("ok") },
         ]);
       } catch (error) {
+        if (uploadedUrl) {
+          try {
+            await deleteOwnUpload(uploadedUrl, "group");
+          } catch (cleanupError) {
+            if (cleanupError?.response?.status !== 409) {
+              console.warn("Failed to clean up unreferenced group icon:", cleanupError);
+            }
+          }
+        }
         console.error("❌ Failed to change group icon:", error);
         showAlert(i18n.t("error"), i18n.t("updateGroupIconFailed"), [
           { text: i18n.t("ok") },

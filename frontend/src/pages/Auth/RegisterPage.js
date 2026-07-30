@@ -17,6 +17,7 @@ import { registerUser } from "../../service/AuthService";
 import {
   getPresignedUploadUrl,
   uploadFileToOSS,
+  deleteAnonymousUpload,
 } from "../../service/OSSService";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -87,8 +88,6 @@ export default function RegisterPage() {
         fileName,
         fileType
       );
-      console.log("Presigned URL:", presignedUploadUrl);
-
       // Step 2: Upload image to OSS
       const uploadedFileUrl = await uploadFileToOSS(
         profileImage,
@@ -148,8 +147,9 @@ export default function RegisterPage() {
     }
 
     setSubmitting(true);
+    let profileImageUrl = null;
     try {
-      const profileImageUrl = await uploadImageUsingPresignedUrl(
+      profileImageUrl = await uploadImageUsingPresignedUrl(
         "profile",
         email
       ); // Pass the file type as 'profile'
@@ -171,6 +171,15 @@ export default function RegisterPage() {
         navigation.navigate("VerificationCode", { email });
       }
     } catch (error) {
+      if (profileImageUrl) {
+        try {
+          await deleteAnonymousUpload(profileImageUrl);
+        } catch (cleanupError) {
+          if (cleanupError?.response?.status !== 409) {
+            console.warn("Failed to clean up unreferenced registration image:", cleanupError);
+          }
+        }
+      }
       const status = error?.response?.status;
       let message;
       if (status === 403) {
@@ -373,6 +382,9 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 });
+
+/* ================= Marked as unused & deprecated ================= */
+/* ============ S3 is only used by mystry fyp student's project ============ */
 
 // Function to upload image to S3 using the pre-signed URL
 // const uploadImageUsingPresignedUrl = async (fileType) => {

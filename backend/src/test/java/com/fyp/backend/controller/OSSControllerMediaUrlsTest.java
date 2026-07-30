@@ -9,9 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -23,7 +25,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fyp.backend.config.security.JwtAuthenticationFilter;
 import com.fyp.backend.config.security.SpringSecurityConfig;
+import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.ConversationService;
+import com.fyp.backend.service.MediaReferenceService;
 import com.fyp.backend.service.MediaTokenService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.util.JwtUtil;
@@ -50,6 +55,18 @@ class OSSControllerMediaUrlsTest {
     @MockBean private OSSService ossService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private UserRepository userRepository;
+    @MockBean private ConversationService conversationService;
+    @MockBean private MediaReferenceService mediaReferenceService;
+
+    @BeforeEach
+    void authenticatedUser() {
+        User user = new User();
+        user.setId(7L);
+        user.setEmail("user");
+        user.setActive(true);
+        when(userRepository.findByEmail("user")).thenReturn(Optional.of(user));
+        when(conversationService.isUserPartOfConversation(42L, 7L)).thenReturn(true);
+    }
 
     private void assertValidGatewayUrl(String url, String expectedObjectKey) {
         Matcher matcher = GATEWAY_URL.matcher(url);
@@ -61,7 +78,7 @@ class OSSControllerMediaUrlsTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "ADMIN")
     void downloadUrlPointsAtMediaGateway() throws Exception {
         when(ossService.getFolderPath("event")).thenReturn("eventPictures/");
 
@@ -88,6 +105,18 @@ class OSSControllerMediaUrlsTest {
 
     @Test
     @WithMockUser
+    void groupIconDownloadRequiresConversationMembership() throws Exception {
+        when(conversationService.isUserPartOfConversation(99L, 7L)).thenReturn(false);
+
+        mockMvc.perform(get("/oss/presigned-download-url")
+                        .param("fileName", "group.jpg")
+                        .param("fileType", "group")
+                        .param("conversationId", "99"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
     void listPicturesReturnsGatewayUrls() throws Exception {
         Map<String, Object> page = new LinkedHashMap<>();
         page.put("success", true);

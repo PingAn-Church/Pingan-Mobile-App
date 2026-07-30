@@ -6,4 +6,6 @@ import org.springframework.stereotype.Repository;
 import com.fyp.backend.model.Announcement;
 
 @Repository
-public interface AnnouncementRepository extends JpaRepository<Announcement, Long> {}
+public interface AnnouncementRepository extends JpaRepository<Announcement, Long> {
+    boolean existsByImageUrlContaining(String fragment);
+}

@@ -30,6 +30,7 @@ public class RedisService {
     private static final String OTP_VERIFY_FAIL_KEY = "otp_verify_fail:";
     // Pending sign-up held here (not the DB) until the emailed code is confirmed.
     private static final String PENDING_REG_KEY = "pending_reg:";
+    private static final String PENDING_REG_MEDIA_KEY = "pending_reg_media:";
     private static final long PENDING_REG_TTL_HOURS = 24;
     private static final long OTP_SECRET_TTL_HOURS = 24;
     private static final long OTP_COOLDOWN_SECONDS = 60;
@@ -245,5 +246,23 @@ public class RedisService {
     /** Drop the pending sign-up once the account has been materialised. */
     public void deletePendingRegistration(String email) {
         redisTemplate.delete(PENDING_REG_KEY + email);
+    }
+
+    public void markPendingRegistrationMedia(String fileName) {
+        if (fileName != null && !fileName.isBlank()) {
+            redisTemplate.opsForValue().set(
+                    PENDING_REG_MEDIA_KEY + fileName, "1", Duration.ofHours(PENDING_REG_TTL_HOURS));
+        }
+    }
+
+    public boolean isPendingRegistrationMedia(String fileName) {
+        return fileName != null && Boolean.TRUE.equals(
+                redisTemplate.hasKey(PENDING_REG_MEDIA_KEY + fileName));
+    }
+
+    public void clearPendingRegistrationMedia(String fileName) {
+        if (fileName != null && !fileName.isBlank()) {
+            redisTemplate.delete(PENDING_REG_MEDIA_KEY + fileName);
+        }
     }
 }

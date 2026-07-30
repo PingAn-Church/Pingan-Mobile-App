@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import com.fyp.backend.model.Certificate;
 
 public interface CertificateRepository extends JpaRepository<Certificate, Long> {
+    boolean existsByCredentialUrlContaining(String fragment);
 
     List<Certificate> findByUserIdOrderByIssuedAtDesc(Long userId);
 

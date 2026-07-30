@@ -19,6 +19,7 @@ import { startGroupChat } from "../../service/UserService";
 import {
   getPresignedUploadUrl,
   uploadFileToOSS,
+  deleteOwnUpload,
 } from "../../service/OSSService";
 import { UserContext } from "../../context/UserContext";
 import { useNavigation } from "@react-navigation/native";
@@ -102,9 +103,8 @@ const NewGroupScreen = () => {
     }
 
     setSubmitting(true);
+    let groupImageUrl = null;
     try {
-      let groupImageUrl = null;
-
       if (groupImage) {
         groupImageUrl = await uploadGroupImageUsingPresignedUrl(groupName);
         if (!groupImageUrl) throw new Error(i18n.t("imageUploadFailed"));
@@ -132,11 +132,18 @@ const NewGroupScreen = () => {
           });
         }
       } else {
-        showAlert(i18n.t("error"), i18n.t("createGroupFailed"), [
-          { text: i18n.t("ok") },
-        ]);
+        throw new Error(i18n.t("createGroupFailed"));
       }
     } catch (error) {
+      if (groupImageUrl) {
+        try {
+          await deleteOwnUpload(groupImageUrl, "group");
+        } catch (cleanupError) {
+          if (cleanupError?.response?.status !== 409) {
+            console.warn("Failed to clean up unreferenced group icon:", cleanupError);
+          }
+        }
+      }
       showAlert(
         i18n.t("error"),
         error.message || i18n.t("somethingWentWrong"),

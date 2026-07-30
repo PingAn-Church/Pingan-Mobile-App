@@ -127,7 +127,8 @@ public class OSSService {
             request.setContentType(contentType); // Content-Type is part of the signature
 
             URL signedUrl = publicClient().generatePresignedUrl(request);
-            logger.info("Generated Presigned Upload URL with Content-Type " + contentType + ": " + signedUrl);
+            logger.fine("Generated presigned upload URL for " + objectKey
+                    + " with Content-Type " + contentType);
             return signedUrl;
         } catch (Exception e) {
             logger.severe("Error generating presigned upload URL: " + e.getMessage());
@@ -146,7 +147,7 @@ public class OSSService {
             request.setExpiration(expiration);
 
             URL signedUrl = publicClient().generatePresignedUrl(request);
-            logger.info("Generated Presigned Download URL: " + signedUrl);
+            logger.fine("Generated presigned download URL for " + objectKey);
             return signedUrl;
         } catch (Exception e) {
             logger.severe("Error generating presigned download URL: " + e.getMessage());
@@ -259,13 +260,13 @@ public class OSSService {
         }
         final String key = objectKey;
         if (MANAGED_PREFIXES.stream().noneMatch(key::startsWith)) {
-            logger.info("Skipping delete for unmanaged/external URL: " + url);
+            logger.info("Skipping delete for unmanaged or external media location.");
             return;
         }
         try {
             deleteObject(key);
         } catch (Exception e) {
-            logger.warning("Failed to delete OSS object for URL " + url + ": " + e.getMessage());
+            logger.warning("Failed to delete OSS object " + key + ": " + e.getMessage());
         }
     }
 }

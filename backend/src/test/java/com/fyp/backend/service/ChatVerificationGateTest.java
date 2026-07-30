@@ -46,6 +46,7 @@ class ChatVerificationGateTest {
     @Mock private MessageRepository messageRepository;
     @Mock private MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     @Mock private ConversationMuteRepository conversationMuteRepository;
+    @Mock private OssCleanupService ossCleanupService;
 
     @InjectMocks private ConversationService conversationService;
 

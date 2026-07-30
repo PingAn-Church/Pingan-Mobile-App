@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Colors } from "@/constants";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getCourseDetail } from "@/services/courseService";
-import { getPresignedUploadUrl, uploadFileToOSS, deletePicture } from "../../../service/OSSService";
+import { getPresignedUploadUrl, uploadFileToOSS, deleteOwnUpload } from "../../../service/OSSService";
 import * as authoring from "@/services/authoringService";
 import { confirmDestructive, notify } from "@/utils/alerts";
 import {
@@ -57,6 +57,7 @@ export default function CourseEditorScreen() {
   const [description, setDescription] = useState("");
   const [durationHours, setDurationHours] = useState("0");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const pendingCoverUploadRef = useRef<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [tags, setTags] = useState("");
   const [isPublished, setIsPublished] = useState(false);
@@ -122,6 +123,18 @@ export default function CourseEditorScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", () => {
+      const pendingUpload = pendingCoverUploadRef.current;
+      if (!pendingUpload) return;
+      pendingCoverUploadRef.current = null;
+      deleteOwnUpload(pendingUpload, "course").catch((error) =>
+        console.warn("Failed to clean up unsaved course cover upload:", error)
+      );
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const loadAll = async (id: string) => {
     setLoading(true);
     try {
@@ -131,6 +144,7 @@ export default function CourseEditorScreen() {
       setDescription(d.description);
       setDurationHours(String(d.durationHours));
       setThumbnailUrl(d.thumbnailUrl || "");
+      pendingCoverUploadRef.current = null;
       setTags((d.tags || []).join(", "));
       setIsPublished(!!d.isPublished);
       setCategoryName(d.categoryName || "General");
@@ -158,6 +172,18 @@ export default function CourseEditorScreen() {
     categoryName,
   });
 
+  const finalizePendingCoverAfterSave = async () => {
+    const pendingUpload = pendingCoverUploadRef.current;
+    if (!pendingUpload) return;
+    pendingCoverUploadRef.current = null;
+    if (thumbnailUrl.trim() === pendingUpload) return;
+    try {
+      await deleteOwnUpload(pendingUpload, "course");
+    } catch (error) {
+      console.warn("Failed to clean up abandoned course cover upload:", error);
+    }
+  };
+
   const handleSaveCourse = async () => {
     if (!title.trim()) {
       notify(i18n.t("required"), i18n.t("enterCourseTitle"));
@@ -168,6 +194,7 @@ export default function CourseEditorScreen() {
       const cleanOutcomes = outcomes.map((o) => o.trim()).filter(Boolean);
       if (!courseId) {
         const res = await authoring.createCourse(courseBody());
+        await finalizePendingCoverAfterSave();
         const newId = String(res?.data?.id ?? res?.id ?? "");
         if (newId) {
           await authoring.setCourseOutcomes(newId, cleanOutcomes);
@@ -177,11 +204,23 @@ export default function CourseEditorScreen() {
         }
       } else {
         await authoring.updateCourse(courseId, courseBody());
+        await finalizePendingCoverAfterSave();
         await authoring.setCourseOutcomes(courseId, cleanOutcomes);
         await reloadContent(courseId);
       }
       notify(i18n.t("saved"), i18n.t("courseSaved"));
     } catch (e: any) {
+      if (pendingCoverUploadRef.current) {
+        try {
+          await deleteOwnUpload(pendingCoverUploadRef.current, "course");
+          pendingCoverUploadRef.current = null;
+          setThumbnailUrl("");
+        } catch (cleanupError: any) {
+          if (cleanupError?.response?.status !== 409) {
+            console.warn("Failed to clean up unreferenced course cover:", cleanupError);
+          }
+        }
+      }
       notify(i18n.t("error"), e?.message || i18n.t("courseSaveFailed"));
     } finally {
       setSaving(false);
@@ -210,17 +249,17 @@ export default function CourseEditorScreen() {
     });
     if (result.canceled || result.assets.length === 0) return;
     setUploadingCover(true);
-    const previousThumb = thumbnailUrl;
     try {
       const presignedUrl = await getPresignedUploadUrl(`course_cover_${Date.now()}.jpeg`, "course");
       const uploadedUrl = await uploadFileToOSS(result.assets[0].uri, presignedUrl);
+      const previousPendingUpload = pendingCoverUploadRef.current;
+      pendingCoverUploadRef.current = uploadedUrl;
       setThumbnailUrl(uploadedUrl);
-      // Remove the replaced cover from OSS (best-effort; only our uploaded covers).
-      if (previousThumb && previousThumb !== uploadedUrl && previousThumb.includes("coursePictures/")) {
+      if (previousPendingUpload && previousPendingUpload !== uploadedUrl) {
         try {
-          await deletePicture(previousThumb.split("/").pop()!.split("?")[0], "course");
+          await deleteOwnUpload(previousPendingUpload, "course");
         } catch (err) {
-          console.warn("Failed to delete old course cover:", err);
+          console.warn("Failed to clean up superseded course cover upload:", err);
         }
       }
     } catch (e: any) {
@@ -228,6 +267,21 @@ export default function CourseEditorScreen() {
     } finally {
       setUploadingCover(false);
     }
+  };
+
+  const clearCover = () => {
+    const pendingUpload = pendingCoverUploadRef.current;
+    pendingCoverUploadRef.current = null;
+    setThumbnailUrl("");
+    if (pendingUpload) {
+      deleteOwnUpload(pendingUpload, "course").catch((error) =>
+        console.warn("Failed to clean up removed course cover upload:", error)
+      );
+    }
+  };
+
+  const changeThumbnailUrl = (value: string) => {
+    setThumbnailUrl(value);
   };
 
   // ---- categories ---------------------------------------------------
@@ -580,13 +634,13 @@ export default function CourseEditorScreen() {
           </Text>
         </TouchableOpacity>
         {!!thumbnailUrl && !uploadingCover && (
-          <TouchableOpacity style={styles.coverBtn} onPress={() => setThumbnailUrl("")}>
+          <TouchableOpacity style={styles.coverBtn} onPress={clearCover}>
             <Ionicons name="trash-outline" size={18} color={Colors.red} />
             <Text style={[styles.coverBtnText, { color: Colors.red }]}>{i18n.t("remove")}</Text>
           </TouchableOpacity>
         )}
       </View>
-      <TextInput style={styles.input} value={thumbnailUrl} onChangeText={setThumbnailUrl} placeholder={i18n.t("pasteImageUrl")} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+      <TextInput style={styles.input} value={thumbnailUrl} onChangeText={changeThumbnailUrl} placeholder={i18n.t("pasteImageUrl")} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
 
       <Text style={styles.label}>{i18n.t("tagsLabel")}</Text>
       <TextInput style={styles.input} value={tags} onChangeText={setTags} placeholder={i18n.t("tagsExample")} placeholderTextColor={Colors.textMuted} autoCapitalize="none" />

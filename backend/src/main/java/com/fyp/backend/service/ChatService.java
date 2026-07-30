@@ -15,8 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,7 +32,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     private final SimpMessagingTemplate messagingTemplate;
-    private final OSSService ossService;
+    private final OssCleanupService ossCleanupService;
     private final RedisService redisService;
     private final MessagePublisher messagePublisher;
     private final PushNotificationService pushNotificationService;
@@ -48,7 +46,7 @@ public class ChatService {
                        PrivateConversationRepository privateConversationRepository,
                        UserRepository userRepository,
                        MessageDeliveryStatusRepository messageDeliveryStatusRepository, SimpMessagingTemplate messagingTemplate,
-                       OSSService ossService,
+                       OssCleanupService ossCleanupService,
                        RedisService redisService,
                        MessagePublisher messagePublisher,
                        PushNotificationService pushNotificationService,
@@ -61,7 +59,7 @@ public class ChatService {
         this.userRepository = userRepository;
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
         this.messagingTemplate = messagingTemplate;
-        this.ossService = ossService;
+        this.ossCleanupService = ossCleanupService;
         this.redisService = redisService;
         this.messagePublisher = messagePublisher;
         this.pushNotificationService = pushNotificationService;
@@ -331,13 +329,23 @@ public class ChatService {
         return savedMessage;
     }
 
-    public void updateMessageStatus(Long messageId, Long userId, String status) {
-        MessageDeliveryStatus deliveryStatus = getDeliveryStatus(messageId, userId);
-        if (deliveryStatus != null) {
-            deliveryStatus.setStatus(status);
-            deliveryStatus.setTimestamp(new Timestamp(System.currentTimeMillis()));
-            messageDeliveryStatusRepository.save(deliveryStatus);
+    @Transactional
+    public String updateMessageStatusAuthorized(Long messageId, Long conversationId, Long userId, String status) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        if (!conversationId.equals(message.getConversation().getId())) {
+            throw new IllegalArgumentException("Message does not belong to this conversation");
         }
+        checkUserIsParticipant(message.getConversation(), userId);
+
+        MessageDeliveryStatus deliveryStatus = getDeliveryStatus(messageId, userId);
+        if (deliveryStatus == null) {
+            throw new IllegalArgumentException("No delivery status exists for this user");
+        }
+        deliveryStatus.setStatus(status);
+        deliveryStatus.setTimestamp(new Timestamp(System.currentTimeMillis()));
+        messageDeliveryStatusRepository.save(deliveryStatus);
+        return message.getConversationType();
     }
 
     /**
@@ -449,15 +457,6 @@ public class ChatService {
         return deletedMessageDto;
     }
 
-    private String extractObjectKeyFromUrl(String url) {
-        try {
-            URL parsedUrl = new URL(url);
-            return parsedUrl.getPath().substring(1); // remove leading '/'
-        } catch (MalformedURLException e) {
-            throw new RuntimeException("Invalid OSS URL format");
-        }
-    }
-
     @Transactional
     public MessageDto deleteMessageAndBroadcast(Long messageId) {
         Message message = messageRepository.findById(messageId)
@@ -466,29 +465,29 @@ public class ChatService {
         MessageDto deletedMessageDto = new MessageDto(message);
         deletedMessageDto.setDeleted(true);
 
-        boolean isImage = "image".equalsIgnoreCase(message.getType());
-        String imageContent = message.getContent();
+        boolean hasManagedMedia = "image".equalsIgnoreCase(message.getType())
+                || "voice".equalsIgnoreCase(message.getType());
+        String mediaContent = message.getContent();
+        int metadataSeparator = mediaContent == null ? -1 : mediaContent.indexOf('|');
+        String mediaUrl = metadataSeparator >= 0
+                ? mediaContent.substring(0, metadataSeparator)
+                : mediaContent;
 
         messageRepository.delete(message);
         List<String> destinations = getDestination(message.getConversationType(), deletedMessageDto);
 
-        // ✅ Defer OSS cleanup and broadcasting until the delete has committed —
-        // removing the object first would orphan-delete the image on rollback.
+        // Broadcast only after the database delete commits.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                if (isImage) {
-                    try {
-                        ossService.deleteObject(extractObjectKeyFromUrl(imageContent));
-                    } catch (Exception e) {
-                        System.err.println("❌ Failed to delete OSS object for message " + messageId + ": " + e.getMessage());
-                    }
-                }
                 for (String destination : destinations) {
                     messagingTemplate.convertAndSend(destination, deletedMessageDto);
                 }
             }
         });
+        if (hasManagedMedia && mediaUrl != null && !mediaUrl.isBlank()) {
+            ossCleanupService.deleteAfterCommit(mediaUrl);
+        }
 
         return deletedMessageDto;
     }

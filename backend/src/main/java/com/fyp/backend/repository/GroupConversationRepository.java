@@ -12,6 +12,7 @@ import java.util.Optional;
 
 @Repository
 public interface GroupConversationRepository extends JpaRepository<GroupConversation, Long> {
+    boolean existsByGroupIconContaining(String fragment);
     @EntityGraph(attributePaths = {"participants"})
     Optional<GroupConversation> findById(Long id);
 

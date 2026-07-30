@@ -6,7 +6,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.net.URL;
+import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -18,7 +20,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fyp.backend.config.security.JwtAuthenticationFilter;
 import com.fyp.backend.config.security.SpringSecurityConfig;
+import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.ConversationService;
+import com.fyp.backend.service.MediaReferenceService;
 import com.fyp.backend.service.MediaTokenService;
 import com.fyp.backend.service.OSSService;
 import com.fyp.backend.util.JwtUtil;
@@ -37,9 +42,21 @@ class OSSControllerLegacyPresignTest {
     @MockBean private OSSService ossService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private UserRepository userRepository;
+    @MockBean private ConversationService conversationService;
+    @MockBean private MediaReferenceService mediaReferenceService;
+
+    @BeforeEach
+    void authenticatedUser() {
+        User user = new User();
+        user.setId(7L);
+        user.setEmail("user");
+        user.setActive(true);
+        when(userRepository.findByEmail("user")).thenReturn(Optional.of(user));
+        when(conversationService.isUserPartOfConversation(42L, 7L)).thenReturn(true);
+    }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "ADMIN")
     void downloadUrlFallsBackToOssPresignedUrl() throws Exception {
         when(ossService.getFolderPath("event")).thenReturn("eventPictures/");
         when(ossService.generatePresignedDownloadUrl("eventPictures/pic.jpg", 60))

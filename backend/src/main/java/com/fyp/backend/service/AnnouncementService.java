@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.fyp.backend.model.Announcement;
 import com.fyp.backend.repository.AnnouncementRepository;
@@ -17,9 +18,12 @@ public class AnnouncementService {
     private static final int MAX_ANNOUNCEMENTS = 20;
 
     private final AnnouncementRepository announcementRepository;
+    private final OssCleanupService ossCleanupService;
 
-    public AnnouncementService(AnnouncementRepository announcementRepository) {
+    public AnnouncementService(AnnouncementRepository announcementRepository,
+                               OssCleanupService ossCleanupService) {
         this.announcementRepository = announcementRepository;
+        this.ossCleanupService = ossCleanupService;
     }
 
     public List<Announcement> getAllAnnouncements() {
@@ -62,11 +66,12 @@ public class AnnouncementService {
         }
     }
 
+    @Transactional
     public void deleteAnnouncement(Long id) {
         Announcement announcement = announcementRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Announcement not found"));
 
-        // Remove from database
-        announcementRepository.deleteById(id);
+        announcementRepository.delete(announcement);
+        ossCleanupService.deleteAfterCommit(announcement.getImageUrl());
     }
 }
