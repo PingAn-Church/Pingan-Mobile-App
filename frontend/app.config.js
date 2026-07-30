@@ -20,6 +20,14 @@ export default {
       ios: {
         supportsTablet: true,
         buildNumber: "10000",
+        // Push entitlement. It used to live only in the generated
+        // ios/frontend.entitlements, which `expo prebuild --clean` rebuilds from
+        // this config — so a regeneration silently dropped it and killed iOS
+        // push. "development" is what a local `expo run:ios` needs; EAS Build
+        // overrides it from the provisioning profile for release builds.
+        entitlements: {
+          "aps-environment": "development",
+        },
         infoPlist: {
           // orientation: "default" above would otherwise let prebuild write all
           // four orientations for iPhone too. Spelling them out here keeps the
