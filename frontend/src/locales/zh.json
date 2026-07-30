@@ -713,5 +713,7 @@
   "postAnonymously": "匿名发布",
   "updateReview": "更新评价",
   "submitReview": "提交评价",
-  "tagsExample": "敬拜, 祷告"
+  "tagsExample": "敬拜, 祷告",
+  "loadActivityFailed": "活动加载失败。",
+  "loadPicturesFailed": "图片加载失败。"
 }

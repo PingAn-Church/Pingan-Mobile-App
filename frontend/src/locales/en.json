@@ -713,5 +713,7 @@
   "postAnonymously": "Post anonymously",
   "updateReview": "Update Review",
   "submitReview": "Submit Review",
-  "tagsExample": "worship, prayer"
+  "tagsExample": "worship, prayer",
+  "loadActivityFailed": "Failed to load activities.",
+  "loadPicturesFailed": "Failed to load pictures."
 }

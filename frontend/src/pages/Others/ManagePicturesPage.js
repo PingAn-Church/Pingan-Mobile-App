@@ -31,6 +31,7 @@ export default function ManagePicturesPage() {
   const [marker, setMarker] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const { language } = useContext(LanguageContext);
   const { width } = useWindowDimensions();
   // 3 columns on wide screens (tablets/desktop), 2 otherwise; the list is
@@ -53,6 +54,7 @@ export default function ManagePicturesPage() {
   const loadPictures = async (replace = false) => {
     if (!replace && (loading || !hasMore)) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const response = await fetchPictures("event", {
         size: 20,
@@ -66,6 +68,7 @@ export default function ManagePicturesPage() {
       setHasMore(Boolean(response?.pagination?.hasMore));
     } catch (error) {
       console.error("Error fetching pictures:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -105,8 +108,32 @@ export default function ManagePicturesPage() {
         numColumns={numColumns}
         onEndReached={() => loadPictures(false)}
         onEndReachedThreshold={0.3}
-        ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
-        ListEmptyComponent={!loading ? <Text style={styles.noPicturesText}>{i18n.t("noPics")}</Text> : null}
+        ListFooterComponent={
+          loading ? (
+            <ActivityIndicator style={{ marginVertical: 16 }} />
+          ) : loadError && pictures.length > 0 ? (
+            <View style={styles.errorState}>
+              <Text style={styles.noPicturesText}>{i18n.t("loadPicturesFailed")}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={() => loadPictures(false)}>
+                <Text style={styles.retryText}>{i18n.t("tryAgain")}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          !loading ? (
+            loadError ? (
+              <View style={styles.errorState}>
+                <Text style={styles.noPicturesText}>{i18n.t("loadPicturesFailed")}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={() => loadPictures(true)}>
+                  <Text style={styles.retryText}>{i18n.t("tryAgain")}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.noPicturesText}>{i18n.t("noPics")}</Text>
+            )
+          ) : null
+        }
         renderItem={({ item: picture }) => (
             <View
               style={[
@@ -342,5 +369,20 @@ const styles = StyleSheet.create({
     color: "gray",
     marginTop: 20,
     textAlign: "center",
+  },
+  errorState: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  retryButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    marginTop: 10,
+  },
+  retryText: {
+    color: "white",
+    fontWeight: "600",
   },
 });

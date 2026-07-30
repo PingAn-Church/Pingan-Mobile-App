@@ -36,6 +36,7 @@ export default function MyActivityPage() {
   const [upcomingEvents, setUpcomingEvents] = useState(emptyPage);
   const [pastEvents, setPastEvents] = useState(emptyPage);
   const [eventPictures, setEventPictures] = useState(emptyPage);
+  const [tabErrors, setTabErrors] = useState({});
   const { user } = useContext(UserContext);
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
@@ -65,6 +66,7 @@ export default function MyActivityPage() {
       const current = tab === "Upcoming" ? upcomingEvents : tab === "Past" ? pastEvents : eventPictures;
       if (!replace && (current.loading || !current.hasMore)) return;
 
+      setTabErrors((prev) => ({ ...prev, [tab]: false }));
       setPageForTab(tab, (prev) => ({ ...prev, loading: true }));
       try {
         if (tab === "Photos") {
@@ -101,6 +103,7 @@ export default function MyActivityPage() {
         }));
       } catch (error) {
         console.error("Failed to load activity page:", error);
+        setTabErrors((prev) => ({ ...prev, [tab]: true }));
         setPageForTab(tab, (prev) => ({ ...prev, loading: false }));
       }
     },
@@ -113,6 +116,7 @@ export default function MyActivityPage() {
       setUpcomingEvents(emptyPage());
       setPastEvents(emptyPage());
       setEventPictures(emptyPage());
+      setTabErrors({});
       loadTab(activeTab, true);
     }, [activeTab, user?.id, user?.verifiedUser])
   );
@@ -216,12 +220,32 @@ export default function MyActivityPage() {
         if (!pageForTab.loading && pageForTab.hasMore) loadTab(activeTab, false);
       }}
       onEndReachedThreshold={0.3}
-      ListFooterComponent={pageForTab.loading ? <ActivityIndicator style={{ marginVertical: 18 }} /> : null}
+      ListFooterComponent={
+        pageForTab.loading ? (
+          <ActivityIndicator style={{ marginVertical: 18 }} />
+        ) : tabErrors[activeTab] && pageForTab.items.length > 0 ? (
+          <View style={styles.errorState}>
+            <Text style={styles.noText}>{i18n.t("loadActivityFailed")}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => loadTab(activeTab, false)}>
+              <Text style={styles.retryText}>{i18n.t("tryAgain")}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null
+      }
       ListEmptyComponent={
         !pageForTab.loading ? (
-          <Text style={styles.noText}>
-            {activeTab === "Photos" ? i18n.t("noPhotos") : i18n.t("noEvents")}
-          </Text>
+          tabErrors[activeTab] ? (
+            <View style={styles.errorState}>
+              <Text style={styles.noText}>{i18n.t("loadActivityFailed")}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={() => loadTab(activeTab, true)}>
+                <Text style={styles.retryText}>{i18n.t("tryAgain")}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={styles.noText}>
+              {activeTab === "Photos" ? i18n.t("noPhotos") : i18n.t("noEvents")}
+            </Text>
+          )
         ) : null
       }
     />
@@ -291,6 +315,20 @@ const styles = StyleSheet.create({
     color: "gray",
     marginTop: 20,
     marginBottom: 20,
+  },
+  errorState: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  retryButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  retryText: {
+    color: "white",
+    fontWeight: "600",
   },
   // Width follows the live column count (see numColumns), not the platform,
   // so rotation/resize can move between 2 and 3 columns without overflow.
