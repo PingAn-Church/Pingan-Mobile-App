@@ -15,16 +15,32 @@ import { UserContext } from "../../context/UserContext";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { fetchPictures } from "../../service/OSSService";
 import i18n from "../../../i18n";
-import { Directory, File, Paths } from "expo-file-system";
 import { Ionicons } from "@expo/vector-icons";
 import { showAlert } from "../../utils/showAlert";
 import {
   MEDIA_LIBRARY_PERMISSION_DENIED,
-  saveImageToLibrary,
+  downloadImageToLibrary,
 } from "../../utils/mediaLibrary";
 
 const EVENT_PAGE_SIZE = 20;
 const PHOTO_PAGE_SIZE = 30;
+
+const pad = (value) => String(value).padStart(2, "0");
+
+/**
+ * Gallery name for a saved event photo, e.g. "event-photo-20260802-153045.jpg".
+ * The stored object keys are opaque (owner prefix + random token), so a local
+ * timestamp is both friendlier to read and naturally sorted in the gallery.
+ */
+const buildEventPhotoFileName = (uri) => {
+  const extension = String(uri || "").split(/[?#]/)[0].split(".").pop()?.toLowerCase();
+  const safeExtension = /^[a-z0-9]{1,5}$/.test(extension || "") ? extension : "jpg";
+  const now = new Date();
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `event-photo-${stamp}.${safeExtension}`;
+};
 
 const emptyPage = () => ({
   items: [],
@@ -141,20 +157,8 @@ export default function MyActivityPage() {
         return;
       }
 
-      const downloadDirectory = new Directory(Paths.cache, "event-downloads");
-      downloadDirectory.create({ idempotent: true, intermediates: true });
-      const targetFile = new File(downloadDirectory, `event_${Date.now()}.jpg`);
-      let downloadedFile = null;
-      try {
-        downloadedFile = await File.downloadFileAsync(uri, targetFile, { idempotent: true });
-        await saveImageToLibrary(downloadedFile.uri);
-        showAlert(i18n.t("success"), i18n.t("saveImageSuccess"));
-      } finally {
-        const temporaryFile = downloadedFile ?? targetFile;
-        if (temporaryFile.exists) {
-          temporaryFile.delete();
-        }
-      }
+      await downloadImageToLibrary(uri, buildEventPhotoFileName(uri));
+      showAlert(i18n.t("success"), i18n.t("saveImageSuccess"));
     } catch (error) {
       console.error("Download error:", error);
       showAlert(

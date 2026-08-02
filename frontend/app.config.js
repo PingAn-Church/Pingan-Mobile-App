@@ -1,5 +1,19 @@
 import 'dotenv/config'
 
+// Single source for the iOS photo-library prompts. Three places declare these
+// keys — ios.infoPlist, the expo-image-picker plugin and the expo-media-library
+// plugin — and whichever wins at prebuild time is an implementation detail of
+// mod ordering. Pointing all of them at the same constants means the generated
+// Info.plist reads the same either way, instead of three strings drifting apart.
+//
+// Reading the library is never prompted for: both pickers use the system photo
+// picker, so only the file the user selects reaches the app. The add-only
+// prompt is the one users actually see, when saving an image to their gallery.
+const PHOTO_LIBRARY_USAGE_DESCRIPTION =
+  "We need access to your photo library so you can choose images to upload.";
+const PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION =
+  "We need permission to save images to your photo library.";
+
 export default {
     expo: {
       name: "Ping An",
@@ -43,10 +57,8 @@ export default {
             "UIInterfaceOrientationLandscapeLeft",
             "UIInterfaceOrientationLandscapeRight",
           ],
-          NSPhotoLibraryUsageDescription:
-            "We need access to your photo library to upload profile images.",
-          NSPhotoLibraryAddUsageDescription:
-            "We need permission to save images to your photo library.",
+          NSPhotoLibraryUsageDescription: PHOTO_LIBRARY_USAGE_DESCRIPTION,
+          NSPhotoLibraryAddUsageDescription: PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION,
           NSMicrophoneUsageDescription:
             "We need access to your microphone to record voice messages.",
         },
@@ -98,15 +110,19 @@ export default {
         [
           "expo-image-picker",
           {
-            photosPermission: "We need access to your photo library to upload images.",
+            photosPermission: PHOTO_LIBRARY_USAGE_DESCRIPTION,
+            // false also blocks android.permission.CAMERA — nothing in the app
+            // calls launchCameraAsync, so neither platform asks for the camera.
             cameraPermission: false,
           },
         ],
         [
           "expo-media-library",
           {
-            photosPermission: "We need access to your photo library.",
-            savePhotosPermission: "We need permission to save images to your photo library.",
+            photosPermission: PHOTO_LIBRARY_USAGE_DESCRIPTION,
+            savePhotosPermission: PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION,
+            // No READ_MEDIA_* permissions: media is only ever selected through
+            // the system photo picker, which needs none of them.
             granularPermissions: [],
           },
         ],

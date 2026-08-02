@@ -46,7 +46,7 @@ export const TERMS_COPY = {
       {
         title: "5. Privacy, permissions, and data",
         body:
-          "The app may collect and process registration details, profile information, event and application records, check-ins, learning progress, messages, user-submitted media, device information needed for push notifications, and files you choose to upload. We use this data to provide the app, keep accounts secure, notify users, support administration, and improve reliability. We do not sell personal data. Photos, voice messages, and other files may be stored with cloud service providers and may be cached on your device for faster loading. Camera, photo library, microphone, and notification permissions are requested only when needed for app features.",
+          "The app may collect and process registration details, profile information, event and application records, check-ins, learning progress, messages, user-submitted media, device information needed for push notifications, and files you choose to upload. We use this data to provide the app, keep accounts secure, notify users, support administration, and improve reliability. We do not sell personal data. Photos, voice messages, and other files may be stored with cloud service providers and may be cached on your device for faster loading. The app does not use your camera and never asks to read your photo library: pictures are chosen through your device's own photo picker, so only the images you pick are shared with the app. Permission is requested only to save an image to your gallery, to record a voice message, and to send notifications.",
       },
       {
         title: "6. Third-party links and services",
@@ -106,7 +106,7 @@ export const TERMS_COPY = {
       {
         title: "5. 隐私、权限与数据",
         body:
-          "本 App 可能收集和处理注册信息、个人资料、活动和申请记录、签到记录、学习进度、消息、用户上传的媒体、推送通知所需的设备信息，以及你选择上传的文件。我们使用这些数据来提供 App 功能、保障账户安全、发送通知、支持管理工作并提升可靠性。我们不会出售个人数据。照片、语音消息和其他文件可能存储在云服务提供商处，也可能缓存在你的设备上以加快加载速度。相机、照片库、麦克风和通知权限只会在相关功能需要时请求。",
+          "本 App 可能收集和处理注册信息、个人资料、活动和申请记录、签到记录、学习进度、消息、用户上传的媒体、推送通知所需的设备信息，以及你选择上传的文件。我们使用这些数据来提供 App 功能、保障账户安全、发送通知、支持管理工作并提升可靠性。我们不会出售个人数据。照片、语音消息和其他文件可能存储在云服务提供商处，也可能缓存在你的设备上以加快加载速度。本 App 不使用相机，也不会请求读取你的照片库：图片通过设备自带的照片选择器选取，因此只有你选中的图片会提供给 App。仅在将图片保存到相册、录制语音消息以及发送通知时才会请求相应权限。",
       },
       {
         title: "6. 第三方链接与服务",

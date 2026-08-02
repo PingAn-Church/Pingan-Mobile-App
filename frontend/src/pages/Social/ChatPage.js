@@ -20,7 +20,6 @@ import {
   Easing,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -31,6 +30,7 @@ import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
   MEDIA_LIBRARY_PERMISSION_DENIED,
+  downloadImageToLibrary,
   saveImageToLibrary,
 } from "../../utils/mediaLibrary";
 import { isTranslationEnabled, translateText } from "../../service/TranslateService";
@@ -1446,7 +1446,6 @@ export default function ChatPage({ route }) {
     }
 
     const fileName = buildChatImageFileName(message, uri);
-    const tempFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${fileName}`;
 
     if (Platform.OS === "web") {
       const anchor = document.createElement("a");
@@ -1465,19 +1464,7 @@ export default function ChatPage({ route }) {
       return;
     }
 
-    const downloadDirectory = new Directory(Paths.cache, "chat-downloads");
-    downloadDirectory.create({ idempotent: true, intermediates: true });
-    const targetFile = new File(downloadDirectory, tempFileName);
-    let downloadedFile = null;
-    try {
-      downloadedFile = await File.downloadFileAsync(uri, targetFile, { idempotent: true });
-      await saveImageToLibrary(downloadedFile.uri);
-    } finally {
-      const temporaryFile = downloadedFile ?? targetFile;
-      if (temporaryFile.exists) {
-        temporaryFile.delete();
-      }
-    }
+    await downloadImageToLibrary(uri, fileName);
   };
 
   // (chat image rendering lives in the module-level <ChatImage> component above)
