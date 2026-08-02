@@ -45,8 +45,6 @@ export default {
           ],
           NSPhotoLibraryUsageDescription:
             "We need access to your photo library to upload profile images.",
-          NSCameraUsageDescription:
-            "We need access to your camera to take profile pictures.",
           NSPhotoLibraryAddUsageDescription:
             "We need permission to save images to your photo library.",
           NSMicrophoneUsageDescription:
@@ -64,11 +62,16 @@ export default {
           backgroundColor: "#FFFFFF",
         },
         permissions: [
-          "CAMERA",
-          "READ_EXTERNAL_STORAGE",
           "WRITE_EXTERNAL_STORAGE",
           "RECORD_AUDIO",
           "MODIFY_AUDIO_SETTINGS",
+        ],
+        blockedPermissions: [
+          "android.permission.READ_EXTERNAL_STORAGE",
+          "android.permission.READ_MEDIA_IMAGES",
+          "android.permission.READ_MEDIA_VIDEO",
+          "android.permission.READ_MEDIA_AUDIO",
+          "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         ],
         package: "org.pingan.app",
         versionCode: 10000,
@@ -92,6 +95,22 @@ export default {
         // outside Expo Go.
         "expo-asset",
         "expo-image",
+        [
+          "expo-image-picker",
+          {
+            photosPermission: "We need access to your photo library to upload images.",
+            cameraPermission: false,
+          },
+        ],
+        [
+          "expo-media-library",
+          {
+            photosPermission: "We need access to your photo library.",
+            savePhotosPermission: "We need permission to save images to your photo library.",
+            granularPermissions: [],
+          },
+        ],
+        "./plugins/withAndroidMediaPermissions",
         "expo-localization",
         "expo-status-bar",
         "@react-native-community/datetimepicker",

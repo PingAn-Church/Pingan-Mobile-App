@@ -242,7 +242,7 @@ export default function CourseEditorScreen() {
   // ---- cover image --------------------------------------------------
   const handlePickCover = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [2, 1],
       quality: 0.8,

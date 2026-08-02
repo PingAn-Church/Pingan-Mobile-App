@@ -15,10 +15,13 @@ import { UserContext } from "../../context/UserContext";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { fetchPictures } from "../../service/OSSService";
 import i18n from "../../../i18n";
-import * as FileSystem from "expo-file-system/legacy";
-import * as MediaLibrary from "expo-media-library";
+import { Directory, File, Paths } from "expo-file-system";
 import { Ionicons } from "@expo/vector-icons";
 import { showAlert } from "../../utils/showAlert";
+import {
+  MEDIA_LIBRARY_PERMISSION_DENIED,
+  saveImageToLibrary,
+} from "../../utils/mediaLibrary";
 
 const EVENT_PAGE_SIZE = 20;
 const PHOTO_PAGE_SIZE = 30;
@@ -138,22 +141,28 @@ export default function MyActivityPage() {
         return;
       }
 
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== "granted") {
-        showAlert("Permission Denied", "Please allow gallery access.");
-        return;
-      }
-
-      const fileUri = FileSystem.documentDirectory + `event_${Date.now()}.jpg`;
-      const downloadResult = await FileSystem.downloadAsync(uri, fileUri);
-
-      if (downloadResult && downloadResult.uri) {
-        await MediaLibrary.createAssetAsync(downloadResult.uri);
-        showAlert("Success", "Image saved to gallery!");
+      const downloadDirectory = new Directory(Paths.cache, "event-downloads");
+      downloadDirectory.create({ idempotent: true, intermediates: true });
+      const targetFile = new File(downloadDirectory, `event_${Date.now()}.jpg`);
+      let downloadedFile = null;
+      try {
+        downloadedFile = await File.downloadFileAsync(uri, targetFile, { idempotent: true });
+        await saveImageToLibrary(downloadedFile.uri);
+        showAlert(i18n.t("success"), i18n.t("saveImageSuccess"));
+      } finally {
+        const temporaryFile = downloadedFile ?? targetFile;
+        if (temporaryFile.exists) {
+          temporaryFile.delete();
+        }
       }
     } catch (error) {
       console.error("Download error:", error);
-      showAlert("Error", "Failed to save image.");
+      showAlert(
+        i18n.t("error"),
+        error?.message === MEDIA_LIBRARY_PERMISSION_DENIED
+          ? i18n.t("needPhotoAccess")
+          : i18n.t("saveImageFailed")
+      );
     }
   };
 

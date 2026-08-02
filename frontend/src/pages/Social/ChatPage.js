@@ -22,7 +22,6 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import * as MediaLibrary from "expo-media-library";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,6 +29,10 @@ import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import defaultProfileImage from "../../../assets/user.png";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
+import {
+  MEDIA_LIBRARY_PERMISSION_DENIED,
+  saveImageToLibrary,
+} from "../../utils/mediaLibrary";
 import { isTranslationEnabled, translateText } from "../../service/TranslateService";
 import { UserContext } from "../../context/UserContext";
 import { ChatContext } from "../../context/ChatContext";
@@ -1457,21 +1460,24 @@ export default function ChatPage({ route }) {
       return;
     }
 
-    const permission = await MediaLibrary.requestPermissionsAsync(false, ["photo"]);
-    if (!permission.granted) {
-      throw new Error("Media library permission denied");
-    }
-
     if (String(uri).startsWith("file://")) {
-      await MediaLibrary.saveToLibraryAsync(uri);
+      await saveImageToLibrary(uri);
       return;
     }
 
     const downloadDirectory = new Directory(Paths.cache, "chat-downloads");
     downloadDirectory.create({ idempotent: true, intermediates: true });
     const targetFile = new File(downloadDirectory, tempFileName);
-    const downloadedFile = await File.downloadFileAsync(uri, targetFile, { idempotent: true });
-    await MediaLibrary.saveToLibraryAsync(downloadedFile.uri);
+    let downloadedFile = null;
+    try {
+      downloadedFile = await File.downloadFileAsync(uri, targetFile, { idempotent: true });
+      await saveImageToLibrary(downloadedFile.uri);
+    } finally {
+      const temporaryFile = downloadedFile ?? targetFile;
+      if (temporaryFile.exists) {
+        temporaryFile.delete();
+      }
+    }
   };
 
   // (chat image rendering lives in the module-level <ChatImage> component above)
@@ -1481,7 +1487,7 @@ export default function ChatPage({ route }) {
     if (!currentUser?.id || !conversationId || !conversationType) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       quality: 1,
     });
 
@@ -1718,7 +1724,7 @@ export default function ChatPage({ route }) {
         } catch (error) {
           showAlert(
             i18n.t("error"),
-            error?.message === "Media library permission denied"
+            error?.message === MEDIA_LIBRARY_PERMISSION_DENIED
               ? i18n.t("needPhotoAccess")
               : i18n.t("saveImageFailed")
           );
@@ -1951,16 +1957,8 @@ export default function ChatPage({ route }) {
 
   const handlePickNewGroupImage = async () => {
     try {
-      if (Platform.OS !== "web") {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          showAlert(i18n.t("error"), i18n.t("needPhotoAccess"), [{ text: i18n.t("ok") }]);
-          return;
-        }
-      }
-
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         quality: 0.9,
       });
@@ -2385,7 +2383,7 @@ export default function ChatPage({ route }) {
                   } catch (error) {
                     showAlert(
                       i18n.t("error"),
-                      error?.message === "Media library permission denied"
+                      error?.message === MEDIA_LIBRARY_PERMISSION_DENIED
                         ? i18n.t("needPhotoAccess")
                         : i18n.t("saveImageFailed")
                     );
