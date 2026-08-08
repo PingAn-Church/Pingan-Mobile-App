@@ -115,6 +115,36 @@ class OSSControllerMediaUrlsTest {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * Clients released before the conversationId parameter existed ask for a group
+     * icon by file name alone; the icon has to resolve to a group they belong to.
+     */
+    @Test
+    @WithMockUser
+    void groupIconDownloadFallsBackToIconOwnershipWhenNoConversationId() throws Exception {
+        when(ossService.getFolderPath("group")).thenReturn("groupProfilePictures/");
+        when(conversationService.isUserInGroupWithIcon("u3_team_abc.jpg", 7L)).thenReturn(true);
+
+        String body = mockMvc.perform(get("/oss/presigned-download-url")
+                        .param("fileName", "u3_team_abc.jpg")
+                        .param("fileType", "group"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertValidGatewayUrl(body, "groupProfilePictures/u3_team_abc.jpg");
+    }
+
+    @Test
+    @WithMockUser
+    void groupIconDownloadWithoutConversationIdStillRefusesNonMembers() throws Exception {
+        when(conversationService.isUserInGroupWithIcon("someone_else.jpg", 7L)).thenReturn(false);
+
+        mockMvc.perform(get("/oss/presigned-download-url")
+                        .param("fileName", "someone_else.jpg")
+                        .param("fileType", "group"))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     @WithMockUser(roles = "ADMIN")
     void listPicturesReturnsGatewayUrls() throws Exception {

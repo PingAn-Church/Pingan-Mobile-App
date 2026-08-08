@@ -186,10 +186,11 @@ public class OSSController {
             @RequestParam(required = false) Long conversationId,
             Authentication authentication) {
         try {
-            if (!canDownload(fileType, conversationId, authentication)) {
+            String safeFileName = requireSimpleFileName(fileName);
+            if (!canDownload(fileType, safeFileName, conversationId, authentication)) {
                 return ResponseEntity.status(403).body("You are not allowed to download this media type.");
             }
-            String objectKey = ossService.getFolderPath(fileType) + requireSimpleFileName(fileName);
+            String objectKey = ossService.getFolderPath(fileType) + safeFileName;
             String downloadUrl = downloadUrlFor(objectKey);
             return ResponseEntity.ok(downloadUrl);
         } catch (IllegalArgumentException e) {
@@ -256,15 +257,20 @@ public class OSSController {
         };
     }
 
-    private boolean canDownload(String fileType, Long conversationId, Authentication authentication) {
+    private boolean canDownload(String fileType, String fileName, Long conversationId,
+            Authentication authentication) {
         Long userId = authenticatedUserId(authentication);
         if (userId == null) {
             return false;
         }
         return switch (fileType) {
             case "profile" -> true;
+            // conversationId is the current contract, but clients released before it
+            // existed send only the file name; fall back to resolving the group from
+            // the icon itself so their group avatars keep loading.
             case "group" -> conversationId != null
-                    && conversationService.isUserPartOfConversation(conversationId, userId);
+                    ? conversationService.isUserPartOfConversation(conversationId, userId)
+                    : conversationService.isUserInGroupWithIcon(fileName, userId);
             case "event", "other" -> hasRole(authentication, "ADMIN");
             case "document" -> hasRole(authentication, "INSTRUCTOR");
             // Public course covers and announcements must use /public-download-url.

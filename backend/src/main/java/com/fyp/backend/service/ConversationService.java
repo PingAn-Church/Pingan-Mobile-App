@@ -156,6 +156,30 @@ public class ConversationService {
         return false;
     }
 
+    /**
+     * Whether the user belongs to a group whose icon is the named object.
+     *
+     * Backwards compatibility for clients released before the group
+     * download-signing endpoint took a conversationId: they ask for a group icon
+     * by file name alone. The name embeds a server-generated UUID, so resolving
+     * membership through it grants no more than passing the id would.
+     */
+    public boolean isUserInGroupWithIcon(String iconFileName, Long userId) {
+        if (iconFileName == null || userId == null) {
+            return false;
+        }
+        // Uploaded names are normalised to this alphabet, so anything else is not a
+        // real object name — refuse it rather than let '%' match every group the
+        // caller belongs to.
+        if (!iconFileName.matches("[A-Za-z0-9._-]{1,255}")) {
+            return false;
+        }
+        // '_' survives that check because it is legal in an object name, but it is
+        // also a LIKE single-character wildcard, so it still has to be escaped.
+        String escaped = iconFileName.replace("!", "!!").replace("_", "!_");
+        return groupConversationRepository.isParticipantOfGroupWithIcon(userId, escaped);
+    }
+
     public String getConversationType(Long conversationId) {
         if (groupConversationRepository.findById(conversationId).isPresent()) {
             return "group";

@@ -39,4 +39,16 @@ public interface GroupConversationRepository extends JpaRepository<GroupConversa
     // (no lazy collection access outside a transaction).
     @Query("SELECT COUNT(g) > 0 FROM GroupConversation g JOIN g.participants p WHERE g.id = :conversationId AND p.id = :userId")
     boolean isParticipant(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
+
+    // Membership check keyed on the icon's object name rather than a conversation
+    // id, for clients that predate the conversationId parameter on the group
+    // download-signing endpoint. The icon name carries a server-generated UUID,
+    // so it identifies one group as precisely as the id would.
+    // fileName must arrive LIKE-escaped (see ConversationService#isUserInGroupWithIcon):
+    // '_' is both legal in an object name and a single-character wildcard, so an
+    // unescaped name would match icons it does not actually name.
+    @Query("SELECT COUNT(g) > 0 FROM GroupConversation g JOIN g.participants p "
+            + "WHERE p.id = :userId AND g.groupIcon LIKE CONCAT('%', :fileName, '%') ESCAPE '!'")
+    boolean isParticipantOfGroupWithIcon(@Param("userId") Long userId,
+                                         @Param("fileName") String fileName);
 }

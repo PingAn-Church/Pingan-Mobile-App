@@ -43,10 +43,17 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
             if (token != null && deviceId != null) {
                 String email = jwtUtil.extractEmail(token);
                 User user = email == null ? null : userRepository.findByEmail(email).orElse(null);
+                // Deliberately NOT gated on isVerifiedUser(). Authorization lives in
+                // WebSocketSubscriptionInterceptor, which already restricts every user
+                // queue to its owner and every conversation topic to its participants —
+                // and an unverified user is a participant of nothing, because
+                // ConversationService refuses to put them in a conversation. Rejecting
+                // the handshake instead only pushed older clients into a permanent
+                // 5-second reconnect loop (they connect for any logged-in user), which
+                // cost battery and connections without denying anything extra.
                 if (user != null
                         && user.isActive()
                         && !user.isDeletedAccount()
-                        && user.isVerifiedUser()
                         && jwtUtil.validateToken(token, user.getEmail())) {
                     attributes.put("userEmail", email);
                     attributes.put("userId", user.getId());
