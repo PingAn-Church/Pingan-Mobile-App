@@ -38,6 +38,7 @@ import com.fyp.backend.repository.PushTokenRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.RefreshTokenRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
+import com.fyp.backend.repository.SpiritualGiftResultRepository;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserAchievementRepository;
@@ -105,6 +106,7 @@ public class UserAccountDeletionService {
     @Autowired private UserAchievementRepository userAchievementRepository;
     @Autowired private CourseRatingRepository courseRatingRepository;
     @Autowired private UserPreferencesRepository userPreferencesRepository;
+    @Autowired private SpiritualGiftResultRepository spiritualGiftResultRepository;
 
     /**
      * Admin-triggered permanent deletion. Only a deactivated, non-admin account may
@@ -243,6 +245,7 @@ public class UserAccountDeletionService {
         userAchievementRepository.deleteByUserId(userId);
         courseRatingRepository.deleteByUserId(userId);
         userPreferencesRepository.deleteByUserId(userId);
+        spiritualGiftResultRepository.deleteByUserId(userId);
     }
 
     private void scrubEventCheckins(Long userId) {
