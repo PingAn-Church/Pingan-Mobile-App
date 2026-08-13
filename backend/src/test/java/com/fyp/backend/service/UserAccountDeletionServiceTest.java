@@ -39,6 +39,7 @@ import com.fyp.backend.repository.PushTokenRepository;
 import com.fyp.backend.repository.QuizAttemptRepository;
 import com.fyp.backend.repository.RefreshTokenRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
+import com.fyp.backend.repository.SpiritualGiftResultRepository;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserAchievementRepository;
@@ -88,6 +89,7 @@ class UserAccountDeletionServiceTest {
     @Mock private UserAchievementRepository userAchievementRepository;
     @Mock private CourseRatingRepository courseRatingRepository;
     @Mock private UserPreferencesRepository userPreferencesRepository;
+    @Mock private SpiritualGiftResultRepository spiritualGiftResultRepository;
     @Mock private UserBlockRepository userBlockRepository;
 
     @InjectMocks private UserAccountDeletionService service;
@@ -154,6 +156,7 @@ class UserAccountDeletionServiceTest {
         verify(quizAttemptRepository).deleteByUserId(ID);
         verify(courseEnrollmentRepository).deleteByUserId(ID);
         verify(userPreferencesRepository).deleteByUserId(ID);
+        verify(spiritualGiftResultRepository).deleteByUserId(ID);
         // The avatar is removed from OSS.
         verify(ossCleanupService).deleteAfterCommit(any(java.util.Collection.class));
     }
