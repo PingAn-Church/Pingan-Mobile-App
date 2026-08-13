@@ -736,5 +736,7 @@
   "giftAssessmentSource": "Based on C. Peter Wagner's 25 spiritual-gifts definitions and assessment framework.",
   "retry": "Retry",
   "holdToRevealPassword": "Press and hold to show password",
-  "releaseToHidePassword": "Release or move away to hide the password"
+  "releaseToHidePassword": "Release or move away to hide the password",
+  "giftAssessmentPrivacyTitle": "Before You Begin",
+  "giftAssessmentPrivacyMessage": "Your privacy matters. This assessment does not ask for or collect personally identifiable information in your answers. Your individual choices are used only during this attempt to calculate your scores and are not stored long term. Only the final gift scores are saved; for guests, the result stays in this device's cache. Please answer honestly based on your own experience."
 }

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
+import { showAlert } from "../../utils/showAlert";
 import GiftExplanationModal from "./GiftExplanationModal";
 import {
   SPIRITUAL_GIFTS,
@@ -75,6 +76,20 @@ export default function GiftDiscoveryScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmStartAssessment = () => {
+    showAlert(
+      i18n.t("giftAssessmentPrivacyTitle"),
+      i18n.t("giftAssessmentPrivacyMessage"),
+      [
+        { text: i18n.t("cancel"), style: "cancel" },
+        {
+          text: i18n.t("startGiftAssessment"),
+          onPress: () => navigation.navigate("GiftAssessment"),
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -156,7 +171,7 @@ export default function GiftDiscoveryScreen() {
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.startButton}
-            onPress={() => navigation.navigate("GiftAssessment")}
+            onPress={confirmStartAssessment}
           >
             <Text style={styles.startButtonText}>{i18n.t("startGiftAssessment")}</Text>
             <Ionicons name="arrow-forward" size={19} color="#FFFFFF" />
