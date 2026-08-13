@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   stage: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   questionPanel: { alignItems: "stretch" },
   questionText: { color: "#17212B", fontSize: 22, lineHeight: 32, fontWeight: "700", textAlign: "center", minHeight: 112, textAlignVertical: "center" },
-  optionsRow: { flexDirection: "row", gap: 7, marginTop: 28 },
+  optionsRow: { flexDirection: "row", gap: 7, marginTop: 40 },
   option: { flex: 1, minHeight: 52, paddingHorizontal: 4, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: "#C9D8D2", backgroundColor: "#FFFFFF" },
   optionSelected: { borderColor: "#176B55", backgroundColor: "#E7F2EE" },
   optionText: { color: "#475467", fontSize: 12, lineHeight: 16, fontWeight: "700", textAlign: "center" },

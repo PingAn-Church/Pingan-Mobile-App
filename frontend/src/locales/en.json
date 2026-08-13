@@ -734,5 +734,7 @@
   "giftResultLoadFailed": "Your previous result could not be loaded. Please try again.",
   "giftResultSaveFailed": "Your result could not be saved. Please try the last answer again.",
   "giftAssessmentSource": "Based on C. Peter Wagner's 25 spiritual-gifts definitions and assessment framework.",
-  "retry": "Retry"
+  "retry": "Retry",
+  "holdToRevealPassword": "Press and hold to show password",
+  "releaseToHidePassword": "Release or move away to hide the password"
 }

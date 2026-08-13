@@ -24,6 +24,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert"
 import GuestContinueLink from "../../components/GuestContinueLink";
 import AuthSwitchLink from "../../components/AuthSwitchLink";
+import PressToRevealPasswordInput from "../../components/PressToRevealPasswordInput";
 import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
 
 export default function RegisterPage() {
@@ -231,12 +232,11 @@ export default function RegisterPage() {
           style={styles.input}
           autoCapitalize="none"
         />
-        <TextInput
+        <PressToRevealPasswordInput
           placeholder={i18n.t("password")}
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
+          containerStyle={styles.passwordInputContainer}
           autoCapitalize="none"
         />
 
@@ -310,6 +310,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 5,
     fontSize: 18,
+  },
+  passwordInputContainer: {
+    marginBottom: 10,
+    marginTop: 10,
   },
   image: {
     width: 100,

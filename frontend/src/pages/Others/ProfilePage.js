@@ -20,6 +20,7 @@ import {
   useWindowDimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import PressToRevealPasswordInput from "../../components/PressToRevealPasswordInput";
 import { MaterialIcons } from "@expo/vector-icons";
 import { UserContext } from "../../context/UserContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -592,26 +593,26 @@ export function ChangePasswordPage({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <TextInput
+      <PressToRevealPasswordInput
         placeholder={i18n.t("currentPassword")}
-        secureTextEntry
         value={currentPassword}
         onChangeText={setCurrentPassword}
-        style={styles.passwordInputTop}
+        containerStyle={styles.passwordInputTop}
+        inputStyle={styles.passwordInputText}
       />
-      <TextInput
+      <PressToRevealPasswordInput
         placeholder={i18n.t("newPassword")}
-        secureTextEntry
         value={newPassword}
         onChangeText={setNewPassword}
-        style={styles.passwordInput}
+        containerStyle={styles.passwordInput}
+        inputStyle={styles.passwordInputText}
       />
-      <TextInput
+      <PressToRevealPasswordInput
         placeholder={i18n.t("confirmNewPassword")}
-        secureTextEntry
         value={confirmPassword}
         onChangeText={setConfirmPassword}
-        style={styles.passwordInput}
+        containerStyle={styles.passwordInput}
+        inputStyle={styles.passwordInputText}
       />
 
       <TouchableOpacity
@@ -930,22 +931,15 @@ const styles = StyleSheet.create({
     color: "gray",
   },
   passwordInput: {
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
     marginBottom: 10,
     marginTop: 10,
-    borderRadius: 5,
   },
   passwordInputTop: {
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
     marginBottom: 10,
     marginTop: 30,
-    borderRadius: 5,
+  },
+  passwordInputText: {
+    fontSize: 16,
   },
   changePasswordButton: {
     backgroundColor: "#007BFF",

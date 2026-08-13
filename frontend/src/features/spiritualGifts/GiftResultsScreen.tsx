@@ -104,6 +104,9 @@ export default function GiftResultsScreen() {
   const allTop = ranked.filter((item) => item.score >= topCutoff);
   const visibleTop = allTop.slice(0, 3);
   const hiddenTop = allTop.slice(3);
+  const podium = [visibleTop[1], visibleTop[0], visibleTop[2]].filter(
+    (item): item is RankedGift => Boolean(item)
+  );
   const contentWidth = Math.min(width - 28, 760);
 
   const copyResult = async () => {
@@ -149,21 +152,30 @@ export default function GiftResultsScreen() {
       <View style={[styles.content, { width: contentWidth }]}>
         <Text style={styles.heading}>{i18n.t("yourLeadingGifts")}</Text>
         <View style={styles.topRow}>
-          {visibleTop.map((item) => (
-            <TouchableOpacity
-              key={item.gift.id}
-              style={styles.topCard}
-              onPress={() => setSelectedGift(item.gift)}
-            >
-              <View style={styles.rankBadge}>
-                <Text style={styles.rankText}>{item.rank}</Text>
-              </View>
-              <Text style={styles.topName} numberOfLines={2} adjustsFontSizeToFit>
-                {item.gift.name[locale]}
-              </Text>
-              <Text style={styles.topScore}>{item.score}/15</Text>
-            </TouchableOpacity>
-          ))}
+          {podium.map((item) => {
+            const podiumHeight = item.rank === 1 ? 136 : item.rank === 2 ? 118 : 104;
+            const badgeStyle =
+              item.rank === 1
+                ? styles.rankFirst
+                : item.rank === 2
+                  ? styles.rankSecond
+                  : styles.rankThird;
+            return (
+              <TouchableOpacity
+                key={item.gift.id}
+                style={[styles.topCard, { height: podiumHeight }]}
+                onPress={() => setSelectedGift(item.gift)}
+              >
+                <View style={[styles.rankBadge, badgeStyle]}>
+                  <Text style={styles.rankText}>{item.rank}</Text>
+                </View>
+                <Text style={styles.topName} numberOfLines={2} adjustsFontSizeToFit>
+                  {item.gift.name[locale]}
+                </Text>
+                <Text style={styles.topScore}>{item.score}/15</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {hiddenTop.length > 0 && (
@@ -260,9 +272,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: "#F6F8FA", alignItems: "center", justifyContent: "center" },
   content: { flex: 1, paddingHorizontal: 2, paddingTop: 14, paddingBottom: 12 },
   heading: { color: "#17212B", fontSize: 20, fontWeight: "800", textAlign: "center", marginBottom: 10 },
-  topRow: { flexDirection: "row", gap: 8 },
-  topCard: { flex: 1, minHeight: 106, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: "#D9E5DF", alignItems: "center", justifyContent: "center", padding: 8 },
-  rankBadge: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#E3B341", marginBottom: 5 },
+  topRow: { minHeight: 136, flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  topCard: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: "#D9E5DF", alignItems: "center", justifyContent: "center", padding: 8 },
+  rankBadge: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 5 },
+  rankFirst: { backgroundColor: "#D5A11E" },
+  rankSecond: { backgroundColor: "#8C98A4" },
+  rankThird: { backgroundColor: "#B97845" },
   rankText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   topName: { color: "#24483C", fontSize: 13, lineHeight: 17, fontWeight: "800", textAlign: "center" },
   topScore: { color: "#667085", fontSize: 12, marginTop: 4, fontWeight: "700" },

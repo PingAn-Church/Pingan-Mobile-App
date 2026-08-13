@@ -734,5 +734,7 @@
   "giftResultLoadFailed": "无法读取上一次测试结果，请重试。",
   "giftResultSaveFailed": "无法保存测试结果，请重新选择最后一题。",
   "giftAssessmentSource": "本测试依据 C. Peter Wagner 的 25 项属灵恩赐定义与评估框架整理。",
-  "retry": "重试"
+  "retry": "重试",
+  "holdToRevealPassword": "按住以显示密码",
+  "releaseToHidePassword": "松开或移开后隐藏密码"
 }

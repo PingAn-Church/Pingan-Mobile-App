@@ -20,6 +20,7 @@ import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert";
 import GuestContinueLink from "../../components/GuestContinueLink";
 import AuthSwitchLink from "../../components/AuthSwitchLink";
+import PressToRevealPasswordInput from "../../components/PressToRevealPasswordInput";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
@@ -110,12 +111,11 @@ const LoginPage = () => {
             style={styles.input}
             autoCapitalize="none"
           />
-          <TextInput
+          <PressToRevealPasswordInput
             placeholder={i18n.t("password")}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
-            style={styles.input}
+            containerStyle={styles.passwordInputContainer}
             autoCapitalize="none"
           />
 
@@ -259,6 +259,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 5,
     fontSize: 18,
+  },
+  passwordInputContainer: {
+    marginBottom: 20,
   },
   button: {
     backgroundColor: "#007bff",
