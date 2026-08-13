@@ -20,6 +20,9 @@ import ProfilePage, {
 } from "./src/pages/Others/ProfilePage";
 import HomePage, { VideosPage } from "./src/pages/Homepage/HomePage";
 import FormApplicationPage from "./src/pages/Homepage/FormApplicationPage";
+import GiftDiscoveryScreen from "./src/features/spiritualGifts/GiftDiscoveryScreen";
+import GiftAssessmentScreen from "./src/features/spiritualGifts/GiftAssessmentScreen";
+import GiftResultsScreen from "./src/features/spiritualGifts/GiftResultsScreen";
 import CommunityPage from "./src/pages/Activity/CommunityPage";
 import SocialPage from "./src/pages/Social/SocialPage";
 import ThreadHomePage from "./src/pages/Social/ThreadHomePage";
@@ -334,6 +337,9 @@ const GUEST_ROUTES = new Set([
   "LearningDocument",
   "VideosPage",
   "StorageSettings",
+  "GiftDiscovery",
+  "GiftAssessment",
+  "GiftResults",
 ]);
 
 const ROOT_BACK_FALLBACKS = {
@@ -352,6 +358,9 @@ const ROOT_BACK_FALLBACKS = {
   DetailedPrivateChat: "ChatHome",
   DetailedGroupChat: "ChatHome",
   FormApplication: "HomeTabs",
+  GiftDiscovery: "HomeTabs",
+  GiftAssessment: "GiftDiscovery",
+  GiftResults: "HomeTabs",
   ManageApplications: "HomeTabs",
   ManageEvents: "HomeTabs",
   EventForm: "ManageEvents",
@@ -552,6 +561,9 @@ export default function App() {
                     component={FormApplicationPage}
                     options={{ headerTitle: "" }}
                   />
+                  <Stack.Screen name="GiftDiscovery" component={GiftDiscoveryScreen} />
+                  <Stack.Screen name="GiftAssessment" component={GiftAssessmentScreen} />
+                  <Stack.Screen name="GiftResults" component={GiftResultsScreen} />
                   <Stack.Screen
                     name="ManageApplications"
                     component={ManageApplicationsPage}

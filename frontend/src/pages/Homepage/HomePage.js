@@ -177,6 +177,7 @@ export default function HomePage() {
           >
             {[
               { icon: "description", color: "#009688", label: "applyForm", screen: "FormApplication" },
+              { icon: "stars", color: "#2A8068", label: "giftDiscovery", screen: "GiftDiscovery" },
               { icon: "public", color: "#4CAF50", label: "website", url: "https://www.pingan.org.sg" },
               { icon: "play-arrow", color: "#F44336", label: "youtube", url: "https://www.youtube.com/@Pinganchurch" },
               { icon: "place", color: "#2196F3", label: "location", url: "https://maps.app.goo.gl/87euaduDeRSA5JMN6" },

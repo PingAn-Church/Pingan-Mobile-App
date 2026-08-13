@@ -22,6 +22,7 @@ import {
   MIN_BUDGET_BYTES,
   MAX_BUDGET_BYTES,
 } from "../../service/MediaCacheService";
+import { clearLocalSpiritualGiftCache } from "../../features/spiritualGifts/spiritualGiftService";
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
@@ -121,7 +122,7 @@ export default function StorageSettingsPage() {
         text: i18n.t("clearCache"),
         style: "destructive",
         onPress: async () => {
-          await clearMediaCache();
+          await Promise.all([clearMediaCache(), clearLocalSpiritualGiftCache()]);
           setUsage(await getUsageBytes());
           showAlert(i18n.t("cacheCleared"));
         },
