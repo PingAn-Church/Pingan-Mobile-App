@@ -225,6 +225,12 @@ export const SPIRITUAL_GIFTS: SpiritualGiftDefinition[] = [
   },
 ];
 
+// Scoring maps every question onto a gift by position (index % GIFT_COUNT), so a
+// gift list of the wrong length silently misattributes every single answer.
+if (SPIRITUAL_GIFTS.length !== GIFT_COUNT) {
+  throw new Error(`Spiritual gift list must contain ${GIFT_COUNT} gifts, found ${SPIRITUAL_GIFTS.length}`);
+}
+
 export function calculateScores(answers: number[]): number[] {
   if (answers.length !== QUESTION_COUNT) {
     throw new Error(`Expected ${QUESTION_COUNT} answers`);
