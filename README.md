@@ -218,6 +218,8 @@ npm run update 1.2.3                 # set an explicit version
 npm run update patch forced-update   # also raise min-supported so older installs are force-updated
 npm run update -- patch -m "0.1.9: faster chat, bug fixes"
                                       # also update the in-app update message
+npm run update -- patch -m "Faster chat, bug fixes" "聊天更流畅，修复若干问题"
+                                      # English first, Chinese second
 ```
 
 The Android version code is `major*10000 + minor*100 + patch` (so `0.1.3` -> `103`).
@@ -226,11 +228,17 @@ The Android version code is `major*10000 + minor*100 + patch` (so `0.1.3` -> `10
 strips `--`/`-` flags unless you separate them with `--` (e.g.
 `npm run update -- patch --forced-update`) — the bare `forced-update` word above
 avoids that. `-m` / `--message` updates the release notes shown in the Android
-update dialog for both direct-download and Play channels, in both English and
-Chinese metadata entries. Non-ASCII message text (e.g. Chinese) is stored as
-`\uXXXX` escapes automatically, since Spring reads `.properties` as ISO-8859-1.
-The script only edits files; it does not commit or tag, and the backend must be
-redeployed for new update metadata to take effect.
+update dialog for both direct-download and Play channels. It takes the English
+text first and, optionally, the Chinese translation as a second value; given
+only one message, that text is used for both languages. A bump keyword, a flag
+or `forced-update` is never read as the Chinese value, so
+`npm run update -- -m "Bug fixes" patch` still bumps the patch version. Chinese
+can also be set on its own with `--message-zh` / `-mz` (or `message-zh=…`, which
+survives `npm run` without the `--`). Non-ASCII message text is stored as
+`\uXXXX` escapes automatically, since Spring reads `.properties` as ISO-8859-1 —
+raw Chinese typed straight into that file is served as mojibake. The script only
+edits files; it does not commit or tag, and the backend must be redeployed for
+new update metadata to take effect.
 
 ## In-App Update Links
 

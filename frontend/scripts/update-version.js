@@ -17,6 +17,9 @@
  *                            # older installs are force-updated
  *   npm run update -- patch -m "Bug fixes and speed-ups"
  *                            # also update the in-app update message
+ *   npm run update -- patch -m "Bug fixes and speed-ups" "修复问题并提升速度"
+ *                            # English first, Chinese second; with only one
+ *                            # message the same text is used for both
  *
  * npm strips --flags from `npm run` unless separated by `--`, so the force
  * toggle is accepted as a bare word above; the flag form works after `--`:
@@ -54,7 +57,12 @@ const XCODE_MARKETING_VERSION = /(MARKETING_VERSION = )\d+\.\d+\.\d+(;)/g;
 const BACKEND_ANDROID_LATEST_NAME = /(app\.update\.android\.(?:direct|play)\.latest-version-name=).*/g;
 const BACKEND_ANDROID_LATEST_CODE = /(app\.update\.android\.(?:direct|play)\.latest-version-code=)\d+/g;
 const BACKEND_ANDROID_MIN_SUPPORTED_CODE = /(app\.update\.android\.(?:direct|play)\.min-supported-version-code=)\d+/g;
-const BACKEND_ANDROID_RELEASE_NOTES = /(app\.update\.android\.(?:direct|play)\.release-notes\.(?:en|zh)=).*/g;
+// Notes are served per language, and each language covers both channels, so
+// every one of these matches exactly two lines: direct.* and play.*.
+const BACKEND_ANDROID_RELEASE_NOTES = {
+  en: /(app\.update\.android\.(?:direct|play)\.release-notes\.en=).*/g,
+  zh: /(app\.update\.android\.(?:direct|play)\.release-notes\.zh=).*/g,
+};
 
 function fail(msg) {
   console.error(`✗ ${msg}`);
@@ -116,37 +124,62 @@ const esc = (s) => s.replace(/\$/g, "$$$$");
 // A value ready to drop into a .properties line via String.replace.
 const propVal = (s) => esc(toPropsAscii(s));
 
-// --- parse CLI: <bump> [forced-update] --------------------------------------
+// --- parse CLI: <bump> [forced-update] [-m "English" "中文"] ------------------
 // npm strips --flags from `npm run <script> ...` unless you use `--`, so the
 // force toggle is ALSO accepted as the bare word `forced-update`. The flag
 // form (--forced-update) still works when passed after `--`.
 const rawArgs = process.argv.slice(2).filter((a) => a && a !== "--");
 
+const LANGUAGE_NAME = { en: "English", zh: "Chinese" };
+
 let forceMinimumSupported = false;
-let releaseMessage = null;
+const messages = { en: null, zh: null };
 let arg = null;
 const unexpected = [];
 
-function setReleaseMessage(value) {
-  if (releaseMessage !== null) fail("Update message was provided more than once.");
-  if (value === undefined) fail("--message/-m requires a single-line value.");
-  releaseMessage = value;
+function setReleaseMessage(lang, value) {
+  if (messages[lang] !== null) fail(`The ${LANGUAGE_NAME[lang]} update message was provided more than once.`);
+  if (value === undefined) fail(`--message/-m requires a single-line ${LANGUAGE_NAME[lang]} value.`);
+  messages[lang] = value;
 }
+
+const isBump = (a) => a === "patch" || a === "minor" || a === "major" || SEMVER.test(a);
+
+// `-m` takes an optional second value: the Chinese translation of the first.
+// Only a bare word that means nothing else to this script can be that value, so
+// `-m "English" patch` still reads `patch` as the bump rather than swallowing it.
+const isMessageValue = (a) =>
+  a !== undefined &&
+  !a.startsWith("-") &&
+  !isBump(a) &&
+  a !== "forced-update" &&
+  !/^(?:message|release-notes)(?:-zh)?=/.test(a);
 
 for (let i = 0; i < rawArgs.length; i++) {
   const a = rawArgs[i];
   if (a === "--forced-update" || a === "forced-update") {
     forceMinimumSupported = true;
   } else if (a === "-m" || a === "--message") {
-    setReleaseMessage(rawArgs[++i]);
+    setReleaseMessage("en", rawArgs[++i]);
+    if (isMessageValue(rawArgs[i + 1])) setReleaseMessage("zh", rawArgs[++i]);
   } else if (a.startsWith("--message=")) {
-    setReleaseMessage(a.slice("--message=".length));
+    setReleaseMessage("en", a.slice("--message=".length));
   } else if (a.startsWith("-m=")) {
-    setReleaseMessage(a.slice(3));
+    setReleaseMessage("en", a.slice(3));
   } else if (a.startsWith("message=")) {
-    setReleaseMessage(a.slice("message=".length));
+    setReleaseMessage("en", a.slice("message=".length));
   } else if (a.startsWith("release-notes=")) {
-    setReleaseMessage(a.slice("release-notes=".length));
+    setReleaseMessage("en", a.slice("release-notes=".length));
+  } else if (a === "-mz" || a === "--message-zh") {
+    setReleaseMessage("zh", rawArgs[++i]);
+  } else if (a.startsWith("--message-zh=")) {
+    setReleaseMessage("zh", a.slice("--message-zh=".length));
+  } else if (a.startsWith("-mz=")) {
+    setReleaseMessage("zh", a.slice(4));
+  } else if (a.startsWith("message-zh=")) {
+    setReleaseMessage("zh", a.slice("message-zh=".length));
+  } else if (a.startsWith("release-notes-zh=")) {
+    setReleaseMessage("zh", a.slice("release-notes-zh=".length));
   } else if (arg === null && !a.startsWith("--")) {
     arg = a;
   } else {
@@ -155,8 +188,19 @@ for (let i = 0; i < rawArgs.length; i++) {
 }
 
 if (unexpected.length) fail(`Unknown or unexpected arg(s): ${unexpected.join(", ")}`);
-if (!arg) fail('Usage: npm run update <patch|minor|major|x.y.z> [forced-update] [-m "update message"]');
-if (releaseMessage !== null && releaseMessage.includes("\n")) fail("--message/-m must be a single line.");
+if (!arg) {
+  fail('Usage: npm run update <patch|minor|major|x.y.z> [forced-update] [-m "English message" "中文说明"]');
+}
+for (const lang of Object.keys(messages)) {
+  if (messages[lang] !== null && messages[lang].includes("\n")) {
+    fail(`The ${LANGUAGE_NAME[lang]} update message must be a single line.`);
+  }
+}
+
+// One message still means one text in both languages, as it always has. Chinese
+// is left untouched only when nothing at all was given for it.
+const releaseNotes = { en: messages.en, zh: messages.zh ?? messages.en };
+const hasReleaseNotes = releaseNotes.en !== null || releaseNotes.zh !== null;
 
 // --- read current version from app.config.js (source of truth) --------------
 const cfgRaw = fs.readFileSync(cfgPath, "utf8");
@@ -185,7 +229,7 @@ const pkgCurrent = JSON.parse(pkgRaw).version;
 // --- precompute backend metadata before writing files -----------------------
 let nextPropsRaw = null;
 if (!fs.existsSync(backendPropertiesPath)) {
-  if (releaseMessage !== null) {
+  if (hasReleaseNotes) {
     fail(`Backend properties not found at ${backendPropertiesPath}`);
   }
 } else {
@@ -215,13 +259,14 @@ if (!fs.existsSync(backendPropertiesPath)) {
     );
   }
 
-  if (releaseMessage !== null) {
+  for (const lang of Object.keys(releaseNotes)) {
+    if (releaseNotes[lang] === null) continue;
     nextPropsRaw = replaceExpected(
       nextPropsRaw,
-      BACKEND_ANDROID_RELEASE_NOTES,
-      `$1${propVal(releaseMessage)}`,
-      "Android release-notes entries in backend application.properties",
-      4
+      BACKEND_ANDROID_RELEASE_NOTES[lang],
+      `$1${propVal(releaseNotes[lang])}`,
+      `Android ${LANGUAGE_NAME[lang]} release-notes entries in backend application.properties`,
+      2
     );
   }
 }
@@ -276,6 +321,10 @@ console.log(
   `✓ version ${current} → ${next}, build ${nextCode}` +
     (forceMinimumSupported ? " (minimum supported)" : "")
 );
-if (releaseMessage !== null) {
-  console.log(`✓ update message → ${releaseMessage}`);
+if (releaseNotes.en !== null && releaseNotes.zh === releaseNotes.en) {
+  console.log(`✓ update message (en + zh) → ${releaseNotes.en}`);
+} else {
+  for (const lang of Object.keys(releaseNotes)) {
+    if (releaseNotes[lang] !== null) console.log(`✓ update message (${lang}) → ${releaseNotes[lang]}`);
+  }
 }
