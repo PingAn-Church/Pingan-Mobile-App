@@ -7,10 +7,23 @@ import {
   ASSESSMENT_VERSION,
   calculateScores,
   isValidResult,
+  QUESTION_COUNT,
   type SpiritualGiftResult,
 } from "./spiritualGiftData";
 
 const GUEST_RESULT_KEY = `spiritualGift.${ASSESSMENT_VERSION}.guestResult`;
+const PROGRESS_KEY_PREFIX = `spiritualGift.${ASSESSMENT_VERSION}.progress.`;
+
+/** Identifies whose partial answers these are, so two people sharing a device
+ *  never resume into each other's attempt. */
+export type AssessmentOwner = number | string | null | undefined;
+
+export interface AssessmentProgress {
+  answers: Array<number | null>;
+  currentIndex: number;
+}
+
+const progressKey = (owner: AssessmentOwner) => `${PROGRESS_KEY_PREFIX}${owner ?? "guest"}`;
 
 export async function getMySpiritualGiftResult(): Promise<SpiritualGiftResult | null> {
   const token = await getAuthToken();
@@ -61,6 +74,56 @@ export async function replaceGuestSpiritualGiftResult(
   };
   await AsyncStorage.setItem(GUEST_RESULT_KEY, JSON.stringify(result));
   return result;
+}
+
+/**
+ * The questionnaire is 125 questions long, so the OS is likely to reclaim the app
+ * before someone finishes it. Partial answers are kept locally and are only ever
+ * read back into the attempt they came from.
+ */
+export async function loadAssessmentProgress(
+  owner: AssessmentOwner
+): Promise<AssessmentProgress | null> {
+  try {
+    const raw = await AsyncStorage.getItem(progressKey(owner));
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!Array.isArray(saved?.answers) || saved.answers.length !== QUESTION_COUNT) return null;
+
+    const answers: Array<number | null> = saved.answers.map((answer: unknown) =>
+      Number.isInteger(answer) && (answer as number) >= 0 && (answer as number) <= 3
+        ? (answer as number)
+        : null
+    );
+    if (!answers.some((answer) => answer !== null)) return null;
+
+    const savedIndex = Number.isInteger(saved.currentIndex) ? saved.currentIndex : 0;
+    return {
+      answers,
+      currentIndex: Math.min(Math.max(savedIndex, 0), QUESTION_COUNT - 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveAssessmentProgress(
+  owner: AssessmentOwner,
+  progress: AssessmentProgress
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(progressKey(owner), JSON.stringify(progress));
+  } catch {
+    // A dropped progress write must never interrupt the questionnaire itself.
+  }
+}
+
+export async function clearAssessmentProgress(owner: AssessmentOwner): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(progressKey(owner));
+  } catch {
+    // Nothing to recover from: the next attempt overwrites this key anyway.
+  }
 }
 
 /** Guest assessment data is cache data and is removed by Storage > Clear cache. */

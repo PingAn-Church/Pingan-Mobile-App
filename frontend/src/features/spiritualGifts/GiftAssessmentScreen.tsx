@@ -19,8 +19,11 @@ import { showAlert } from "../../utils/showAlert";
 import { QUESTION_COUNT, type SupportedLanguage } from "./spiritualGiftData";
 import { SPIRITUAL_GIFT_QUESTIONS } from "./spiritualGiftQuestions";
 import {
+  clearAssessmentProgress,
+  loadAssessmentProgress,
   replaceGuestSpiritualGiftResult,
   replaceMySpiritualGiftResult,
+  saveAssessmentProgress,
 } from "./spiritualGiftService";
 
 const OPTIONS = [
@@ -43,12 +46,55 @@ export default function GiftAssessmentScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [restoring, setRestoring] = useState(true);
   const opacity = useRef(new Animated.Value(1)).current;
   const translateX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     navigation.setOptions({ title: i18n.t("giftAssessment") });
   }, [language, navigation]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restore = async () => {
+      const saved = await loadAssessmentProgress(user?.id);
+      if (cancelled) return;
+      setRestoring(false);
+      if (!saved) return;
+
+      // Resuming is applied before the prompt rather than inside it, so the
+      // questionnaire is already usable no matter what happens to the alert —
+      // and the default outcome is the one that keeps the work.
+      setAnswers(saved.answers);
+      setCurrentIndex(saved.currentIndex);
+
+      const answered = saved.answers.filter((answer) => answer !== null).length;
+      showAlert(
+        i18n.t("resumeAssessmentTitle"),
+        i18n.t("resumeAssessmentMessage", { answered, total: QUESTION_COUNT }),
+        [
+          {
+            text: i18n.t("startOverAssessment"),
+            style: "cancel",
+            onPress: () => {
+              clearAssessmentProgress(user?.id);
+              setAnswers(Array(QUESTION_COUNT).fill(null));
+              setCurrentIndex(0);
+            },
+          },
+          { text: i18n.t("resumeAssessment") },
+        ]
+      );
+    };
+
+    restore();
+    return () => {
+      cancelled = true;
+    };
+    // The attempt to restore belongs to the mount, not to later renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const animateTo = (nextIndex: number, direction: 1 | -1) => {
     setTransitioning(true);
@@ -87,6 +133,7 @@ export default function GiftAssessmentScreen() {
       const result = user
         ? await replaceMySpiritualGiftResult(completedAnswers)
         : await replaceGuestSpiritualGiftResult(completedAnswers);
+      await clearAssessmentProgress(user?.id);
       navigation.replace("GiftResults", { result });
     } catch (error: any) {
       showAlert(
@@ -99,7 +146,7 @@ export default function GiftAssessmentScreen() {
   };
 
   const selectAnswer = async (score: number) => {
-    if (transitioning || submitting) return;
+    if (transitioning || submitting || restoring) return;
     const nextAnswers = [...answers];
     nextAnswers[currentIndex] = score;
     setAnswers(nextAnswers);
@@ -108,17 +155,33 @@ export default function GiftAssessmentScreen() {
       await finish(nextAnswers as number[]);
       return;
     }
-    animateTo(currentIndex + 1, 1);
+
+    const nextIndex = currentIndex + 1;
+    // Not awaited: the write is small, and a slow disk must not stall the
+    // transition to the next question.
+    saveAssessmentProgress(user?.id, { answers: nextAnswers, currentIndex: nextIndex });
+    animateTo(nextIndex, 1);
   };
 
   const goPrevious = () => {
-    if (currentIndex === 0 || transitioning || submitting) return;
-    animateTo(currentIndex - 1, -1);
+    if (currentIndex === 0 || transitioning || submitting || restoring) return;
+    const previousIndex = currentIndex - 1;
+    saveAssessmentProgress(user?.id, { answers, currentIndex: previousIndex });
+    animateTo(previousIndex, -1);
   };
 
   const progress = submitting ? 1 : currentIndex / QUESTION_COUNT;
   const question = SPIRITUAL_GIFT_QUESTIONS[currentIndex];
   const contentWidth = Math.min(width - 32, 720);
+
+  if (restoring) {
+    return (
+      <View style={[styles.screen, styles.restoringScreen]}>
+        <ActivityIndicator size="large" color="#176B55" />
+        <Text style={styles.savingText}>{i18n.t("restoringGiftProgress")}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -182,6 +245,7 @@ export default function GiftAssessmentScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#F6F8FA" },
+  restoringScreen: { alignItems: "center", justifyContent: "center", gap: 10 },
   progressArea: { paddingTop: 14, paddingHorizontal: 20, alignItems: "center" },
   progressTrack: { width: "100%", maxWidth: 720, height: 4, backgroundColor: "#DDE4E1", borderRadius: 2, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: "#176B55", borderRadius: 2 },
