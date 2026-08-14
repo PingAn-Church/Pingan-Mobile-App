@@ -737,6 +737,9 @@
   "retry": "重试",
   "holdToRevealPassword": "按住以显示密码",
   "releaseToHidePassword": "松开或移开后隐藏密码",
+  "showPasswordAction": "显示密码",
+  "hidePasswordAction": "隐藏密码",
+  "tapToTogglePassword": "激活以显示或隐藏密码",
   "giftAssessmentPrivacyTitle": "开始前请留意",
   "giftAssessmentPrivacyMessage": "请放心作答。本测试不会在题目或答案中收集任何可识别个人身份的信息。每道题的选择仅在本次测试期间用于计算分数，不会被长期保存；系统仅保存最终的恩赐分数，访客结果只保存在本机缓存中。请按自己的真实经历诚实作答。"
 }
