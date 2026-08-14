@@ -264,7 +264,7 @@
   "storageUsedLabel": "已使用",
   "cacheLimit": "缓存上限",
   "clearCache": "清除缓存",
-  "clearCacheConfirm": "从本设备移除所有已缓存的图片和语音消息？再次打开时将重新下载。",
+  "clearCacheConfirm": "从本设备移除所有已缓存的图片和语音消息？再次打开时将重新下载。此操作同时会删除尚未完成的属灵恩赐自测进度；若你未登录，也会删除已保存的自测结果，且无法恢复。",
   "cacheCleared": "缓存已清除。",
   "storageNativeOnly": "媒体缓存仅在手机 App 中可用。",
 

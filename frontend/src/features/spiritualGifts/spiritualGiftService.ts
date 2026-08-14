@@ -126,7 +126,15 @@ export async function clearAssessmentProgress(owner: AssessmentOwner): Promise<v
   }
 }
 
-/** Guest assessment data is cache data and is removed by Storage > Clear cache. */
+/**
+ * Guest results and in-progress answers are cache data and are removed by
+ * Storage > Clear cache. Both are announced in that screen's confirmation,
+ * because neither can be recovered afterwards.
+ */
 export async function clearLocalSpiritualGiftCache(): Promise<void> {
-  await AsyncStorage.removeItem(GUEST_RESULT_KEY);
+  const keys = await AsyncStorage.getAllKeys();
+  const ours = keys.filter(
+    (key) => key === GUEST_RESULT_KEY || key.startsWith(PROGRESS_KEY_PREFIX)
+  );
+  if (ours.length > 0) await AsyncStorage.multiRemove(ours);
 }

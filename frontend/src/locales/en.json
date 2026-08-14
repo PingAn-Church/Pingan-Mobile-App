@@ -264,7 +264,7 @@
   "storageUsedLabel": "Used",
   "cacheLimit": "Cache limit",
   "clearCache": "Clear cache",
-  "clearCacheConfirm": "Remove all cached photos and voice messages from this device? They will re-download when you open them again.",
+  "clearCacheConfirm": "Remove all cached photos and voice messages from this device? They will re-download when you open them again. This also deletes any unfinished spiritual gifts assessment and, if you are not signed in, your saved gift results — those cannot be recovered.",
   "cacheCleared": "Cache cleared.",
   "storageNativeOnly": "Media caching is only available in the mobile app.",
 
