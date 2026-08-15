@@ -25,6 +25,11 @@
  * toggle is accepted as a bare word above; the flag form works after `--`:
  *   npm run update -- patch --forced-update
  *
+ * This bumps the version but does NOT make the in-app update prompt appear: a
+ * store build is not installable until review passes, days after this metadata
+ * deploys. Announce it with `npm run live <direct|play>` once it is actually
+ * downloadable (see scripts/publish-release.js).
+ *
  * Download links live in the backend and are managed separately with
  * `npm run dir-link` (see scripts/set-download-links.js).
  *
@@ -327,4 +332,10 @@ if (releaseNotes.en !== null && releaseNotes.zh === releaseNotes.en) {
   for (const lang of Object.keys(releaseNotes)) {
     if (releaseNotes[lang] !== null) console.log(`✓ update message (${lang}) → ${releaseNotes[lang]}`);
   }
+}
+if (nextPropsRaw !== null) {
+  console.log(
+    "· not announced yet — users keep seeing the published version until the build is\n" +
+      "  downloadable and `npm run live <direct|play>` says so (`npm run live status`)."
+  );
 }

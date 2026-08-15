@@ -13,6 +13,7 @@
     "build:aab": "node scripts/build-android.js aab",
     "web": "export NODE_OPTIONS=--openssl-legacy-provider && expo start --web -c",
     "update": "node scripts/update-version.js",
+    "live": "node scripts/publish-release.js",
     "dir-link": "node scripts/set-download-links.js"
   },
   "dependencies": {

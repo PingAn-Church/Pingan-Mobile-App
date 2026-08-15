@@ -224,6 +224,9 @@ npm run update -- patch -m "Faster chat, bug fixes" "聊天更流畅，修复若
 
 The Android version code is `major*10000 + minor*100 + patch` (so `0.1.3` -> `103`).
 
+Bumping does **not** make the update prompt appear — see [Announcing a
+Release](#announcing-a-release) below.
+
 `forced-update` also has a `--forced-update` flag form, but note that `npm run`
 strips `--`/`-` flags unless you separate them with `--` (e.g.
 `npm run update -- patch --forced-update`) — the bare `forced-update` word above
@@ -239,6 +242,55 @@ survives `npm run` without the `--`). Non-ASCII message text is stored as
 raw Chinese typed straight into that file is served as mojibake. The script only
 edits files; it does not commit or tag, and the backend must be redeployed for
 new update metadata to take effect.
+
+## Announcing a Release
+
+The backend deploys the moment CI/CD runs, but a store build is not
+downloadable until review passes — days later. So the backend tracks two
+versions per channel, and only ever tells clients about the second:
+
+| property | meaning | written by |
+|---|---|---|
+| `latest-version-*` | built and submitted | `npm run update` |
+| `published-version-*` | installable right now | `npm run live` |
+
+While `published-*` trails `latest-*`, no update is advertised and
+`min-supported-version-code` is clamped to `published-*`. That clamp matters:
+without it, `npm run update patch forced-update` would put every user behind a
+**non-dismissable** dialog whose only button opens a store listing that still
+serves the old build.
+
+```bash
+cd frontend
+npm run live status     # what is built vs what is live, per channel
+npm run live direct     # the APK is on the mirror — announce it
+npm run live play       # Play review passed — announce it
+npm run live all        # both channels
+npm run live play 1.0.0 # pin one channel to an earlier release (rollback)
+```
+
+The channels are published separately because they go live at different times:
+`direct` as soon as you upload the APK, `play` only after review. Redeploy the
+backend after running it — like `npm run update` and `npm run dir-link`, this
+only edits `application.properties`.
+
+**Skipped versions need no special handling.** Releases are sparse — 1.0.0 ships,
+1.0.1 and 1.0.2 get built but never go out, then 1.0.3 ships. Publishing always
+means "whatever is built right now", so an unreleased build never becomes the
+published one, and a user on 1.0.0 is offered 1.0.3 directly. Nothing compares
+adjacent versions or walks a sequence; it is all one numeric `>`.
+
+The one place this bites is the manual `npm run live <channel> <x.y.z>` form:
+an earlier version number is *not* evidence that it ever shipped, and the script
+keeps no publication history to check against. It warns when the version you name
+is neither the built nor the live one, but only you can confirm that build is
+really downloadable.
+
+If a release is being held back, the backend says so once at startup:
+
+```text
+WARN  App update channel 'play' is holding back 1.0.4 (10004): published is 1.0.3 (10003).
+```
 
 ## In-App Update Links
 
