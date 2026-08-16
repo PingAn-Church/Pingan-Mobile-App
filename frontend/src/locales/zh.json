@@ -354,6 +354,9 @@
   "handle": "用户名",
 
   "threadHome": "帖子主页",
+  "threadsAndTopics": "帖子与话题",
+  "topicsThreadsOverview": "话题与帖子列表",
+  "topicsThreadsSubtitle": "帖子与讨论",
   "threadDetail": "帖子详情",
   "createThread": "创建帖子",
   "editThread": "编辑帖子",

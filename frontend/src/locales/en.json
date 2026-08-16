@@ -354,6 +354,9 @@
   "handle": "Handle",
 
   "threadHome": "Thread Home",
+  "threadsAndTopics": "Threads and Topics",
+  "topicsThreadsOverview": "Topics & Threads Overview",
+  "topicsThreadsSubtitle": "Posts and discussions",
   "threadDetail": "Thread Detail",
   "createThread": "Create Thread",
   "editThread": "Edit Thread",

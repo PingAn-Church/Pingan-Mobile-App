@@ -1842,6 +1842,19 @@ export default function ChatPage({ route }) {
     });
   }, [chatSidebarConversations, sidebarSearchQuery]);
 
+  // Mirrors the phone list: the app-level group first, then the permanent Threads
+  // entry, then ordinary conversations by recency.
+  const sidebarRows = useMemo(() => {
+    const rows = [...filteredSidebarConversations];
+    const query = String(sidebarSearchQuery || "").trim().toLowerCase();
+    if (query && !i18n.t("topicsThreadsOverview").toLowerCase().includes(query)) {
+      return rows;
+    }
+    const appGroupIndex = rows.findIndex((c) => c.appLevel);
+    rows.splice(appGroupIndex + 1, 0, { conversationId: "__topics__", isTopicsRow: true });
+    return rows;
+  }, [filteredSidebarConversations, sidebarSearchQuery, language]);
+
   const filteredNewChatUsers = useMemo(() => {
     const query = String(newChatSearchQuery || "").trim().toLowerCase();
     if (!query) return newChatUsers;
@@ -2741,12 +2754,35 @@ export default function ChatPage({ route }) {
                   />
                 </View>
                 <FlatList
-                  data={filteredSidebarConversations}
+                  data={sidebarRows}
                   keyExtractor={(item) => String(item.conversationId)}
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={styles.sidebarConversationListContent}
                   ItemSeparatorComponent={() => <View style={styles.sidebarConversationSeparator} />}
                   renderItem={({ item }) => {
+                    // Threads are the one sidebar row that is not a conversation.
+                    // Desktop web has no other way in now that the hub is gone.
+                    if (item.isTopicsRow) {
+                      return (
+                        <TouchableOpacity
+                          onPress={() => navigation.navigate("ThreadHomePage")}
+                          style={styles.sidebarConversationItem}
+                        >
+                          <View style={[styles.sidebarAvatar, styles.sidebarTopicsAvatar]}>
+                            <Ionicons name="documents" size={20} color="#FFFFFF" />
+                          </View>
+                          <View style={styles.sidebarTextWrap}>
+                            <Text style={styles.sidebarConversationTitle} numberOfLines={1}>
+                              {i18n.t("topicsThreadsOverview")}
+                            </Text>
+                            <Text style={styles.sidebarConversationPreview} numberOfLines={1}>
+                              {i18n.t("topicsThreadsSubtitle")}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    }
+
                     const isActive =
                       String(item.conversationId) === String(conversationId);
 
@@ -3397,6 +3433,11 @@ const styles = StyleSheet.create({
   },
   groupMessageBubble: {
     marginHorizontal: 0,
+  },
+  sidebarTopicsAvatar: {
+    backgroundColor: "#0F766E",
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
     fontSize: webFontSize(16),

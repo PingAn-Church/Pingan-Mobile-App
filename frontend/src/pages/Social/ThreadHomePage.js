@@ -175,7 +175,7 @@ const ThreadHomePage = () => {
 
   useEffect(() => {
     navigation.setOptions({
-      title: i18n.t("threadHome"),
+      title: i18n.t("threadsAndTopics"),
       headerBackTitle: i18n.t("back"),
     });
   }, [language]);
@@ -233,7 +233,7 @@ const ThreadHomePage = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>{i18n.t("threads")}</Text>
+      <Text style={styles.header}>{i18n.t("threadsAndTopics")}</Text>
 
       {/* <FlatList
         data={threads}

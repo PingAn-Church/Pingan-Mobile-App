@@ -155,6 +155,31 @@ const ChatHomePage = () => {
     });
   }, [sortedConversations, searchQuery, language]);
 
+  /**
+   * The chat list holds one row that is not a conversation at all: the way into
+   * threads. It has no history and no unread count of its own, so it carries a
+   * marker the row renderer switches on rather than pretending to be a chat.
+   *
+   * It sits directly under the app-level group, above every ordinary
+   * conversation — both are permanent, so a member who was verified a minute ago
+   * still finds them waiting at the top of an otherwise empty list.
+   */
+  const listData = useMemo(() => {
+    const rows = [...filteredConversations];
+
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query || i18n.t("topicsThreadsOverview").toLowerCase().includes(query);
+    if (!matchesSearch) return rows;
+
+    const appGroupIndex = rows.findIndex((c) => c.appLevel);
+    rows.splice(appGroupIndex + 1, 0, {
+      conversationId: "__topics__",
+      isTopicsRow: true,
+    });
+    return rows;
+  }, [filteredConversations, searchQuery, language]);
+
   useEffect(() => {
     navigation.setOptions({
       title: i18n.t("Chats"),
@@ -275,6 +300,27 @@ const ChatHomePage = () => {
   };
 
   const renderConversationItem = ({ item }) => {
+    if (item.isTopicsRow) {
+      return (
+        <TouchableOpacity
+          style={styles.conversationCard}
+          onPress={() => navigation.navigate("ThreadHomePage")}
+        >
+          <View style={styles.profileContainer}>
+            <View style={[styles.profileImage, styles.iconAvatar, styles.topicsAvatar]}>
+              <Ionicons name="documents" size={24} color="#ffffff" />
+            </View>
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.groupName}>{i18n.t("topicsThreadsOverview")}</Text>
+            <Text style={styles.recentMessage} numberOfLines={1}>
+              {i18n.t("topicsThreadsSubtitle")}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
     const lastMessage = getLastMessage(item);
 
     let title = i18n.t("privateChat");
@@ -415,7 +461,7 @@ const ChatHomePage = () => {
         />
       </View>
       <FlatList
-        data={filteredConversations}
+        data={listData}
         keyExtractor={(item) => item.conversationId.toString()}
         renderItem={renderConversationItem}
         ListEmptyComponent={
@@ -511,6 +557,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 0,
+  },
+  // Threads are a different kind of place from a chat, so the row reads as one.
+  topicsAvatar: {
+    backgroundColor: "#0F766E",
   },
   textContainer: {
     flex: 1,
