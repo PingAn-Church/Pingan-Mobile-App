@@ -89,4 +89,16 @@ public class User {
     // Null for users who have not been seen since this was introduced.
     @Column(length = 8)
     private String language;
+
+    // How far this admin has read down the list of new sign-ups: the highest
+    // user id they have already been shown. Everything above it is what the
+    // "new members" badge counts. Only ever set for admins.
+    //
+    // Null means "has not looked yet", which is deliberately NOT treated as
+    // "everything is new" — an admin who installs this build should not be
+    // greeted by a badge counting the entire membership. The first read stamps
+    // the current high-water mark and reports nothing outstanding, so only
+    // genuinely later registrations ever raise the badge.
+    @Column
+    private Long lastSeenMemberId;
 }

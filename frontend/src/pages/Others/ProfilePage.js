@@ -24,6 +24,7 @@ import PressToRevealPasswordInput from "../../components/PressToRevealPasswordIn
 import { MaterialIcons } from "@expo/vector-icons";
 import { UserContext } from "../../context/UserContext";
 import { useNotification } from "../../context/NotificationContext";
+import { useAdminAlerts } from "../../context/AdminAlertContext";
 import { deleteOwnAccount, getUserById } from "../../service/UserService";
 import { getAllApplications } from "../../service/ApplicationService";
 import { useNavigation } from "@react-navigation/native";
@@ -48,6 +49,7 @@ export default function ProfilePage() {
   const [termsVisible, setTermsVisible] = useState(false);
   const { language, toggleLanguage } = useContext(LanguageContext);
   const { handleDeactivatePushToken } = useNotification();
+  const { newMemberCount } = useAdminAlerts();
   const termsCopy = TERMS_COPY[language] || TERMS_COPY.en;
 
   // On tablets/iPad the percentage-sized grid buttons balloon and push the admin,
@@ -181,6 +183,9 @@ export default function ProfilePage() {
       titleKey: "manageUsers",
       screen: "ManageUsers",
       icon: "groups",
+      // Sign-ups waiting to be verified. The Settings tab badge says something
+      // is waiting; this says which of the nine tiles to open.
+      badge: newMemberCount,
     },
   ];
 
@@ -397,6 +402,13 @@ export default function ProfilePage() {
                     <Text style={styles.optionText}>
                       {i18n.t(option.titleKey)}
                     </Text>
+                    {option.badge > 0 && (
+                      <View style={styles.optionBadge}>
+                        <Text style={styles.optionBadgeText}>
+                          {option.badge > 99 ? "99+" : option.badge}
+                        </Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -844,6 +856,25 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: "center",
     flexWrap: "wrap",
+  },
+  // Matches the unread pill used on the chat card in SocialPage, so a count on
+  // an admin tile reads the same way as a count anywhere else in the app.
+  optionBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    backgroundColor: "#e74c3c",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  optionBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
   },
   logoutButton: {
     backgroundColor: "#e74c3c",

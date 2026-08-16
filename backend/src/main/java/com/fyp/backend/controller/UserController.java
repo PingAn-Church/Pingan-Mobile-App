@@ -30,6 +30,7 @@ import com.fyp.backend.dto.UserProfileDto;
 import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.AdminAlertService;
 import com.fyp.backend.service.RedisService;
 import com.fyp.backend.service.UserAccountDeletionService;
 import com.fyp.backend.service.UserService;
@@ -54,6 +55,9 @@ public class UserController {
 
     @Autowired
     private UserAccountDeletionService userAccountDeletionService;
+
+    @Autowired
+    private AdminAlertService adminAlertService;
 
     @GetMapping("/profile")
     public ResponseEntity<UserProfileDto> getUserProfile(@RequestHeader("Authorization") String authorizationHeader) {
@@ -142,6 +146,37 @@ public class UserController {
             }
         }
         return ResponseEntity.ok(onlineById);
+    }
+
+    /**
+     * How many accounts have registered since this admin last opened the user
+     * list — the number behind the admin badge. Per-caller, so two admins clear
+     * it independently.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/new-members/count")
+    public ResponseEntity<Map<String, Object>> getNewMemberCount(
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long adminId = userService.getUserIdFromToken(authorizationHeader);
+        if (adminId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("success", false));
+        }
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "count", adminAlertService.unseenNewMemberCount(adminId)));
+    }
+
+    /** Clears this admin's badge; called when they open the user list. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/new-members/seen")
+    public ResponseEntity<Map<String, Object>> markNewMembersSeen(
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long adminId = userService.getUserIdFromToken(authorizationHeader);
+        if (adminId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("success", false));
+        }
+        adminAlertService.markNewMembersSeen(adminId);
+        return ResponseEntity.ok(Map.of("success", true, "count", 0));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

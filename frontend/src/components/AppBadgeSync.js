@@ -2,11 +2,15 @@ import { useContext, useEffect } from "react";
 import * as Notifications from "expo-notifications";
 import { UserContext } from "../context/UserContext";
 import { ChatContext } from "../context/ChatContext";
+import { useAdminAlerts } from "../context/AdminAlertContext";
 
 /**
- * Keeps the OS app-icon badge in step with the unread total while the app is
- * running. Renders nothing — a boundary component in the same style as AuthGuard
- * and SessionQueryBoundary, mounted inside ChatProvider.
+ * Keeps the OS app-icon badge in step with everything waiting for this person
+ * while the app is running: unread messages, plus — for admins — sign-ups still
+ * to be looked at. There is only one icon, so the badge is the sum; the server
+ * composes the same total when it sends a push (see badgeFor in
+ * PushNotificationService). Renders nothing — a boundary component in the same
+ * style as AuthGuard and SessionQueryBoundary, mounted inside ChatProvider.
  *
  * On iOS this is exact. Pushes arriving while the app is closed carry their own
  * badge number (the backend puts it on the payload as aps.badge) and the OS
@@ -30,6 +34,8 @@ import { ChatContext } from "../context/ChatContext";
 const AppBadgeSync = () => {
   const { user, loading: sessionLoading } = useContext(UserContext);
   const { totalUnread, loading: conversationsLoading } = useContext(ChatContext);
+  // Always 0 for non-admins, so this adds nothing for most people.
+  const { newMemberCount } = useAdminAlerts();
 
   useEffect(() => {
     // Cold start: the session check hasn't settled, so we don't yet know whether
@@ -48,8 +54,8 @@ const AppBadgeSync = () => {
     // because we haven't counted yet.
     if (conversationsLoading) return;
 
-    setBadge(totalUnread);
-  }, [user, sessionLoading, conversationsLoading, totalUnread]);
+    setBadge(totalUnread + newMemberCount);
+  }, [user, sessionLoading, conversationsLoading, totalUnread, newMemberCount]);
 
   return null;
 };

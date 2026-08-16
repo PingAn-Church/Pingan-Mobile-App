@@ -42,6 +42,16 @@ public class PushNotificationService {
     @Autowired
     private UnreadCountService unreadCountService;
 
+    @Autowired
+    private AdminAlertService adminAlertService;
+
+    /**
+     * Tags the admin "someone just registered" push. Shares the conversationType
+     * field with chat and learning pushes; the app routes on it (see
+     * NotificationContext) and it decides the icon badge below.
+     */
+    static final String NEW_MEMBER_TYPE = "new-member";
+
     private final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
     // Reused across sends — RestTemplate is thread-safe once built, and a new one
@@ -154,6 +164,38 @@ public class PushNotificationService {
     }
 
     /**
+     * Tells every admin that someone has just finished registering.
+     *
+     * A new account can't chat, post or join anything until an admin verifies
+     * it, so this is the one unsolicited alert the admin side needs: without it
+     * a sign-up sits unnoticed until somebody happens to open the user list.
+     *
+     * The new member's name is rendered per recipient, so an admin reading the
+     * app in Chinese sees it family-name-first just as they would in-app.
+     * Best-effort: registration must never fail because a push did.
+     */
+    public void notifyAdminsOfNewMember(User newMember) {
+        if (newMember == null) return;
+        try {
+            List<Long> admins = adminAlertService.alertableAdminIds();
+            // Covers the seeded first admin registering through the normal flow.
+            admins = admins.stream()
+                    .filter(id -> !id.equals(newMember.getId()))
+                    .collect(Collectors.toList());
+            if (admins.isEmpty()) return;
+
+            LocalizedText name = pushMessages.personName(newMember.getFirstName(), newMember.getLastName());
+            LocalizedText body = language ->
+                    pushMessages.get(language, "push.admin.newMember.body", name.render(language));
+
+            sendPushNotification(admins, body, pushMessages.text("push.admin.newMember.title"),
+                    null, NEW_MEMBER_TYPE);
+        } catch (Exception ignored) {
+            // best-effort notification; never disrupt the originating action
+        }
+    }
+
+    /**
      * Fans a push out to every active device of every recipient.
      *
      * The text arrives as a recipe rather than a finished string: one send can
@@ -161,8 +203,6 @@ public class PushNotificationService {
      * rendered against the language their device last reported.
      */
     public void sendPushNotification(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long conversationId, String conversationType) {
-        boolean isChat = isChatConversation(conversationId, conversationType);
-
         for (Long userId : filterMutedRecipients(recipientIds, conversationId, conversationType)) {
             List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
             if (tokens == null || tokens.isEmpty()) continue;
@@ -173,9 +213,8 @@ public class PushNotificationService {
 
             // The app icon can only learn the count from the payload when the app
             // isn't running to count for itself. Resolved once per recipient, not
-            // per device — every device of theirs shows the same number. Learning
-            // events carry no badge (see sendPushToDevice).
-            Integer badge = isChat ? (int) unreadCountService.totalUnreadFor(userId) : null;
+            // per device — every device of theirs shows the same number.
+            Integer badge = badgeFor(userId, conversationId, conversationType);
 
             for (PushToken token : tokens) {
                 // Only send notification if the token is active
@@ -200,6 +239,26 @@ public class PushNotificationService {
     private static boolean isChatConversation(Long conversationId, String conversationType) {
         return conversationId != null
                 && ("private".equals(conversationType) || "group".equals(conversationType));
+    }
+
+    /**
+     * The number the app icon should show once this push lands, or null to leave
+     * whatever is already on the icon untouched.
+     *
+     * There is only one icon, so anything that badges has to send the whole
+     * total. A new-member alert carrying just its own count would wipe the
+     * recipient's unread messages off the icon, and vice versa — hence the sum.
+     * Learning pushes deliberately send nothing at all.
+     */
+    private Integer badgeFor(Long userId, Long conversationId, String conversationType) {
+        if (isChatConversation(conversationId, conversationType)) {
+            return (int) unreadCountService.totalUnreadFor(userId);
+        }
+        if (NEW_MEMBER_TYPE.equals(conversationType)) {
+            return (int) (unreadCountService.totalUnreadFor(userId)
+                    + adminAlertService.unseenNewMemberCount(userId));
+        }
+        return null;
     }
 
     private List<Long> filterMutedRecipients(List<Long> recipientIds, Long conversationId, String conversationType) {

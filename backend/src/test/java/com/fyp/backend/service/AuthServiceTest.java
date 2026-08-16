@@ -48,6 +48,7 @@ class AuthServiceTest {
     @Mock private EmailService emailService;
     @Mock private RedisService redisService;
     @Mock private OssCleanupService ossCleanupService;
+    @Mock private PushNotificationService pushNotificationService;
 
     @InjectMocks private AuthService authService;
 

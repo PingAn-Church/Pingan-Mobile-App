@@ -34,6 +34,9 @@ public class UserService {
     @Autowired
     private OssCleanupService ossCleanupService;
 
+    @Autowired
+    private AdminAlertService adminAlertService;
+
     /**
      * Retrieves the user profile of the currently authenticated user.
      * 
@@ -184,6 +187,11 @@ public class UserService {
             }
 
             user.setAdmin(isAdmin);
+            // A new admin starts from today's membership, not from a badge
+            // counting everyone who ever joined.
+            if (isAdmin) {
+                adminAlertService.startTrackingNewMembers(user);
+            }
             userRepository.save(user);
         } else {
             throw new RuntimeException("User not found");

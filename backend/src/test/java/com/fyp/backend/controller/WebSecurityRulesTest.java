@@ -39,6 +39,7 @@ import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.dto.ReportResolutionDto;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.AdminAlertService;
 import com.fyp.backend.service.AppReleaseService;
 import com.fyp.backend.service.ConversationService;
 import com.fyp.backend.service.MediaReferenceService;
@@ -73,6 +74,7 @@ class WebSecurityRulesTest {
     @MockBean private MediaTokenService mediaTokenService;
     @MockBean private AppReleaseService appReleaseService;
     @MockBean private UserAccountDeletionService userAccountDeletionService;
+    @MockBean private AdminAlertService adminAlertService;
     @MockBean private MessageReportService messageReportService;
     @MockBean private UserBlockService userBlockService;
     @MockBean private ConversationService conversationService;

@@ -26,6 +26,7 @@ class UserServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private JwtUtil jwtUtil;
     @Mock private RedisService redisService;
+    @Mock private AdminAlertService adminAlertService;
 
     @InjectMocks private UserService userService;
 

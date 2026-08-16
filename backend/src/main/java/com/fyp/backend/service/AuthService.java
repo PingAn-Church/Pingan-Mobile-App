@@ -27,18 +27,21 @@ public class AuthService {
     private final EmailService emailService;
     private final RedisService redisService;
     private final OssCleanupService ossCleanupService;
+    private final PushNotificationService pushNotificationService;
     // Serializes the pending sign-up blob stored in Redis until the code is confirmed.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
-            EmailService emailService, RedisService redisService, OssCleanupService ossCleanupService) {
+            EmailService emailService, RedisService redisService, OssCleanupService ossCleanupService,
+            PushNotificationService pushNotificationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.emailService = emailService;
         this.redisService = redisService;
         this.ossCleanupService = ossCleanupService;
+        this.pushNotificationService = pushNotificationService;
     }
 
     /**
@@ -215,6 +218,7 @@ public class AuthService {
         // A row may already exist if two devices verified the same email at once;
         // treat the first materialisation as authoritative and just log the other in.
         User user = userRepository.findByEmail(email).orElse(null);
+        boolean joinedJustNow = user == null;
         if (user == null) {
             PendingRegistration pending;
             try {
@@ -239,6 +243,15 @@ public class AuthService {
         redisService.deletePendingRegistration(email);
         redisService.clearPendingRegistrationMedia(mediaFileName(user.getProfileImage()));
         redisService.clearOtpState(email);
+
+        // This — not registerUser — is where somebody actually becomes a member,
+        // so it is the only honest place to tell the admins. Guarded on the row
+        // having been created here so the two-device race above alerts once, not
+        // twice. The call swallows its own failures; a push must never cost
+        // someone their sign-up.
+        if (joinedJustNow) {
+            pushNotificationService.notifyAdminsOfNewMember(user);
+        }
         return user;
     }
 

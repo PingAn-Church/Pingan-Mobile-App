@@ -66,6 +66,7 @@ import "./i18n";
 import i18n from "./i18n";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import { AppUpdateProvider } from "./src/context/AppUpdateContext";
+import { AdminAlertProvider, useAdminAlerts } from "./src/context/AdminAlertContext";
 import * as Notifications from "expo-notifications";
 import { isConversationActive } from "./src/utils/activeConversation";
 
@@ -137,12 +138,18 @@ function HomeTabsNavigator() {
   const { language } = useContext(LanguageContext); // to listen to language change
   const { user } = useContext(UserContext);
   const { totalUnread } = useContext(ChatContext);
+  const { newMemberCount } = useAdminAlerts();
   const { width, height } = useWindowDimensions();
   const sidebar = width >= 768 && width > height;
 
   // react-navigation hides the badge entirely when this is undefined.
-  const unreadBadge =
-    totalUnread > 0 ? (totalUnread > 99 ? "99+" : totalUnread) : undefined;
+  const tabBadge = (count) =>
+    count > 0 ? (count > 99 ? "99+" : count) : undefined;
+  const unreadBadge = tabBadge(totalUnread);
+  // Admin controls live under Settings, so that is where a waiting sign-up has
+  // to surface — nothing else in the tab bar leads to the user list. Non-admins
+  // never have a count, so this is undefined for them.
+  const newMemberBadge = tabBadge(newMemberCount);
 
   return (
     <Tab.Navigator
@@ -232,7 +239,10 @@ function HomeTabsNavigator() {
       <Tab.Screen
         name="Settings"
         component={ProfilePage}
-        options={{ headerTitle: i18n.t("Settings") }}
+        options={{
+          headerTitle: i18n.t("Settings"),
+          tabBarBadge: newMemberBadge,
+        }}
       />
     </Tab.Navigator>
   );
@@ -508,6 +518,7 @@ export default function App() {
         <NotificationProvider>
           <LanguageProvider>
             <AppUpdateProvider>
+            <AdminAlertProvider>
             <ChatProvider>
               <WebSocketProvider>
                 <EntryGate>
@@ -740,6 +751,7 @@ export default function App() {
                 </EntryGate>
               </WebSocketProvider>
             </ChatProvider>
+            </AdminAlertProvider>
             </AppUpdateProvider>
           </LanguageProvider>
         </NotificationProvider>

@@ -84,4 +84,25 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     Long countByIsAdminTrue();
 
     Long countByIsAdminTrueAndDeletedAccountFalse();
+
+    /**
+     * Ids of the admins worth alerting: live accounts only, so a deactivated or
+     * self-deleted admin neither receives pushes nor keeps a badge ticking.
+     */
+    @Query("SELECT u.id FROM User u WHERE u.isAdmin = true AND u.active = true AND u.deletedAccount = false")
+    List<Long> findAlertableAdminIds();
+
+    /**
+     * The newest account id in the system. Ids are identity-generated and so
+     * strictly increasing, which is what lets the new-member badge be a single
+     * integer comparison rather than a timestamp window.
+     */
+    @Query("SELECT COALESCE(MAX(u.id), 0) FROM User u")
+    long findHighestUserId();
+
+    /** Accounts registered after a given id, ignoring ones since self-deleted. */
+    long countByIdGreaterThanAndDeletedAccountFalse(Long id);
+
+    /** Admins with no new-member marker yet — backfilled once at startup. */
+    List<User> findByIsAdminTrueAndLastSeenMemberIdIsNull();
 }

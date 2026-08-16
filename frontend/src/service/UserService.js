@@ -333,6 +333,43 @@ export const getInactiveUsers = async ({ q = "", page = 0, size = 20 } = {}) => 
   }
 };
 
+/**
+ * Accounts that have registered since this admin last opened the user list.
+ *
+ * Drives the admin badge, so it is polled: a failure returns 0 rather than
+ * throwing, because a missed poll should leave the badge alone, not tear down
+ * whatever is rendering it. Admin-only on the server; a non-admin caller gets
+ * 403 and, therefore, 0.
+ */
+export const getNewMemberCount = async () => {
+  const token = await getAuthToken();
+  if (!token) return 0;
+
+  try {
+    const response = await axios.get(apiUrl(`/api/users/new-members/count`), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return Number(response.data?.count) || 0;
+  } catch (error) {
+    console.warn("⚠️ Could not fetch new member count:", error?.message || error);
+    return 0;
+  }
+};
+
+/** Clears this admin's new-member badge. Called when they open the user list. */
+export const markNewMembersSeen = async () => {
+  const token = await getAuthToken();
+  if (!token) return;
+
+  try {
+    await axios.post(apiUrl(`/api/users/new-members/seen`), null, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    console.warn("⚠️ Could not clear new member badge:", error?.message || error);
+  }
+};
+
 // Hard delete: permanently remove a deactivated user and ALL their associated
 // data (chat, quiz attempts, OSS media, etc.). Irreversible; admin-only.
 export const deleteUser = async (userId) => {

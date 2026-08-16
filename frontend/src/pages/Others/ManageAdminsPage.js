@@ -25,7 +25,8 @@ import UserIdentity from "../../components/UserIdentity";
 import { formatName } from "../../utils/formatName";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
-import { useNavigation } from "@react-navigation/native";
+import { useAdminAlerts } from "../../context/AdminAlertContext";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 
 const PAGE_SIZE = 20;
 
@@ -290,11 +291,21 @@ export function ManageUsersPage() {
   const [inactiveUsers, setInactiveUsers] = useState(emptyPage);
   const [search, setSearch] = useState("");
   const { language } = useContext(LanguageContext);
+  const { clearNewMembers } = useAdminAlerts();
   const navigation = useNavigation();
 
   useEffect(() => {
     navigation.setOptions({ headerBackTitle: i18n.t("back") });
   }, [language, navigation]);
+
+  // This screen is where a waiting sign-up gets dealt with, so reaching it is
+  // what counts as having seen them. On focus rather than on mount so coming
+  // back from a sub-screen clears anything that arrived meanwhile.
+  useFocusEffect(
+    useCallback(() => {
+      clearNewMembers();
+    }, [clearNewMembers])
+  );
 
   const loadSection = useCallback(
     async (sectionKey, page = 0, replace = false) => {
