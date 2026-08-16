@@ -450,6 +450,7 @@
   "blockUser": "Block User",
   "unblockUser": "Unblock User",
   "sendMessage": "Send Message",
+  "mentionEveryone": "Everyone in this group",
   "verifiedMember": "Verified",
   "instructorRole": "Instructor",
   "blockedYouNotice": "This member has blocked you, so you cannot message each other.",

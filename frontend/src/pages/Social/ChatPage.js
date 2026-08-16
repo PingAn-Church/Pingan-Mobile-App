@@ -15,6 +15,7 @@ import {
   Pressable,
   Platform,
   Keyboard,
+  ScrollView,
   useWindowDimensions,
   Animated,
   Easing,
@@ -235,6 +236,55 @@ const formatDeliveryStateLabel = (state) => {
   if (state === "delivered") return "Delivered";
   if (state === "sent") return "Sent";
   return "";
+};
+
+/**
+ * The @token being typed, or null when the picker should stay shut.
+ *
+ * Only a token at the very END of the text counts. That is where the caret is
+ * while you are typing a mention, and it avoids tracking the caret through a
+ * multiline TextInput across iOS, Android and web — which is far more fragile
+ * than the tiny amount of behaviour it would buy.
+ */
+const MENTION_AT_END = /(?:^|\s)@([^\s@]{0,40})$/;
+
+const activeMentionQuery = (text) => {
+  const match = String(text || "").match(MENTION_AT_END);
+  return match ? match[1] : null;
+};
+
+/** Replaces the trailing @token with a finished mention, keeping any space before it. */
+const applyMentionToText = (text, label) =>
+  String(text || "").replace(MENTION_AT_END, (whole) => {
+    const lead = whole.slice(0, whole.indexOf("@"));
+    return `${lead}@${label} `;
+  });
+
+const escapeForRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Splits message text so the names it calls out can be drawn differently from
+ * the rest. Falls back to plain text when a mentioned name can't be resolved —
+ * a missing highlight is better than a crash or a mangled message.
+ */
+const splitOnMentions = (content, labels) => {
+  const text = String(content ?? "");
+  const usable = (labels || []).filter(Boolean).map(escapeForRegex);
+  if (!usable.length) return [{ text, isMention: false }];
+
+  const pattern = new RegExp(`@(?:${usable.join("|")})`, "g");
+  const parts = [];
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      parts.push({ text: text.slice(cursor, match.index), isMention: false });
+    }
+    parts.push({ text: match[0], isMention: true });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) parts.push({ text: text.slice(cursor), isMention: false });
+  return parts.length ? parts : [{ text, isMention: false }];
 };
 
 const getConversationPreview = (conversation, currentUserId) => {
@@ -805,6 +855,137 @@ export default function ChatPage({ route }) {
       ? groupDisplayName(conversation, language)
       : privateChatParticipant?.fullName || "";
 
+  // ---- @mentions -----------------------------------------------------------
+  // The composer records who was picked rather than re-parsing the text on send:
+  // names contain spaces, two members can share one, and a mention has to keep
+  // pointing at the same person if they rename themselves later.
+  const [pendingMentions, setPendingMentions] = useState([]);
+  const [mentionsEveryone, setMentionsEveryone] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionCandidates, setMentionCandidates] = useState([]);
+
+  // @all reaches everyone at once, so it stays with the group's admins — which,
+  // in the app-level group, means the app admins. The server checks this too.
+  const canMentionEveryone =
+    conversationType === "group" &&
+    (conversation?.adminIds || []).some((id) => String(id) === String(currentUser?.id));
+
+  const handleInputTextChange = useCallback(
+    (text) => {
+      setInputText(text);
+      setMentionQuery(conversationType === "group" ? activeMentionQuery(text) : null);
+    },
+    [conversationType]
+  );
+
+  useEffect(() => {
+    if (mentionQuery === null) {
+      setMentionCandidates([]);
+      return;
+    }
+
+    let active = true;
+    const query = mentionQuery.trim().toLowerCase();
+
+    (async () => {
+      const roster = participants.filter((p) => String(p.id) !== String(currentUser?.id));
+      if (roster.length) {
+        const matches = query
+          ? roster.filter((p) => (p.fullName || "").toLowerCase().includes(query))
+          : roster;
+        if (active) setMentionCandidates(matches.slice(0, 8));
+        return;
+      }
+
+      // No roster in hand means the app-level group, whose membership the server
+      // deliberately does not ship. The directory search covers exactly the same
+      // people — every verified member — so it stands in for the roster here.
+      try {
+        const response = await searchUsers(mentionQuery, 0, 8);
+        if (!active) return;
+        setMentionCandidates(
+          (response?.data || [])
+            .filter((u) => String(u.id) !== String(currentUser?.id))
+            .map((u) => ({ id: u.id, fullName: formatName(u.firstName, u.lastName) }))
+        );
+      } catch (error) {
+        if (active) setMentionCandidates([]);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [mentionQuery, participants, currentUser?.id]);
+
+  const applyMention = useCallback(
+    (candidate) => {
+      const label = candidate.id === "__all__" ? "all" : candidate.fullName;
+      setInputText((text) => applyMentionToText(text, label));
+      setMentionQuery(null);
+
+      if (candidate.id === "__all__") {
+        setMentionsEveryone(true);
+        return;
+      }
+      setPendingMentions((previous) =>
+        previous.some((m) => String(m.id) === String(candidate.id))
+          ? previous
+          : [...previous, { id: candidate.id, name: candidate.fullName }]
+      );
+    },
+    []
+  );
+
+  /**
+   * What the message actually claims, checked against the text as it stands now:
+   * picking a name and then deleting it should not still notify that person.
+   */
+  const resolveOutgoingMentions = useCallback(
+    (text) => ({
+      mentionedUserIds: pendingMentions
+        .filter((m) => text.includes(`@${m.name}`))
+        .map((m) => m.id),
+      mentionsEveryone: mentionsEveryone && canMentionEveryone && text.includes("@all"),
+    }),
+    [pendingMentions, mentionsEveryone, canMentionEveryone]
+  );
+
+  /**
+   * The names a message calls out, resolved for display.
+   *
+   * Ids travel with the message; names are looked up locally, so a mention of
+   * someone this device has never seen simply renders unhighlighted rather than
+   * costing a fetch per message.
+   */
+  const mentionLabelsFor = useCallback(
+    (message) => {
+      const labels = [];
+      if (message?.mentionsEveryone) labels.push("all");
+      (message?.mentionedUserIds || []).forEach((id) => {
+        const key = String(id);
+        const known =
+          participants.find((p) => String(p.id) === key) || userDirectory[key];
+        const name =
+          known?.fullName || formatName(known?.firstName, known?.lastName);
+        if (name) labels.push(name);
+      });
+      return labels;
+    },
+    [participants, userDirectory]
+  );
+
+  const clearPendingMentions = useCallback(() => {
+    setPendingMentions([]);
+    setMentionsEveryone(false);
+    setMentionQuery(null);
+  }, []);
+
+  // Nothing carries over between conversations.
+  useEffect(() => {
+    clearPendingMentions();
+  }, [conversationId, clearPendingMentions]);
+
   const openDetailsPanel = useCallback(() => {
     if (!isWebDesktop) return;
 
@@ -1283,8 +1464,10 @@ export default function ChatPage({ route }) {
     const trimmed = inputText.trim();
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
+    const mentions = resolveOutgoingMentions(trimmed);
 
     const optimisticMessage = {
+      ...mentions,
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1303,9 +1486,11 @@ export default function ChatPage({ route }) {
 
     appendOptimisticMessage(optimisticMessage);
     setInputText("");
+    clearPendingMentions();
     setAckTimeout(localId);
 
     const chatMessage = {
+      ...mentions,
       content: trimmed,
       conversationId,
       conversationType,
@@ -2086,6 +2271,43 @@ export default function ChatPage({ route }) {
         </View>
       )}
 
+      {/* Mention picker. Sits directly above the composer, so the list and the
+          text being typed stay together on screen with the keyboard up. */}
+      {mentionQuery !== null && (mentionCandidates.length > 0 || canMentionEveryone) && (
+        <View style={styles.mentionPicker}>
+          <ScrollView keyboardShouldPersistTaps="always" style={styles.mentionPickerScroll}>
+            {canMentionEveryone && "all".startsWith(mentionQuery.toLowerCase()) && (
+              <TouchableOpacity
+                style={styles.mentionRow}
+                onPress={() => applyMention({ id: "__all__" })}
+              >
+                <View style={[styles.mentionAvatar, styles.mentionAvatarAll]}>
+                  <Ionicons name="megaphone" size={16} color="#FFFFFF" />
+                </View>
+                <Text style={styles.mentionName}>{i18n.t("mentionEveryone")}</Text>
+              </TouchableOpacity>
+            )}
+            {mentionCandidates.map((candidate) => (
+              <TouchableOpacity
+                key={String(candidate.id)}
+                style={styles.mentionRow}
+                onPress={() => applyMention(candidate)}
+              >
+                <CachedImage
+                  uri={candidate.profileImage || null}
+                  type="profile"
+                  fallbackSource={defaultProfileImage}
+                  style={styles.mentionAvatar}
+                />
+                <Text style={styles.mentionName} numberOfLines={1}>
+                  {candidate.fullName || i18n.t("unknownUser")}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       <View style={[styles.inputContainer, messagingBlocked && styles.inputContainerBlocked]}>
         <TouchableOpacity
           onPress={pickAndSendImage}
@@ -2100,7 +2322,7 @@ export default function ChatPage({ route }) {
           <TextInput
             ref={textInputRef}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputTextChange}
             placeholder={messagingBlocked ? i18n.t("messagingBlockedPlaceholder") : i18n.t("typeMessage")}
             placeholderTextColor="#98989D"
             style={styles.inputField}
@@ -2305,7 +2527,18 @@ export default function ChatPage({ route }) {
                       isMe ? styles.contentSent : styles.contentReceived,
                     ]}
                   >
-                    {item.content}
+                    {splitOnMentions(item.content, mentionLabelsFor(item)).map((part, partIndex) =>
+                      part.isMention ? (
+                        <Text
+                          key={partIndex}
+                          style={isMe ? styles.mentionInSent : styles.mentionInReceived}
+                        >
+                          {part.text}
+                        </Text>
+                      ) : (
+                        part.text
+                      )
+                    )}
                   </Text>
 
                   {showTranslation && (
@@ -2829,6 +3062,9 @@ export default function ChatPage({ route }) {
                             style={styles.sidebarConversationPreview}
                             numberOfLines={1}
                           >
+                            {item.mentioned && (
+                              <Text style={styles.sidebarMentionMarker}>[@] </Text>
+                            )}
                             {item.sidebarPreview}
                           </Text>
                         </View>
@@ -3449,6 +3685,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  sidebarMentionMarker: {
+    color: "#f97316",
+    fontWeight: "800",
+  },
+  mentionPicker: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E5EA",
+    overflow: "hidden",
+  },
+  // Capped so the picker never swallows the conversation behind it.
+  mentionPickerScroll: { maxHeight: 190 },
+  mentionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  mentionAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#E9E9EB",
+  },
+  mentionAvatarAll: {
+    backgroundColor: "#f97316",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mentionName: { fontSize: webFontSize(15), color: "#1F1F22", flex: 1 },
+  mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
+  mentionInReceived: { fontWeight: "700", color: "#C2410C" },
   content: {
     fontSize: webFontSize(16),
     lineHeight: Platform.OS === "web" ? 24 : 21,

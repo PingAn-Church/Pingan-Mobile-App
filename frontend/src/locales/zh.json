@@ -450,6 +450,7 @@
   "blockUser": "屏蔽用户",
   "unblockUser": "解除屏蔽",
   "sendMessage": "发送消息",
+  "mentionEveryone": "本群所有人",
   "verifiedMember": "已认证",
   "instructorRole": "讲师",
   "blockedYouNotice": "该用户已屏蔽你，你们无法互发消息。",

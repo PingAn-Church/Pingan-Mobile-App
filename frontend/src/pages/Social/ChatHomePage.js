@@ -408,6 +408,10 @@ const ChatHomePage = () => {
           <Text style={styles.groupName}>{title}</Text>
 
           <Text style={styles.recentMessage} numberOfLines={1}>
+            {/* Someone called you out by name in here and you haven't read it.
+                Worth spotting at a glance even in a busy — or muted — group,
+                where the unread count alone says nothing about urgency. */}
+            {item.mentioned && <Text style={styles.mentionMarker}>[@] </Text>}
             {lastMessage ? (
               <>
                 <Text style={styles.participantName}>
@@ -580,6 +584,10 @@ const styles = StyleSheet.create({
   participantName: {
     fontWeight: "500",
     color: "#3b82f6",
+  },
+  mentionMarker: {
+    color: "#f97316",
+    fontWeight: "800",
   },
   deliveryStatus: {
     fontSize: 12,
