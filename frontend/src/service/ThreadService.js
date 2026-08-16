@@ -113,6 +113,54 @@ export const postReply = async (threadId, replyData) => {
 };
 
 /**
+ * Follows or unfollows a topic.
+ *
+ * Topics are silent by default — the bell is what opts you into hearing about
+ * replies — so this is the only way anyone gets notified about the forum.
+ */
+export const setThreadSubscription = async (threadId, subscribed) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No token found.");
+
+  const response = await axios.put(
+    `${baseUrl()}/${threadId}/subscription`,
+    { subscribed },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return Boolean(response.data?.subscribed);
+};
+
+/** Marks a topic read. Best-effort: a missed call just leaves the badge up. */
+export const markThreadSeen = async (threadId) => {
+  const token = await getAuthToken();
+  if (!token) return;
+
+  try {
+    await axios.post(`${baseUrl()}/${threadId}/seen`, null, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    console.warn("Could not mark the topic as read:", error?.message || error);
+  }
+};
+
+/** Unseen replies across every topic you follow — the Topics row badge. */
+export const getTopicUnreadCount = async () => {
+  const token = await getAuthToken();
+  if (!token) return 0;
+
+  try {
+    const response = await axios.get(`${baseUrl()}/subscriptions/unread-count`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return Number(response.data?.count) || 0;
+  } catch (error) {
+    console.warn("Could not fetch the topic unread count:", error?.message || error);
+    return 0;
+  }
+};
+
+/**
  * Get a single thread by ID (requires auth)
  */
 export const fetchThreadById = async (threadId) => {

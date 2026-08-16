@@ -32,6 +32,9 @@ public class ThreadReplyService {
     private final JwtUtil jwtUtil;
     private final ModerationEventPublisher moderationEventPublisher;
     private final ContentSanitizer contentSanitizer;
+    private final TopicSubscriptionService topicSubscriptionService;
+    private final PushNotificationService pushNotificationService;
+    private final PushMessages pushMessages;
 
     public Map<String, Object> getRepliesPage(Long threadId, Long after, int size, String token) {
         User requester = requireUser(token);
@@ -84,7 +87,42 @@ public class ThreadReplyService {
                 .build();
 
         reply = replyRepository.save(reply);
+        notifySubscribers(thread, reply, author);
         return mapToDto(reply, author);
+    }
+
+    /**
+     * Tells everyone following this topic that there is a new answer.
+     *
+     * Only followers — the whole point of the bell is that a forum post does not
+     * notify the entire church. Best-effort: a reply must never fail because a
+     * push did.
+     */
+    private void notifySubscribers(Thread thread, ThreadReply reply, User author) {
+        try {
+            List<Long> subscribers =
+                    topicSubscriptionService.subscriberIdsExcept(thread.getId(), author.getId());
+            if (subscribers.isEmpty()) return;
+
+            LocalizedText authorName = pushMessages.personName(author.getFirstName(), author.getLastName());
+            String snippet = reply.getContent() == null ? "" : reply.getContent().trim();
+            LocalizedText body = language -> {
+                String shown = snippet.isEmpty()
+                        ? pushMessages.get(language, "push.chat.photo")
+                        : snippet;
+                return pushMessages.get(language, "push.thread.newReply.body",
+                        authorName.render(language), shown);
+            };
+
+            pushNotificationService.sendPushNotification(
+                    subscribers,
+                    body,
+                    pushMessages.literal(thread.getTitle()),
+                    thread.getId(),
+                    "thread");
+        } catch (Exception ignored) {
+            // best-effort notification; never disrupt the reply that triggered it
+        }
     }
 
     private ThreadReplyDto mapToDto(ThreadReply reply, User requester) {

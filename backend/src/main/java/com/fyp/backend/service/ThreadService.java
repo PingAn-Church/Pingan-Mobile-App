@@ -18,9 +18,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,6 +35,7 @@ public class ThreadService {
     private final JwtUtil jwtUtil;
     private final ModerationEventPublisher moderationEventPublisher;
     private final ContentSanitizer contentSanitizer;
+    private final TopicSubscriptionService topicSubscriptionService;
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size, String token) {
@@ -43,8 +46,11 @@ public class ThreadService {
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
 
         Page<Thread> result = threadRepository.findAll(pageable);
+        // One lookup for the whole page: asking per row would be a query per topic
+        // just to decide whether its bell is filled in.
+        Set<Long> subscribed = new HashSet<>(topicSubscriptionService.subscribedThreadIds(requester.getId()));
         List<ThreadDto> data = result.getContent().stream()
-                .map(thread -> mapToDto(thread, requester))
+                .map(thread -> mapToDto(thread, requester, subscribed.contains(thread.getId())))
                 .collect(Collectors.toList());
 
         Map<String, Object> pagination = new LinkedHashMap<>();
@@ -73,18 +79,20 @@ public class ThreadService {
                 .build();
 
         thread = threadRepository.save(thread);
-        return mapToDto(thread, user);
+        // Posting a topic means you are waiting for the answers, so you follow it.
+        topicSubscriptionService.subscribeAuthor(thread.getId(), user.getId());
+        return mapToDto(thread, user, true);
     }
 
     public ThreadDto getThreadDtoById(Long id, String token) {
         User requester = requireUser(token);
         Thread thread = threadRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Thread not found"));
-        return mapToDto(thread, requester);
+        return mapToDto(thread, requester, topicSubscriptionService.isSubscribed(id, requester.getId()));
     }
 
 
-    private ThreadDto mapToDto(Thread thread, User requester) {
+    private ThreadDto mapToDto(Thread thread, User requester, boolean subscribed) {
         boolean canView = !Boolean.TRUE.equals(thread.getReported())
                 || thread.getCreatedBy().getId().equals(requester.getId())
                 || requester.isAdmin();
@@ -100,6 +108,7 @@ public class ThreadService {
                 .createdByFirstName(thread.getCreatedBy().getFirstName())
                 .createdByLastName(thread.getCreatedBy().getLastName())
                 .reported(Boolean.TRUE.equals(thread.getReported()))
+                .subscribed(subscribed)
                 .build();
     }
 
@@ -124,7 +133,7 @@ public class ThreadService {
         thread.setCoverImage(normaliseCoverImage(updatedDto.getCoverImage()));
 
         thread = threadRepository.save(thread);
-        return mapToDto(thread, user);
+        return mapToDto(thread, user, topicSubscriptionService.isSubscribed(threadId, user.getId()));
     }
 
     /**
@@ -154,6 +163,7 @@ public class ThreadService {
             throw new RuntimeException("Unauthorized to delete this thread.");
         }
 
+        topicSubscriptionService.forgetThread(threadId);
         threadRepository.delete(thread); // Optionally cascade delete replies via JPA
         moderationEventPublisher.publishAfterCommit(ModerationEvent.builder()
                 .contentType(com.fyp.backend.model.MessageReport.TYPE_THREAD)

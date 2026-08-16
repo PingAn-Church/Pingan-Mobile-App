@@ -75,6 +75,8 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
 import CachedImage from "../../components/CachedImage";
+import { Ionicons } from "@expo/vector-icons";
+import { setThreadSubscription } from "../../service/ThreadService";
 
 // Helper to format ISO date to readable format
 const formatDateTime = (isoDate) => {
@@ -155,6 +157,28 @@ const ThreadHomePage = () => {
       } else {
         setLoadingInitial(false);
       }
+    }
+  };
+
+  /**
+   * Turns the bell on or off for one topic. The row flips immediately and is put
+   * back if the server disagrees, so a tap never feels like it did nothing.
+   */
+  const toggleSubscription = async (thread) => {
+    const next = !thread.subscribed;
+    setThreads((prev) =>
+      prev.map((t) => (t.id === thread.id ? { ...t, subscribed: next } : t))
+    );
+    try {
+      const confirmed = await setThreadSubscription(thread.id, next);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === thread.id ? { ...t, subscribed: confirmed } : t))
+      );
+    } catch (error) {
+      setThreads((prev) =>
+        prev.map((t) => (t.id === thread.id ? { ...t, subscribed: !next } : t))
+      );
+      showAlert(i18n.t("error"), i18n.t("topicFollowFailed"), [{ text: i18n.t("ok") }]);
     }
   };
 
@@ -315,9 +339,26 @@ const ThreadHomePage = () => {
                   <Text style={styles.threadMeta}>
                     {i18n.t("by")} {formatName(item.createdByFirstName, item.createdByLastName) || item.createdByName}
                   </Text>
-                  <Text style={styles.threadMeta}>
-                    {formatDateTime(item.createdAt)}
-                  </Text>
+                  <View style={styles.metaRight}>
+                    <Text style={styles.threadMeta}>
+                      {formatDateTime(item.createdAt)}
+                    </Text>
+                    {/* Topics are silent unless you ask for them; this is the ask. */}
+                    <TouchableOpacity
+                      onPress={() => toggleSubscription(item)}
+                      style={styles.bellButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel={i18n.t(
+                        item.subscribed ? "unfollowTopic" : "followTopic"
+                      )}
+                    >
+                      <Ionicons
+                        name={item.subscribed ? "notifications" : "notifications-off-outline"}
+                        size={19}
+                        color={item.subscribed ? "#f59e0b" : "#9ca3af"}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </TouchableOpacity>
             );
@@ -350,6 +391,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
+  metaRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  bellButton: { padding: 2 },
   threadCover: {
     width: "100%",
     aspectRatio: 16 / 9,

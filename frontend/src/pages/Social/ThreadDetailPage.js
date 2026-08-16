@@ -206,6 +206,8 @@ import {
   updateReply,
   deleteThread,
   deleteReply,
+  markThreadSeen,
+  setThreadSubscription,
 } from "../../service/ThreadService";
 import {
   reportContent,
@@ -213,6 +215,7 @@ import {
   REPORT_TYPE_THREAD_REPLY,
 } from "../../service/ReportService";
 import { UserContext } from "../../context/UserContext";
+import { ChatContext } from "../../context/ChatContext";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
@@ -236,6 +239,9 @@ const ThreadDetailPage = ({ route }) => {
   const [thread, setThread] = useState(route.params.thread);
   const [replies, setReplies] = useState([]);
   const [newReply, setNewReply] = useState("");
+  // The Topics row badge lives in the chat list, so reading a topic here has to
+  // tell that list to recount.
+  const { refreshTopicUnread } = useContext(ChatContext);
   // Local file until the reply is sent; see utils/threadMedia.
   const [replyImageUri, setReplyImageUri] = useState(null);
   const [postingReply, setPostingReply] = useState(false);
@@ -383,6 +389,31 @@ const ThreadDetailPage = ({ route }) => {
       ]);
     } finally {
       setRepliesLoading(false);
+    }
+  };
+
+  /**
+   * Opening a topic counts as reading it, so the badge on the Topics row drops
+   * on the way in rather than waiting for the reader to do anything. Harmless
+   * for topics nobody follows — there is no marker to move.
+   */
+  useEffect(() => {
+    if (!thread?.id) return;
+    (async () => {
+      await markThreadSeen(thread.id);
+      refreshTopicUnread();
+    })();
+  }, [thread?.id, refreshTopicUnread]);
+
+  const toggleSubscription = async () => {
+    const next = !thread.subscribed;
+    setThread((current) => ({ ...current, subscribed: next }));
+    try {
+      const confirmed = await setThreadSubscription(thread.id, next);
+      setThread((current) => ({ ...current, subscribed: confirmed }));
+    } catch (error) {
+      setThread((current) => ({ ...current, subscribed: !next }));
+      showAlert(i18n.t("error"), i18n.t("topicFollowFailed"), [{ text: i18n.t("ok") }]);
     }
   };
 
@@ -588,13 +619,29 @@ const ThreadDetailPage = ({ route }) => {
                 ) : (
                   <Text style={styles.threadTitle}>{thread.title}</Text>
                 )}
-                <Text style={styles.threadMeta}>
-                  {i18n.t("by")}{" "}
-                  {formatName(thread.createdByFirstName, thread.createdByLastName) ||
-                    thread.createdByName}{" "}
-                  •{" "}
-                  {formatDateTime(thread.createdAt)}
-                </Text>
+                <View style={styles.threadMetaRow}>
+                  <Text style={styles.threadMeta}>
+                    {i18n.t("by")}{" "}
+                    {formatName(thread.createdByFirstName, thread.createdByLastName) ||
+                      thread.createdByName}{" "}
+                    •{" "}
+                    {formatDateTime(thread.createdAt)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={toggleSubscription}
+                    style={styles.bellButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={i18n.t(
+                      thread.subscribed ? "unfollowTopic" : "followTopic"
+                    )}
+                  >
+                    <Ionicons
+                      name={thread.subscribed ? "notifications" : "notifications-off-outline"}
+                      size={20}
+                      color={thread.subscribed ? "#f59e0b" : "#9ca3af"}
+                    />
+                  </TouchableOpacity>
+                </View>
 
                 {!threadShadowHidden && !!thread.coverImage && (
                   <CachedImage
@@ -891,6 +938,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 4,
   },
+  threadMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  bellButton: { padding: 2 },
   threadCover: {
     width: "100%",
     aspectRatio: 16 / 9,

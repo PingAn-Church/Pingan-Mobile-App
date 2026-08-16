@@ -67,6 +67,10 @@ export const NotificationProvider = ({ children }) => {
           } else if (conversationType === "quiz-graded") {
             // "Quiz graded" learning notification: quizId rides on conversationId.
             navigation.navigate("QuizResults", { quizId: conversationId });
+          } else if (conversationType === "thread") {
+            // A reply in a topic this person follows; conversationId is the
+            // thread. ThreadDetail loads the rest from the id.
+            navigation.navigate("ThreadDetail", { thread: { id: conversationId } });
           } else if (conversationType === "new-member") {
             // Admin alert: someone registered and is waiting to be verified.
             // Manage Users is where that happens, so land them there rather

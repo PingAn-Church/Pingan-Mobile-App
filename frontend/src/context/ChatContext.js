@@ -1,5 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { getConversations, getChatHistory } from "../service/ChatService";
+import { getTopicUnreadCount } from "../service/ThreadService";
 import { getOnlineUsers } from "../service/UserService";
 import { getStompClient, subscribeToConversation } from "../service/WebSocketService";
 import { UserContext } from "./UserContext";
@@ -62,6 +71,7 @@ export const ChatProvider = ({ children }) => {
   
   const resetChat = () => {
     setConversations([]);
+    setTopicUnread(0);
     setLoading(true);
   };
   
@@ -422,6 +432,19 @@ export const ChatProvider = ({ children }) => {
     [conversations]
   );
 
+  /**
+   * Unseen replies in topics this user follows.
+   *
+   * Threads are not conversations, but the Topics row lives in the chat list, so
+   * its badge belongs with the rest of that list's state. Zero for anyone who
+   * follows nothing, which is everybody by default.
+   */
+  const [topicUnread, setTopicUnread] = useState(0);
+
+  const refreshTopicUnread = useCallback(async () => {
+    setTopicUnread(await getTopicUnreadCount());
+  }, []);
+
   // Muting is toggled from the chat header; patching it here makes the badge react
   // at once instead of waiting for the next conversation refetch.
   const setConversationMuted = (conversationId, muted) => {
@@ -450,6 +473,8 @@ export const ChatProvider = ({ children }) => {
         conversations,
         loading,
         totalUnread,
+        topicUnread,
+        refreshTopicUnread,
         resetChat,
         setConversations,
         setConversationMuted,

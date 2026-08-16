@@ -4,6 +4,8 @@ import com.fyp.backend.dto.ThreadDto;
 import com.fyp.backend.dto.ThreadReplyDto;
 import com.fyp.backend.service.ThreadReplyService;
 import com.fyp.backend.service.ThreadService;
+import com.fyp.backend.service.TopicSubscriptionService;
+import com.fyp.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,6 +19,50 @@ public class ThreadController {
 
     private final ThreadService threadService;
     private final ThreadReplyService replyService;
+    private final TopicSubscriptionService topicSubscriptionService;
+    private final UserService userService;
+
+    /**
+     * Follows or unfollows a topic. Topics are silent by default, so this is what
+     * opts somebody into hearing about replies.
+     */
+    @PutMapping("/{id}/subscription")
+    public Map<String, Object> setSubscription(
+            @PathVariable Long id,
+            @RequestBody Map<String, Boolean> body,
+            @RequestHeader("Authorization") String token) {
+        Long userId = requireUserId(token);
+        boolean wanted = body != null && Boolean.TRUE.equals(body.get("subscribed"));
+        boolean subscribed = topicSubscriptionService.setSubscribed(id, userId, wanted);
+        return Map.of("success", true, "subscribed", subscribed);
+    }
+
+    /**
+     * Marks a topic read, called when it is opened. Only affects the caller's own
+     * subscription; opening a topic you don't follow does nothing.
+     */
+    @PostMapping("/{id}/seen")
+    public Map<String, Object> markSeen(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String token) {
+        topicSubscriptionService.markSeen(id, requireUserId(token));
+        return Map.of("success", true);
+    }
+
+    /** Unseen replies across every topic the caller follows — the Topics row badge. */
+    @GetMapping("/subscriptions/unread-count")
+    public Map<String, Object> unreadSubscriptionCount(@RequestHeader("Authorization") String token) {
+        return Map.of("success", true,
+                "count", topicSubscriptionService.unseenReplyCount(requireUserId(token)));
+    }
+
+    private Long requireUserId(String token) {
+        Long userId = userService.getUserIdFromToken(token);
+        if (userId == null) {
+            throw new IllegalArgumentException("Unauthorized");
+        }
+        return userId;
+    }
 
     // Paginated, newest-first threads: { success, data, pagination }.
     @GetMapping

@@ -30,7 +30,7 @@ import {
   startPrivateChat,
   startGroupChat,
 } from "../../service/UserService";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { ChatContext } from "../../context/ChatContext";
 import * as ImagePicker from "expo-image-picker";
@@ -57,6 +57,8 @@ const ChatHomePage = () => {
     updateConversation,
     setConversations,
     fetchInitialData,
+    topicUnread,
+    refreshTopicUnread,
   } = useContext(ChatContext);
 
   const [selectedUser, setSelectedUser] = useState(null);
@@ -191,6 +193,14 @@ const ChatHomePage = () => {
     handleSearch(searchQuery); // Reapply search filter to updated conversations
   }, [conversations]);
 
+  // On focus rather than on mount: coming back from reading a topic should drop
+  // the badge straight away, not on the next cold load of this screen.
+  useFocusEffect(
+    useCallback(() => {
+      refreshTopicUnread();
+    }, [refreshTopicUnread])
+  );
+
   // Conversation icons now resolve + cache per-row via <CachedImage> (keyed by the
   // object path), instead of re-signing a presigned URL for every conversation on each
   // `conversations` change — that churn re-downloaded avatars constantly and bloated
@@ -317,6 +327,15 @@ const ChatHomePage = () => {
               {i18n.t("topicsThreadsSubtitle")}
             </Text>
           </View>
+          {/* Counts replies in topics this user follows. Topics nobody follows
+              never contribute, so this stays at zero unless somebody opted in. */}
+          {topicUnread > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>
+                {topicUnread > 99 ? "99+" : topicUnread}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       );
     }

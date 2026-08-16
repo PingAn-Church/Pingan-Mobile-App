@@ -63,6 +63,8 @@ class ReportedContentHardeningTest {
     @Mock private CourseRatingRepository courseRatingRepository;
     @Mock private CourseRepository courseRepository;
     @Mock private ModerationEventPublisher moderationEventPublisher;
+    @Mock private TopicSubscriptionService topicSubscriptionService;
+    @Mock private PushMessages pushMessages;
     // Real instance — masking is deterministic and test fixtures use clean text.
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
 

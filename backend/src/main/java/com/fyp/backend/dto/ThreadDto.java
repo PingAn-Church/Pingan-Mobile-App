@@ -21,4 +21,7 @@ public class ThreadDto {
     private String createdByFirstName;
     private String createdByLastName;
     private boolean reported;
+    // Whether the requester follows this topic — drives the bell in the list and
+    // on the detail screen. Topics are silent unless this is true.
+    private boolean subscribed;
 }

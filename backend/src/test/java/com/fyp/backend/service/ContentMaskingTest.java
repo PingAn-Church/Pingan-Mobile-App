@@ -66,6 +66,8 @@ class ContentMaskingTest {
     @Mock private CourseRatingRepository courseRatingRepository;
     @Mock private CourseRepository courseRepository;
     @Mock private ModerationEventPublisher moderationEventPublisher;
+    @Mock private TopicSubscriptionService topicSubscriptionService;
+    @Mock private PushMessages pushMessages;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
 
     @InjectMocks private ChatService chatService;

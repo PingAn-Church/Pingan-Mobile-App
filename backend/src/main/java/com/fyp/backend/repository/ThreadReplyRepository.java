@@ -19,6 +19,9 @@ public interface ThreadReplyRepository extends JpaRepository<ThreadReply, Long> 
     /** Guards cleanup: a picture still attached to a reply must not be deleted. */
     boolean existsByImageUrlContaining(String fragment);
 
+    /** Newest reply in a topic — the read marker a subscription is set to. */
+    java.util.Optional<ThreadReply> findTopByThreadIdOrderByIdDesc(Long threadId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM ThreadReply r WHERE r.id = :id")
     Optional<ThreadReply> findByIdForUpdate(@Param("id") Long id);
