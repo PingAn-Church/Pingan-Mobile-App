@@ -43,6 +43,19 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             + "AND ds.user.id = :userId AND ds.status = 'READ')")
     long countUnread(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
+    /**
+     * Conversations holding an unread message that calls this user out by name.
+     *
+     * One query for the whole chat list rather than one per row — the list is
+     * already several queries deep and being @-mentioned is rare, so most calls
+     * come back empty.
+     */
+    @Query("SELECT DISTINCT m.conversation.id FROM Message m WHERE m.sender.id <> :userId "
+            + "AND (m.mentionsEveryone = true OR :userId MEMBER OF m.mentionedUserIds) "
+            + "AND NOT EXISTS (SELECT 1 FROM MessageDeliveryStatus ds WHERE ds.message.id = m.id "
+            + "AND ds.user.id = :userId AND ds.status = 'READ')")
+    List<Long> findConversationIdsWithUnreadMention(@Param("userId") Long userId);
+
     // Unread across every conversation the user belongs to — the number that goes on
     // the app icon. Muted conversations are left out: they are silenced app-wide, not
     // just for pushes. Reading m.conversation.id uses the FK column directly, so this

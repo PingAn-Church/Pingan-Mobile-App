@@ -30,6 +30,11 @@ public class MessageDto {
     private String senderProfileImage;
 
     private List<Long> recipientIds = new ArrayList<>();
+    // Ids this message calls out by name, and the @all flag. Both travel in
+    // BOTH directions: the client sends what the composer's picker recorded,
+    // and the server sends back what it accepted after validating it.
+    private List<Long> mentionedUserIds = new ArrayList<>();
+    private boolean mentionsEveryone = false;
     private boolean edited = false;
     private boolean deleted = false;
     private boolean reported = false;
@@ -57,6 +62,10 @@ public class MessageDto {
         this.senderLastName = displayLastName(message.getSender());
         this.senderProfileImage = displayProfileImage(message.getSender());
         this.reported = Boolean.TRUE.equals(message.getReported());
+        this.mentionedUserIds = message.getMentionedUserIds() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(message.getMentionedUserIds());
+        this.mentionsEveryone = Boolean.TRUE.equals(message.getMentionsEveryone());
 
         // ✅ Extract recipient IDs (excluding sender)
         //

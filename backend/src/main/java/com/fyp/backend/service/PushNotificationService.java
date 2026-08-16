@@ -203,7 +203,31 @@ public class PushNotificationService {
      * rendered against the language their device last reported.
      */
     public void sendPushNotification(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long conversationId, String conversationType) {
-        for (Long userId : filterMutedRecipients(recipientIds, conversationId, conversationType)) {
+        fanOut(recipientIds, message, title, conversationId, conversationType, true);
+    }
+
+    /**
+     * The push for someone who was called out by name.
+     *
+     * Mute is ignored here on purpose. Muting a group says "stop telling me about
+     * the chatter", not "stop telling me when someone needs me specifically" —
+     * and a mention nobody sees is the same as no mention at all.
+     */
+    public void sendMentionPush(List<Long> mentionedIds, LocalizedText senderName, LocalizedText title,
+            Long conversationId, String conversationType) {
+        if (mentionedIds == null || mentionedIds.isEmpty()) return;
+        LocalizedText body = language ->
+                pushMessages.get(language, "push.chat.mentionedYou", senderName.render(language));
+        fanOut(mentionedIds, body, title, conversationId, conversationType, false);
+    }
+
+    private void fanOut(List<Long> recipientIds, LocalizedText message, LocalizedText title,
+            Long conversationId, String conversationType, boolean respectMute) {
+        List<Long> targets = respectMute
+                ? filterMutedRecipients(recipientIds, conversationId, conversationType)
+                : recipientIds;
+
+        for (Long userId : targets) {
             List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
             if (tokens == null || tokens.isEmpty()) continue;
 

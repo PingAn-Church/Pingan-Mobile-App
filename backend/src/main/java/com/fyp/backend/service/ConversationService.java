@@ -126,9 +126,15 @@ public class ConversationService {
 
         // Attach a server-computed unread count so the client no longer needs to load
         // every message just to render unread badges.
+        // One query covers the whole list; being mentioned is rare enough that this
+        // usually comes back empty.
+        Set<Long> mentionedIn = new java.util.HashSet<>(
+                messageRepository.findConversationIdsWithUnreadMention(userId));
+
         for (ConversationDto c : conversations) {
             c.setUnreadCount(messageRepository.countUnread(c.getConversationId(), userId));
             c.setMuted(mutedConversationIds.contains(c.getConversationId()));
+            c.setMentioned(mentionedIn.contains(c.getConversationId()));
             // The app-level group ships no roster, so its size has to be counted
             // rather than read off a list that isn't there.
             if (c.isAppLevel()) {

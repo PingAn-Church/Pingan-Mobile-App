@@ -40,6 +40,10 @@ public class ConversationDto {
     // Whether the logged-in user muted this conversation. Ships with the list so the
     // app can total up unread across conversations without a mute call per row.
     private boolean muted = false;
+    // True when something unread in here calls this user out by name. Drives the
+    // orange [@] on the row: a mention is worth spotting even in a busy or muted
+    // conversation, where the plain unread count says nothing about urgency.
+    private boolean mentioned = false;
 
     // Constructor for GroupConversation
     public ConversationDto(GroupConversation groupConversation) {

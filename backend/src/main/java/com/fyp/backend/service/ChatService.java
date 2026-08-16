@@ -18,9 +18,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -239,6 +241,55 @@ public class ChatService {
         };
     }
 
+    /**
+     * Trims a message's mentions down to what the sender was actually entitled to.
+     *
+     * The client picks names from a list, but the payload is still just a request:
+     * it could name someone who is not in the conversation, or claim @all without
+     * the standing to use it. Both are corrected here rather than trusted, and
+     * mentions are meaningless in a private chat where there is only one listener.
+     */
+    private void sanitiseMentions(Message message, Conversation conversation, User sender, String conversationType) {
+        if (!"group".equals(conversationType)) {
+            message.setMentionedUserIds(new HashSet<>());
+            message.setMentionsEveryone(false);
+            return;
+        }
+
+        Set<Long> requested = message.getMentionedUserIds() == null
+                ? new HashSet<>()
+                : new HashSet<>(message.getMentionedUserIds());
+        // Mentioning yourself would only push you a notification about your own
+        // message, so it is dropped alongside anyone who isn't in the group.
+        requested.remove(sender.getId());
+        requested.removeIf(id -> !groupConversationRepository.isParticipant(conversation.getId(), id));
+        message.setMentionedUserIds(requested);
+
+        // @all reaches everyone at once, so it stays with the group's admins —
+        // which, in the app-level group, means the app admins.
+        boolean isGroupAdmin = conversation instanceof GroupConversation group
+                && group.getAdmins() != null
+                && group.getAdmins().stream().anyMatch(u -> u.getId().equals(sender.getId()));
+        message.setMentionsEveryone(Boolean.TRUE.equals(message.getMentionsEveryone()) && isGroupAdmin);
+    }
+
+    /**
+     * Which recipients this message calls out. @all expands here rather than at
+     * write time, so the app-level group stores one flag instead of a mention row
+     * per member per message.
+     */
+    private List<Long> resolveMentionedRecipients(Message message, Conversation conversation, User sender) {
+        if (Boolean.TRUE.equals(message.getMentionsEveryone())) {
+            return conversation.getParticipants().stream()
+                    .map(User::getId)
+                    .filter(id -> !id.equals(sender.getId()))
+                    .collect(Collectors.toList());
+        }
+        return message.getMentionedUserIds() == null
+                ? List.of()
+                : new ArrayList<>(message.getMentionedUserIds());
+    }
+
     @Transactional
     public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
@@ -266,6 +317,7 @@ public class ChatService {
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         Message message = new Message(messageDto, conversation, sender, timestamp.toString());
+        sanitiseMentions(message, conversation, sender, conversationType);
         message = messageRepository.save(message);
 
         createDeliveryStatuses(conversation, sender, message, timestamp);
@@ -273,6 +325,15 @@ public class ChatService {
         MessageDto savedMessage = buildResponseDto(message, conversation);
         LocalizedText notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
         LocalizedText notificationBody = getPushNotificationBody(savedMessage);
+        LocalizedText senderName = pushMessages.personName(sender.getFirstName(), sender.getLastName());
+
+        // Mentioned people get their own push — one that names who called them and
+        // is not silenced by a mute — so they are split out of the ordinary fan-out
+        // rather than being notified twice.
+        List<Long> mentionedRecipients = resolveMentionedRecipients(message, conversation, sender);
+        List<Long> plainRecipients = savedMessage.getRecipientIds().stream()
+                .filter(id -> !mentionedRecipients.contains(id))
+                .collect(Collectors.toList());
 
         // ✅ Defer messaging and notifications. Each recipient is isolated so a
         // Redis/RabbitMQ hiccup for one user cannot silently skip the rest of
@@ -314,12 +375,21 @@ public class ChatService {
                 // Push Notification
                 try {
                     pushNotificationService.sendPushNotification(
-                            savedMessage.getRecipientIds(),
+                            plainRecipients,
                             notificationBody,
                             notificationTitle,
                             savedMessage.getConversationId(),
                             conversationType
                     );
+                    if (!mentionedRecipients.isEmpty()) {
+                        pushNotificationService.sendMentionPush(
+                                mentionedRecipients,
+                                senderName,
+                                notificationTitle,
+                                savedMessage.getConversationId(),
+                                conversationType
+                        );
+                    }
                 } catch (Exception e) {
                     System.err.println("❌ Failed to send push notifications: " + e.getMessage());
                 }
