@@ -52,9 +52,19 @@ export default function DocumentScreen() {
   const uri = viewerUrl(rawUrl, route.params?.resourceType);
   const { height: windowHeight } = useWindowDimensions();
   // The embedded viewer needs a definite height — flex:1 collapses the WebView
-  // on phones — so size it to the screen (minus header + complete button) and
-  // let it scale across devices and orientations.
-  const viewerHeight = Math.max(windowHeight - (resourceId ? 170 : 90), 320);
+  // on phones. How much room is actually left over depends on the navigation
+  // header, the status/safe area, this screen's own title row and whether the
+  // complete button is showing; subtracting a guessed constant from the window
+  // left the document squeezed into a short letterbox on some devices. So a
+  // flex:1 wrapper claims whatever remains and reports its real height, and the
+  // WebView is given exactly that. The wrapper is sized by flex rather than by
+  // its child, so feeding the measurement back in cannot loop.
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const viewerHeight =
+    measuredHeight > 0
+      ? measuredHeight
+      : // First frame only, before onLayout has run.
+        Math.max(windowHeight - (resourceId ? 170 : 90), 320);
   const [marking, setMarking] = useState(false);
   const [completed, setCompleted] = useState<boolean>(!!route.params?.isCompleted);
 
@@ -90,12 +100,22 @@ export default function DocumentScreen() {
         )}
       </View>
       {uri ? (
-        <PlatformWebView
-          source={{ uri }}
-          style={[styles.viewer, { height: viewerHeight }]}
-          javaScriptEnabled
-          domStorageEnabled
-        />
+        <View
+          style={styles.viewerFill}
+          onLayout={(e) => {
+            const { height } = e.nativeEvent.layout;
+            // A zero here is a layout pass that hasn't settled, not a viewer
+            // with no room — keep the last good value rather than collapsing.
+            if (height > 0) setMeasuredHeight(height);
+          }}
+        >
+          <PlatformWebView
+            source={{ uri }}
+            style={[styles.viewer, { height: viewerHeight }]}
+            javaScriptEnabled
+            domStorageEnabled
+          />
+        </View>
       ) : (
         <Text style={styles.muted}>{i18n.t("resourceUnavailable")}</Text>
       )}
@@ -136,6 +156,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   openBtnText: { color: Colors.white, fontWeight: "600" },
+  // Claims every pixel the header and complete button leave behind; its measured
+  // height is what the WebView is then given.
+  viewerFill: { flex: 1 },
   viewer: { width: "100%", backgroundColor: Colors.white },
   completeBtn: {
     flexDirection: "row",
