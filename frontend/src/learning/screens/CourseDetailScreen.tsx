@@ -288,7 +288,13 @@ export default function CourseDetailScreen() {
                     <Text style={styles.lessonText} numberOfLines={1}>
                       {lesson.title}
                     </Text>
-                    {lesson.isPreview && <Text style={styles.previewTag}>{i18n.t("preview")}</Text>}
+                    {/* "Preview" only means anything to someone who hasn't enrolled —
+                        it marks the one lesson they're allowed past. Once enrolled
+                        every lesson is open, so the tag stops informing and starts
+                        reading as if that lesson were somehow lesser. */}
+                    {!enrolled && lesson.isPreview && (
+                      <Text style={styles.previewTag}>{i18n.t("preview")}</Text>
+                    )}
                     {enrolled && lesson.type !== "quiz" && lesson.isCompleted && (
                       <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
                     )}
