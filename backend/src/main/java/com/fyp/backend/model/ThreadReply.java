@@ -21,6 +21,10 @@ public class ThreadReply {
     @Column(length = 3000)
     private String content;
 
+    // Optional picture attached to the reply: the stored OSS object path.
+    @Column
+    private String imageUrl;
+
     // Pending-review shadow flag (see Message.reported). NULL in legacy rows = false.
     @org.hibernate.annotations.ColumnDefault("false")
     private Boolean reported = false;

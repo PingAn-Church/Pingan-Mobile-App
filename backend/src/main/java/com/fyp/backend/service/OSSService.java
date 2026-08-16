@@ -103,6 +103,8 @@ public class OSSService {
             case "event" -> "eventPictures/";
             case "announcement" -> "announcementPictures/";
             case "course" -> "coursePictures/";
+            // Thread cover pictures and pictures attached to replies.
+            case "thread" -> "threadPictures/";
             case "other" -> "otherPictures/";
             default -> throw new IllegalArgumentException("Unsupported file type: " + fileType);
         };
@@ -233,11 +235,19 @@ public class OSSService {
     private static final List<String> MANAGED_PREFIXES = List.of(
             "userProfilePictures/", "groupProfilePictures/", "documents/",
             "eventPictures/", "announcementPictures/", "coursePictures/",
-            "otherPictures/", "conversations/");
+            "otherPictures/", "conversations/", "threadPictures/");
 
     /** Whether the key lives in a folder this app owns — the /media gateway serves nothing else. */
     public static boolean isManagedKey(String objectKey) {
         return objectKey != null && MANAGED_PREFIXES.stream().anyMatch(objectKey::startsWith);
+    }
+
+    /**
+     * Same question, but tolerant of the full URL form clients store and send back.
+     * Used to reject media references that point somewhere this app does not own.
+     */
+    public static boolean isManagedKeyOrUrl(String value) {
+        return value != null && MANAGED_PREFIXES.stream().anyMatch(value::contains);
     }
 
     /**

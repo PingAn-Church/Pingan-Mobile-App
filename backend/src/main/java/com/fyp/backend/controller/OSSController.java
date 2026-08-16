@@ -250,7 +250,9 @@ public class OSSController {
     private boolean canUpload(String fileType, Authentication authentication) {
         return switch (fileType) {
             case "profile" -> true;
-            case "group" -> hasRole(authentication, "VERIFIED");
+            // Threads and their replies are a verified-member surface, so their
+            // pictures follow the same rule as group icons.
+            case "group", "thread" -> hasRole(authentication, "VERIFIED");
             case "course", "document" -> hasRole(authentication, "INSTRUCTOR");
             case "event", "announcement", "other" -> hasRole(authentication, "ADMIN");
             default -> false;
@@ -272,6 +274,8 @@ public class OSSController {
                     ? conversationService.isUserPartOfConversation(conversationId, userId)
                     : conversationService.isUserInGroupWithIcon(fileName, userId);
             case "event", "other" -> hasRole(authentication, "ADMIN");
+            // Anyone who can read the forum can see the pictures posted in it.
+            case "thread" -> hasRole(authentication, "VERIFIED");
             case "document" -> hasRole(authentication, "INSTRUCTOR");
             // Public course covers and announcements must use /public-download-url.
             case "course", "announcement" -> false;

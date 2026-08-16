@@ -74,6 +74,7 @@ import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
+import CachedImage from "../../components/CachedImage";
 
 // Helper to format ISO date to readable format
 const formatDateTime = (isoDate) => {
@@ -294,6 +295,14 @@ const ThreadHomePage = () => {
                   </Text>
                 ) : (
                   <>
+                    {!!item.coverImage && (
+                      <CachedImage
+                        uri={item.coverImage}
+                        type="thread"
+                        style={styles.threadCover}
+                        resizeMode="cover"
+                      />
+                    )}
                     <Text style={styles.threadTitle}>{item.title}</Text>
                     <Text style={styles.threadContent}>
                       {item.content.length > 80
@@ -340,6 +349,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
+  },
+  threadCover: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: 10,
+    marginBottom: 10,
+    backgroundColor: "#eee",
   },
   threadTitle: { fontSize: 18, fontWeight: "600", marginBottom: 6 },
   threadContent: {

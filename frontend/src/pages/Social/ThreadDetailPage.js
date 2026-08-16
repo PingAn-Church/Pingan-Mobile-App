@@ -191,9 +191,11 @@ import {
   StyleSheet,
   Platform,
   Alert,
+  Image,
   RefreshControl,
   TouchableOpacity,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
 import {
@@ -218,6 +220,12 @@ import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
+import CachedImage from "../../components/CachedImage";
+import {
+  discardThreadUpload,
+  pickThreadImage,
+  uploadThreadImage,
+} from "../../utils/threadMedia";
 
 const formatDateTime = (isoDate) => {
   const date = new Date(isoDate);
@@ -228,6 +236,9 @@ const ThreadDetailPage = ({ route }) => {
   const [thread, setThread] = useState(route.params.thread);
   const [replies, setReplies] = useState([]);
   const [newReply, setNewReply] = useState("");
+  // Local file until the reply is sent; see utils/threadMedia.
+  const [replyImageUri, setReplyImageUri] = useState(null);
+  const [postingReply, setPostingReply] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editingReplyId, setEditingReplyId] = useState(null);
   const [editContent, setEditContent] = useState("");
@@ -375,11 +386,30 @@ const ThreadDetailPage = ({ route }) => {
     }
   };
 
-  const handleReply = async () => {
-    if (!newReply.trim()) return;
-
+  const handlePickReplyImage = async () => {
     try {
-      const reply = await postReply(thread.id, { content: newReply });
+      const uri = await pickThreadImage();
+      if (uri) setReplyImageUri(uri);
+    } catch (error) {
+      console.error("Failed to pick a reply image:", error);
+    }
+  };
+
+  const handleReply = async () => {
+    // A picture on its own is a perfectly good reply, so either half is enough.
+    if (!newReply.trim() && !replyImageUri) return;
+    if (postingReply) return;
+
+    setPostingReply(true);
+    let uploadedImage = null;
+    try {
+      // Nothing is uploaded until this moment: a reply typed and then abandoned
+      // costs no storage.
+      uploadedImage = await uploadThreadImage(replyImageUri);
+      const reply = await postReply(thread.id, {
+        content: newReply,
+        imageUrl: uploadedImage,
+      });
       setReplies((prev) => [...prev.filter((r) => r.id !== reply.id), reply]);
 
       setTimeout(() => {
@@ -387,10 +417,14 @@ const ThreadDetailPage = ({ route }) => {
       }, 100);
 
       setNewReply("");
+      setReplyImageUri(null);
     } catch (error) {
+      await discardThreadUpload(uploadedImage);
       showAlert(i18n.t("error"), i18n.t("postReplyFailed"), [
         { text: i18n.t("ok") },
       ]);
+    } finally {
+      setPostingReply(false);
     }
   };
 
@@ -479,14 +513,39 @@ const ThreadDetailPage = ({ route }) => {
   };
 
   const replyComposer = (
-    <View style={styles.replyBox}>
-      <TextInput
-        placeholder={i18n.t("writeReply")}
-        value={newReply}
-        onChangeText={setNewReply}
-        style={styles.input}
-      />
-      <Button title={i18n.t("reply")} onPress={handleReply} />
+    <View style={styles.replyComposer}>
+      {/* The picked picture previews above the field, where it does not squeeze
+          the text input, and stays a local file until the reply is sent. */}
+      {replyImageUri ? (
+        <View style={styles.replyPreviewWrap}>
+          <Image source={{ uri: replyImageUri }} style={styles.replyPreview} />
+          <TouchableOpacity
+            style={styles.replyPreviewRemove}
+            onPress={() => setReplyImageUri(null)}
+            accessibilityLabel={i18n.t("removeImage")}
+          >
+            <Ionicons name="close" size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <View style={styles.replyBox}>
+        <TextInput
+          placeholder={i18n.t("writeReply")}
+          value={newReply}
+          onChangeText={setNewReply}
+          style={styles.input}
+        />
+        <TouchableOpacity
+          onPress={handlePickReplyImage}
+          style={styles.replyAttachButton}
+          accessibilityLabel={i18n.t("addImage")}
+          disabled={postingReply}
+        >
+          <Ionicons name="image-outline" size={22} color="#007aff" />
+        </TouchableOpacity>
+        <Button title={i18n.t("reply")} onPress={handleReply} disabled={postingReply} />
+      </View>
     </View>
   );
 
@@ -536,6 +595,15 @@ const ThreadDetailPage = ({ route }) => {
                   •{" "}
                   {formatDateTime(thread.createdAt)}
                 </Text>
+
+                {!threadShadowHidden && !!thread.coverImage && (
+                  <CachedImage
+                    uri={thread.coverImage}
+                    type="thread"
+                    style={styles.threadCover}
+                    resizeMode="cover"
+                  />
+                )}
 
                 {!threadShadowHidden && (
                   <Text style={styles.threadContent}>{thread.content}</Text>
@@ -645,7 +713,17 @@ const ThreadDetailPage = ({ route }) => {
                 </View>
               </>
             ) : (
-              <Text style={styles.replyText}>{item.content}</Text>
+              <>
+                {!!item.content && <Text style={styles.replyText}>{item.content}</Text>}
+                {!!item.imageUrl && (
+                  <CachedImage
+                    uri={item.imageUrl}
+                    type="thread"
+                    style={styles.replyImage}
+                    resizeMode="cover"
+                  />
+                )}
+              </>
             )}
             {(user?.id === item.authorId || user?.admin || !item.reported) && (
               <View style={{ flexDirection: "row", marginTop: 4 }}>
@@ -780,13 +858,52 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
+  replyComposer: {
+    borderTopWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#fafafa",
+  },
   replyBox: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    borderTopWidth: 1,
-    borderColor: "#ddd",
-    backgroundColor: "#fafafa",
+  },
+  replyAttachButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  replyPreviewWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    alignSelf: "flex-start",
+  },
+  replyPreview: {
+    width: 92,
+    height: 92,
+    borderRadius: 10,
+    backgroundColor: "#eee",
+  },
+  replyPreviewRemove: {
+    position: "absolute",
+    top: 6,
+    right: -6,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 12,
+    padding: 4,
+  },
+  threadCover: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    marginTop: 12,
+    backgroundColor: "#eee",
+  },
+  replyImage: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    borderRadius: 10,
+    marginTop: 8,
+    backgroundColor: "#eee",
   },
   input: {
     flex: 1,

@@ -13,6 +13,10 @@ import jakarta.persistence.LockModeType;
 
 @Repository
 public interface ThreadRepository extends JpaRepository<Thread, Long> {
+
+    /** Guards cleanup: a cover picture still attached to a thread must not be deleted. */
+    boolean existsByCoverImageContaining(String fragment);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Thread t WHERE t.id = :id")
     Optional<Thread> findByIdForUpdate(@Param("id") Long id);

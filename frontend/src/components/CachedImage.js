@@ -19,6 +19,7 @@ const MANAGED_PREFIXES = [
   "eventPictures/",
   "announcementPictures/",
   "otherPictures/",
+  "threadPictures/",
 ];
 
 const isManaged = (url) =>

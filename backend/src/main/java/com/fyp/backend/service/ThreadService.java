@@ -67,6 +67,7 @@ public class ThreadService {
         Thread thread = Thread.builder()
                 .title(contentSanitizer.mask(dto.getTitle()))
                 .content(contentSanitizer.mask(dto.getContent()))
+                .coverImage(normaliseCoverImage(dto.getCoverImage()))
                 .createdBy(user)
                 .createdAt(LocalDateTime.now()) // 👈 add this
                 .build();
@@ -91,6 +92,8 @@ public class ThreadService {
                 .id(thread.getId())
                 .title(canView ? thread.getTitle() : null)
                 .content(canView ? thread.getContent() : null)
+                // A reported thread hides its picture along with its words.
+                .coverImage(canView ? thread.getCoverImage() : null)
                 .createdAt(thread.getCreatedAt())
                 .createdById(thread.getCreatedBy().getId())
                 .createdByName(thread.getCreatedBy().getFirstName() + " " + thread.getCreatedBy().getLastName())
@@ -118,9 +121,22 @@ public class ThreadService {
         // Update fields
         thread.setTitle(contentSanitizer.mask(updatedDto.getTitle()));
         thread.setContent(contentSanitizer.mask(updatedDto.getContent()));
+        thread.setCoverImage(normaliseCoverImage(updatedDto.getCoverImage()));
 
         thread = threadRepository.save(thread);
         return mapToDto(thread, user);
+    }
+
+    /**
+     * Keeps only object paths this app owns. A cover picture arrives as whatever
+     * the client says it uploaded, and storing an arbitrary external URL would
+     * turn every thread into a way to load a third party's image on every reader's
+     * device. Blank means "no picture", which is the normal case.
+     */
+    private String normaliseCoverImage(String coverImage) {
+        if (coverImage == null || coverImage.isBlank()) return null;
+        String trimmed = coverImage.trim();
+        return OSSService.isManagedKeyOrUrl(trimmed) ? trimmed : null;
     }
 
     @Transactional

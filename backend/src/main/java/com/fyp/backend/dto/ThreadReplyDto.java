@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 public class ThreadReplyDto {
     private Long id;
     private String content;
+    // Stored object path for the optional attached picture.
+    private String imageUrl;
     private LocalDateTime createdAt;
     private Long threadId;
     private Long authorId;

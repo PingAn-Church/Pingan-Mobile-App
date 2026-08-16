@@ -11,6 +11,8 @@ public class ThreadDto {
     private Long id;
     private String title;
     private String content;
+    // Stored object path for the optional cover picture; the client signs it.
+    private String coverImage;
     private LocalDateTime createdAt;
     private Long createdById;
     private String createdByName;

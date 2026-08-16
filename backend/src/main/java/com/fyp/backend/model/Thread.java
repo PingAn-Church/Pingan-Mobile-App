@@ -23,6 +23,10 @@ public class Thread {
     @Column(length = 5000)
     private String content;
 
+    // Optional cover picture: the stored OSS object path, not a signed URL.
+    @Column
+    private String coverImage;
+
     // Pending-review shadow flag (see Message.reported). NULL in legacy rows = false.
     @org.hibernate.annotations.ColumnDefault("false")
     private Boolean reported = false;

@@ -10,6 +10,8 @@ import com.fyp.backend.repository.CourseVideoRepository;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageRepository;
 import com.fyp.backend.repository.QuizQuestionRepository;
+import com.fyp.backend.repository.ThreadReplyRepository;
+import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
 
 /**
@@ -28,6 +30,8 @@ public class MediaReferenceService {
     private final QuizQuestionRepository quizQuestionRepository;
     private final CertificateRepository certificateRepository;
     private final MessageRepository messageRepository;
+    private final ThreadRepository threadRepository;
+    private final ThreadReplyRepository threadReplyRepository;
     private final RedisService redisService;
 
     public MediaReferenceService(UserRepository userRepository,
@@ -39,6 +43,8 @@ public class MediaReferenceService {
                                  QuizQuestionRepository quizQuestionRepository,
                                  CertificateRepository certificateRepository,
                                  MessageRepository messageRepository,
+                                 ThreadRepository threadRepository,
+                                 ThreadReplyRepository threadReplyRepository,
                                  RedisService redisService) {
         this.userRepository = userRepository;
         this.groupConversationRepository = groupConversationRepository;
@@ -49,6 +55,8 @@ public class MediaReferenceService {
         this.quizQuestionRepository = quizQuestionRepository;
         this.certificateRepository = certificateRepository;
         this.messageRepository = messageRepository;
+        this.threadRepository = threadRepository;
+        this.threadReplyRepository = threadReplyRepository;
         this.redisService = redisService;
     }
 
@@ -68,6 +76,8 @@ public class MediaReferenceService {
                     || quizQuestionRepository.existsByImageUrlContaining(uniqueFileName)
                     || certificateRepository.existsByCredentialUrlContaining(uniqueFileName);
             case "conversation" -> messageRepository.existsByContentContaining(uniqueFileName);
+            case "thread" -> threadRepository.existsByCoverImageContaining(uniqueFileName)
+                    || threadReplyRepository.existsByImageUrlContaining(uniqueFileName);
             case "event", "other" -> false;
             default -> throw new IllegalArgumentException("Unsupported media type: " + mediaType);
         };
@@ -94,6 +104,7 @@ public class MediaReferenceService {
         if (containsPath(location, "coursePictures/")) return "course";
         if (containsPath(location, "otherPictures/")) return "other";
         if (containsPath(location, "conversations/")) return "conversation";
+        if (containsPath(location, "threadPictures/")) return "thread";
         return null;
     }
 

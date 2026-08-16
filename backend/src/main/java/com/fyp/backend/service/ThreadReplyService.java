@@ -75,6 +75,9 @@ public class ThreadReplyService {
 
         ThreadReply reply = ThreadReply.builder()
                 .content(contentSanitizer.mask(dto.getContent()))
+                // Only object paths this app owns; an arbitrary external URL here
+                // would load a third party's image on every reader's device.
+                .imageUrl(OSSService.isManagedKeyOrUrl(dto.getImageUrl()) ? dto.getImageUrl().trim() : null)
                 .author(author)
                 .thread(thread)
                 .createdAt(LocalDateTime.now())
@@ -91,6 +94,8 @@ public class ThreadReplyService {
         return ThreadReplyDto.builder()
                 .id(reply.getId())
                 .content(canView ? reply.getContent() : null)
+                // A reported reply hides its picture along with its words.
+                .imageUrl(canView ? reply.getImageUrl() : null)
                 .createdAt(reply.getCreatedAt())
                 .threadId(reply.getThread().getId())
                 .authorId(reply.getAuthor().getId())
