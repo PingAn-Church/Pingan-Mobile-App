@@ -1,8 +1,9 @@
 import { showAlert } from "../../utils/showAlert";
-import React, { useEffect, useState, useContext } from "react";
+import React, { useCallback, useEffect, useState, useContext } from "react";
 import {
   SafeAreaView,
   Text,
+  TextInput,
   View,
   Image,
   StyleSheet,
@@ -20,6 +21,8 @@ import {
   removeAdminFromGroup,
   leaveGroup,
   updateGroupIcon,
+  getGroupParticipants,
+  renameAppGroup,
 } from "../../service/ChatService";
 import {
   getPresignedDownloadUrl,
@@ -34,6 +37,7 @@ import { deleteConversationFromDatabase } from "../../service/ChatService";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
+import { groupDisplayName } from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const DetailedGroupChatPage = ({ route }) => {
@@ -60,7 +64,12 @@ const DetailedGroupChatPage = ({ route }) => {
     if (!found) return;
 
     setConversation(found);
-    setIsAdmin(found.adminIds.includes(user.id));
+    setIsAdmin((found.adminIds || []).includes(user.id));
+
+    // The app-level group's roster is the whole church, so the server leaves it
+    // out of the conversation payload; it is paged in separately below.
+    if (found.appLevel) return;
+
     const participantList = found.participants.map((id, index) => {
       // Keep name components so the row can be ordered per the display language;
       // participantProfiles is index-aligned with participants (same backend order).
@@ -75,10 +84,82 @@ const DetailedGroupChatPage = ({ route }) => {
     setParticipants(participantList);
   }, [conversations, conversationId, user.id]);
 
-  // Find the current conversation from the conversations context
-  // const conversation = conversations.find((conv) => conv.conversationId === conversationId);
+  const isAppGroup = !!conversation?.appLevel;
+  // Renaming the app-level group is an app-admin power, not a group-admin one:
+  // its admin list mirrors the app admins anyway (see AppGroupChatService).
+  const canRenameAppGroup = isAppGroup && !!user?.admin;
 
-  // const isAdmin = conversation?.adminIds.includes(user.id); // Check if the current user is an admin
+  const [memberPage, setMemberPage] = useState(0);
+  const [hasMoreMembers, setHasMoreMembers] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  const loadMembers = useCallback(
+    async (page = 0) => {
+      setLoadingMembers(true);
+      try {
+        const response = await getGroupParticipants(conversationId, { page, size: 30 });
+        const rows = (Array.isArray(response?.data) ? response.data : []).map((p) => ({
+          id: p.id,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          fallbackName: i18n.t("unknownUser"),
+        }));
+        setParticipants((previous) => (page === 0 ? rows : [...previous, ...rows]));
+        setMemberPage(Number(response?.pagination?.page) || page);
+        setHasMoreMembers(Boolean(response?.pagination?.hasMore));
+      } catch (error) {
+        console.error("Failed to load group members:", error);
+      } finally {
+        setLoadingMembers(false);
+      }
+    },
+    [conversationId]
+  );
+
+  useEffect(() => {
+    if (!isAppGroup) return;
+    loadMembers(0);
+  }, [isAppGroup, loadMembers]);
+
+  const [nameEn, setNameEn] = useState("");
+  const [nameZh, setNameZh] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  useEffect(() => {
+    if (!isAppGroup) return;
+    setNameEn(conversation?.groupName || "");
+    setNameZh(conversation?.groupNameZh || "");
+  }, [isAppGroup, conversation?.groupName, conversation?.groupNameZh]);
+
+  const handleRenameAppGroup = async () => {
+    if (renaming) return;
+    if (!nameEn.trim() || !nameZh.trim()) {
+      // The server refuses a half-filled rename too: leaving one language blank
+      // would show that half of the church a chat with no title.
+      showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    setRenaming(true);
+    try {
+      const updated = await renameAppGroup({ name: nameEn.trim(), nameZh: nameZh.trim() });
+      // Patch only the names — the returned DTO carries no chat history, and
+      // spreading it wholesale would blank the conversation in the list.
+      setConversations((previous) =>
+        previous.map((c) =>
+          c.conversationId === updated.conversationId
+            ? { ...c, groupName: updated.groupName, groupNameZh: updated.groupNameZh }
+            : c
+        )
+      );
+      showAlert(i18n.t("success"), i18n.t("appGroupRenamed"), [{ text: i18n.t("ok") }]);
+    } catch (error) {
+      console.error("Failed to rename the app group:", error);
+      showAlert(i18n.t("error"), i18n.t("appGroupRenameFailed"), [{ text: i18n.t("ok") }]);
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   const fetchViewingPresignedUrl = async (imageUrl, type) => {
     try {
@@ -338,7 +419,12 @@ const DetailedGroupChatPage = ({ route }) => {
           source={chatIconUrl ? { uri: chatIconUrl } : defaultProfileImage}
           style={styles.chatIcon}
         />
-        <Text style={styles.groupName}>{conversation.groupName}</Text>
+        <Text style={styles.groupName}>{groupDisplayName(conversation, language)}</Text>
+        {isAppGroup && (
+          <Text style={styles.memberCount}>
+            {i18n.t("memberCount", { count: conversation.participantCount || 0 })}
+          </Text>
+        )}
 
         {/* Backend updateGroupIcon is admin-only; only admins get the control so
             non-admins never hit the guaranteed "only admins" 400 (shown as a generic
@@ -353,15 +439,46 @@ const DetailedGroupChatPage = ({ route }) => {
         )}
       </View>
 
-      {/* Leave Group Button */}
-      <TouchableOpacity
-        onPress={handleLeaveGroup}
-        style={styles.leaveGroupButton}
-      >
-        <Text style={styles.leaveGroupText}>{i18n.t("leaveGroup")}</Text>
-      </TouchableOpacity>
+      {canRenameAppGroup && (
+        <View style={styles.renameCard}>
+          <Text style={styles.renameHeading}>{i18n.t("renameAppGroup")}</Text>
+          <TextInput
+            style={styles.renameInput}
+            value={nameEn}
+            onChangeText={setNameEn}
+            placeholder={i18n.t("appGroupNameEn")}
+          />
+          <TextInput
+            style={styles.renameInput}
+            value={nameZh}
+            onChangeText={setNameZh}
+            placeholder={i18n.t("appGroupNameZh")}
+          />
+          <TouchableOpacity
+            style={[styles.renameButton, renaming && styles.renameButtonDisabled]}
+            onPress={handleRenameAppGroup}
+            disabled={renaming}
+          >
+            <Text style={styles.renameButtonText}>
+              {renaming ? i18n.t("saving") : i18n.t("save")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {isAdmin && (
+      {/* Everyone verified is in the app-level group and stays in it — leaving,
+          deleting and hand-picking members are all meaningless there, and the
+          backend refuses them anyway. Mute is the way to quieten it. */}
+      {!isAppGroup && (
+        <TouchableOpacity
+          onPress={handleLeaveGroup}
+          style={styles.leaveGroupButton}
+        >
+          <Text style={styles.leaveGroupText}>{i18n.t("leaveGroup")}</Text>
+        </TouchableOpacity>
+      )}
+
+      {isAdmin && !isAppGroup && (
         <TouchableOpacity
           onPress={handleDeleteGroupConversation}
           style={styles.leaveGroupButton}
@@ -372,7 +489,7 @@ const DetailedGroupChatPage = ({ route }) => {
 
 
       {/* Add Participants Button (Only visible to admins) */}
-      {isAdmin && (
+      {isAdmin && !isAppGroup && (
         <TouchableOpacity
           style={styles.addParticipantButton}
           onPress={() => setShowAddParticipantModal(true)}
@@ -405,7 +522,7 @@ const DetailedGroupChatPage = ({ route }) => {
             </View>
 
             {/* Make Admin Button */}
-            {isAdmin && !conversation.adminIds.includes(item.id) && (
+            {isAdmin && !isAppGroup && !conversation.adminIds.includes(item.id) && (
               <TouchableOpacity
                 onPress={() => handleAddAdmin(item.id)}
                 style={styles.addAdminButton}
@@ -422,7 +539,7 @@ const DetailedGroupChatPage = ({ route }) => {
             )}
 
             {/* Remove Admin and Remove Participant Buttons */}
-            {isAdmin && (
+            {isAdmin && !isAppGroup && (
               <View style={styles.removeButtonsContainer}>
                 {/* Remove Admin Button */}
                 {conversation.adminIds.includes(item.id) &&
@@ -451,9 +568,22 @@ const DetailedGroupChatPage = ({ route }) => {
           </View>
         )}
         ListEmptyComponent={
-          <Text style={styles.noParticipants}>
-            {i18n.t("noParticipantsFound")}
-          </Text>
+          loadingMembers ? null : (
+            <Text style={styles.noParticipants}>
+              {i18n.t("noParticipantsFound")}
+            </Text>
+          )
+        }
+        // Only the app-level group pages its members; every other group already
+        // has its whole roster in hand.
+        onEndReached={() => {
+          if (isAppGroup && hasMoreMembers && !loadingMembers) loadMembers(memberPage + 1);
+        }}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          loadingMembers ? (
+            <ActivityIndicator style={{ marginVertical: 14 }} color="#007aff" />
+          ) : null
         }
       />
 
@@ -479,6 +609,43 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 10,
   },
+  memberCount: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 10,
+  },
+  renameCard: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    backgroundColor: "#f9fafb",
+  },
+  renameHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 10,
+  },
+  renameInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+    fontSize: 15,
+    marginBottom: 10,
+  },
+  renameButton: {
+    backgroundColor: "#007aff",
+    borderRadius: 8,
+    paddingVertical: 11,
+    alignItems: "center",
+  },
+  renameButtonDisabled: { opacity: 0.6 },
+  renameButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   participantCard: {
     flexDirection: "row",
     alignItems: "center",

@@ -17,6 +17,14 @@ public class ConversationDto {
     private Long conversationId;
     private String conversationType; // "group" or "private"
     private String groupName;
+    // Chinese name, non-null only on the app-level group. Both names ship and the
+    // client picks by its own language, so a language toggle renames the row
+    // instantly instead of waiting for the next fetch.
+    private String groupNameZh;
+    // True for the one group every verified member belongs to.
+    private boolean appLevel = false;
+    // Members, for conversations whose roster is not shipped (see below).
+    private long participantCount = 0;
     private String groupIcon;
     private List<Long> participants = new ArrayList<>();  // Ensure initialization
     private List<String> participantNames = new ArrayList<>();
@@ -38,6 +46,8 @@ public class ConversationDto {
         this.conversationId = groupConversation.getId();
         this.conversationType = "group";
         this.groupName = groupConversation.getGroupName();
+        this.groupNameZh = groupConversation.getGroupNameZh();
+        this.appLevel = groupConversation.isAppLevel();
         this.groupIcon = groupConversation.getGroupIcon();
         this.createdAt = groupConversation.getCreatedAt() != null
                 ? groupConversation.getCreatedAt().getTime()
@@ -45,15 +55,24 @@ public class ConversationDto {
         this.updatedAt = groupConversation.getUpdatedAt() != null
                 ? groupConversation.getUpdatedAt().getTime()
                 : null;
-        this.participants = groupConversation.getParticipants().stream()
-                .map(User::getId)
-                .collect(Collectors.toList());
-        this.participantNames = groupConversation.getParticipants().stream()
-                .map(ConversationDto::displayName)
-                .collect(Collectors.toList());
-        this.participantProfiles = groupConversation.getParticipants().stream()
-                .map(UserSummaryDto::from)
-                .collect(Collectors.toList());
+        // The app-level group holds the whole membership, so its roster is left
+        // out: shipping several hundred profiles on every chat-list load would
+        // make the list slower for everyone, and nothing on that screen reads
+        // them. Screens that genuinely need the members fetch them separately,
+        // paginated. participantCount is filled in by the caller, which can ask
+        // for it without materialising the list.
+        if (!this.appLevel) {
+            this.participants = groupConversation.getParticipants().stream()
+                    .map(User::getId)
+                    .collect(Collectors.toList());
+            this.participantNames = groupConversation.getParticipants().stream()
+                    .map(ConversationDto::displayName)
+                    .collect(Collectors.toList());
+            this.participantProfiles = groupConversation.getParticipants().stream()
+                    .map(UserSummaryDto::from)
+                    .collect(Collectors.toList());
+            this.participantCount = this.participants.size();
+        }
         this.adminIds = (groupConversation.getAdmins() != null)
                 ? groupConversation.getAdmins().stream().map(User::getId).collect(Collectors.toList())
                 : new ArrayList<>();
@@ -83,6 +102,7 @@ public class ConversationDto {
         this.participantProfiles = privateConversation.getParticipants().stream()
                 .map(UserSummaryDto::from)
                 .collect(Collectors.toList());
+        this.participantCount = this.participants.size();
         this.adminIds = new ArrayList<>();
         this.adminNames = new ArrayList<>();
     }

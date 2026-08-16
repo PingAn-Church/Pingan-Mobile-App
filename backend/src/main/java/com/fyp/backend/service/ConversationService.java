@@ -3,11 +3,14 @@ package com.fyp.backend.service;
 import com.fyp.backend.dto.ConversationDto;
 import com.fyp.backend.dto.GroupConversationDto;
 import com.fyp.backend.dto.PrivateConversationDto;
+import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.*;
 import com.fyp.backend.repository.*;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -55,6 +58,19 @@ public class ConversationService {
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
         this.conversationMuteRepository = conversationMuteRepository;
         this.ossCleanupService = ossCleanupService;
+    }
+
+    /**
+     * The app-level group's roster and admin list are derived from who is verified
+     * and who is an app admin (see AppGroupChatService), so hand-editing either
+     * would only be undone at the next reconcile — better to refuse outright than
+     * to let a change appear to work and then silently revert.
+     */
+    private void rejectAppGroupRosterEdit(GroupConversation group) {
+        if (group != null && group.isAppLevel()) {
+            throw new IllegalArgumentException(
+                    "Membership of the app-level group follows account verification and cannot be edited here.");
+        }
     }
 
     private Timestamp now() {
@@ -113,6 +129,11 @@ public class ConversationService {
         for (ConversationDto c : conversations) {
             c.setUnreadCount(messageRepository.countUnread(c.getConversationId(), userId));
             c.setMuted(mutedConversationIds.contains(c.getConversationId()));
+            // The app-level group ships no roster, so its size has to be counted
+            // rather than read off a list that isn't there.
+            if (c.isAppLevel()) {
+                c.setParticipantCount(groupConversationRepository.countParticipants(c.getConversationId()));
+            }
         }
 
         return conversations;
@@ -121,13 +142,29 @@ public class ConversationService {
     public ConversationDto getConversationById(Long conversationId) {
         Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
         if (groupConversationOpt.isPresent()) {
-            return new ConversationDto(groupConversationOpt.get());
+            ConversationDto dto = new ConversationDto(groupConversationOpt.get());
+            if (dto.isAppLevel()) {
+                dto.setParticipantCount(groupConversationRepository.countParticipants(conversationId));
+            }
+            return dto;
         }
         Optional<PrivateConversation> privateConversationOpt = privateConversationRepository.findById(conversationId);
         if (privateConversationOpt.isPresent()) {
             return new ConversationDto(privateConversationOpt.get());
         }
         throw new IllegalArgumentException("Conversation not found");
+    }
+
+    /**
+     * One page of a group's members, sorted by name. Exists because the app-level
+     * group's roster is deliberately absent from the conversation payload — this
+     * is how the group details screen shows who is actually in it without the
+     * chat list paying for several hundred profiles on every load.
+     */
+    @Transactional
+    public Page<UserSummaryDto> getGroupParticipants(Long conversationId, Pageable pageable) {
+        return groupConversationRepository.findParticipantsPage(conversationId, pageable)
+                .map(UserSummaryDto::from);
     }
 
     public Conversation getConversationEntityById(Long conversationId) {
@@ -143,10 +180,11 @@ public class ConversationService {
     }
 
     public boolean isUserPartOfConversation(Long conversationId, Long userId) {
-        Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
-        if (groupConversationOpt.isPresent()) {
-            return groupConversationOpt.get().getParticipants().stream()
-                    .anyMatch(u -> u.getId().equals(userId));
+        // Counted rather than loaded: this runs on every history fetch and every
+        // WebSocket subscription, and the app-level group's roster is the whole
+        // church — materialising it just to answer yes/no is pure waste.
+        if (groupConversationRepository.existsById(conversationId)) {
+            return groupConversationRepository.isParticipant(conversationId, userId);
         }
         Optional<PrivateConversation> privateConversationOpt = privateConversationRepository.findById(conversationId);
         if (privateConversationOpt.isPresent()) {
@@ -298,6 +336,8 @@ public class ConversationService {
         GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
 
+        rejectAppGroupRosterEdit(groupConversation);
+
         User userToAdd = requireChatEligible(userId, "User not found");
         User currentUser = requireChatEligible(currentUserId, "Current user not found");
 
@@ -348,6 +388,8 @@ public class ConversationService {
         // Fetch the group conversation
         GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
+
+        rejectAppGroupRosterEdit(groupConversation);
 
         // Fetch user being removed and the current admin
         User userToRemove = userRepository.findById(userId)
@@ -410,6 +452,8 @@ public class ConversationService {
         // Fetch the group conversation from the repository
         GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
+
+        rejectAppGroupRosterEdit(groupConversation);
 
         // Fetch the current user
         User currentUser = userRepository.findById(currentUserId)
@@ -490,6 +534,8 @@ public class ConversationService {
         GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
 
+        rejectAppGroupRosterEdit(groupConversation);
+
         User userToAdd = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         User currentUser = userRepository.findById(currentUserId)
@@ -542,6 +588,8 @@ public class ConversationService {
         // 🔍 Step 1: Fetch group conversation
         GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                 .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
+
+        rejectAppGroupRosterEdit(groupConversation);
 
         // 🔍 Step 2: Fetch users
         User userToRemove = userRepository.findById(userId)
@@ -714,6 +762,11 @@ public class ConversationService {
 
             GroupConversation groupConversation = groupConversationRepository.findById(conversationId)
                     .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+
+            if (groupConversation.isAppLevel()) {
+                // It would be recreated empty on the next boot, minus every message.
+                throw new IllegalArgumentException("The app-level group chat cannot be deleted.");
+            }
 
             performConversationCleanup(groupConversation);
             groupConversation.getParticipants().clear();

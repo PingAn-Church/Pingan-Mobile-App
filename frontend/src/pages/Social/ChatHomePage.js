@@ -23,6 +23,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { UserContext } from "../../context/UserContext";
 import {
   getUserById,
@@ -42,6 +43,10 @@ import defaultProfileImage from "../../../assets/user.png";
 import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
+import {
+  compareConversations,
+  groupDisplayName,
+} from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
 
 const ChatHomePage = () => {
@@ -120,24 +125,10 @@ const ChatHomePage = () => {
   //   });
   // }, [conversations]);
 
-  const sortedConversations = useMemo(() => {
-    return [...conversations].sort((a, b) => {
-      const lastMessageA = a.chatHistory?.[a.chatHistory.length - 1];
-      const lastMessageB = b.chatHistory?.[b.chatHistory.length - 1];
-
-      const timeA = Math.max(
-        lastMessageA ? new Date(lastMessageA.timestamp).getTime() : 0,
-        a.updatedAt || 0
-      );
-
-      const timeB = Math.max(
-        lastMessageB ? new Date(lastMessageB.timestamp).getTime() : 0,
-        b.updatedAt || 0
-      );
-
-      return timeB - timeA;
-    });
-  }, [conversations]);
+  const sortedConversations = useMemo(
+    () => [...conversations].sort(compareConversations),
+    [conversations]
+  );
 
   const filteredConversations = useMemo(() => {
     if (!searchQuery) return sortedConversations;
@@ -145,9 +136,10 @@ const ChatHomePage = () => {
     const lowercasedQuery = searchQuery.toLowerCase();
 
     return sortedConversations.filter((conversation) => {
-      // Group: check groupName
+      // Group: match the name as it is actually displayed, so searching for the
+      // app-level group in Chinese finds it when the app is in Chinese.
       if (conversation.conversationType === "group") {
-        return (conversation.groupName || "")
+        return groupDisplayName(conversation, language)
           .toLowerCase()
           .includes(lowercasedQuery);
       }
@@ -161,7 +153,7 @@ const ChatHomePage = () => {
 
       return false;
     });
-  }, [sortedConversations, searchQuery]);
+  }, [sortedConversations, searchQuery, language]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -275,7 +267,9 @@ const ChatHomePage = () => {
   };
 
   const getOnlineUserCount = (conversation) => {
-    return conversation.participants.reduce((count, participantId) => {
+    // Empty for the app-level group, whose roster the server deliberately does
+    // not send — an online count of the whole church is not worth the payload.
+    return (conversation.participants || []).reduce((count, participantId) => {
       return userStatus[String(participantId)] === "online" ? count + 1 : count;
     }, 0);
   };
@@ -314,7 +308,7 @@ const ChatHomePage = () => {
           : i18n.t("unknownUser");
       }
     } else {
-      title = item.groupName || i18n.t("groupChat");
+      title = groupDisplayName(item, language);
     }
 
     const unreadCount = getUnreadMessageCount(item, user.id);
@@ -336,13 +330,21 @@ const ChatHomePage = () => {
       >
         {/* Profile Image & Online Indicator */}
         <View style={styles.profileContainer}>
-          <CachedImage
-            uri={rawIconUri}
-            type={isGroupIcon ? "group" : "profile"}
-            conversationId={isGroupIcon ? item.conversationId : undefined}
-            fallbackSource={defaultProfileImage}
-            style={styles.profileImage}
-          />
+          {item.appLevel && !rawIconUri ? (
+            // The church-wide group has no photo until an admin sets one, and the
+            // default single-person avatar would read as a private chat.
+            <View style={[styles.profileImage, styles.iconAvatar]}>
+              <Ionicons name="people" size={26} color="#ffffff" />
+            </View>
+          ) : (
+            <CachedImage
+              uri={rawIconUri}
+              type={isGroupIcon ? "group" : "profile"}
+              conversationId={isGroupIcon ? item.conversationId : undefined}
+              fallbackSource={defaultProfileImage}
+              style={styles.profileImage}
+            />
+          )}
 
           {/* Online Indicator for Private Chat */}
           {isPrivateChat && isOnline && <View style={styles.onlineIndicator} />}
@@ -502,6 +504,13 @@ const styles = StyleSheet.create({
     marginRight: 14,
     borderWidth: 1,
     borderColor: "#e5e7eb",
+  },
+  // Stand-in avatar for rows that represent a place rather than a person.
+  iconAvatar: {
+    backgroundColor: "#3b82f6",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 0,
   },
   textContainer: {
     flex: 1,

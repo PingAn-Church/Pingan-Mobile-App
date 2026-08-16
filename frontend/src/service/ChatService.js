@@ -291,6 +291,40 @@ export const leaveGroup = async (conversationId) => {
   }
 };
 
+/**
+ * One page of a group's members.
+ *
+ * Ordinary groups already carry their roster in the conversation payload; this
+ * exists for the app-level group, whose roster is the whole church and is
+ * therefore left out of that payload entirely.
+ */
+export const getGroupParticipants = async (conversationId, { page = 0, size = 30 } = {}) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No token found.");
+
+  const response = await axios.get(
+    apiUrl(`/chat/conversation/${conversationId}/participants`),
+    {
+      params: { page, size },
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return response.data;
+};
+
+/** Renames the app-level group. Both languages at once; app admins only. */
+export const renameAppGroup = async ({ name, nameZh }) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No token found.");
+
+  const response = await axios.put(
+    apiUrl(`/chat/app-group/name`),
+    { name, nameZh },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
 export const updateGroupIcon = async (conversationId, groupIcon) => {
   const token = await getAuthToken();
 

@@ -105,4 +105,11 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     /** Admins with no new-member marker yet — backfilled once at startup. */
     List<User> findByIsAdminTrueAndLastSeenMemberIdIsNull();
+
+    /**
+     * Everyone entitled to be in the app-level group: admin-verified, still
+     * active, not self-deleted. The same three conditions the chat gates on.
+     */
+    @Query("SELECT u FROM User u WHERE u.isVerifiedUser = true AND u.active = true AND u.deletedAccount = false")
+    List<User> findChatEligibleMembers();
 }

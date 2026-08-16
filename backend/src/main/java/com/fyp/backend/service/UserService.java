@@ -37,6 +37,9 @@ public class UserService {
     @Autowired
     private AdminAlertService adminAlertService;
 
+    @Autowired
+    private AppGroupChatService appGroupChatService;
+
     /**
      * Retrieves the user profile of the currently authenticated user.
      * 
@@ -150,6 +153,10 @@ public class UserService {
             }
             user.setVerifiedUser(isVerifiedUser);
             userRepository.save(user);
+            // Verification is what membership of the app-level group is derived
+            // from, so it has to move with it — the group is waiting in their chat
+            // list the moment they are approved, and gone again if that is undone.
+            appGroupChatService.syncMembership(user);
         } else {
             throw new RuntimeException("User not found");
         }
@@ -169,6 +176,9 @@ public class UserService {
         }
         user.setActive(active);
         userRepository.save(user);
+        // A deactivated account keeps its verified flag but must stop receiving the
+        // public group's traffic.
+        appGroupChatService.syncMembership(user);
     }
 
     @Transactional
@@ -193,6 +203,9 @@ public class UserService {
                 adminAlertService.startTrackingNewMembers(user);
             }
             userRepository.save(user);
+            // Admin powers in the app-level group follow app admin rather than a
+            // separate per-group list, so the two must not drift apart.
+            appGroupChatService.syncAdmin(user);
         } else {
             throw new RuntimeException("User not found");
         }

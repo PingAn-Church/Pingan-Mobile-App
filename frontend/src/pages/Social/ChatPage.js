@@ -30,6 +30,10 @@ import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
+  compareConversations,
+  groupDisplayName,
+} from "../../utils/conversationDisplay";
+import {
   MEDIA_LIBRARY_PERMISSION_DENIED,
   downloadImageToLibrary,
   saveImageToLibrary,
@@ -231,13 +235,6 @@ const formatDeliveryStateLabel = (state) => {
   if (state === "delivered") return "Delivered";
   if (state === "sent") return "Sent";
   return "";
-};
-
-const getConversationSortTime = (conversation) => {
-  const history = conversation?.chatHistory || [];
-  const lastMessage = history[history.length - 1];
-  const lastMessageTime = getMessageDate(lastMessage)?.getTime() || 0;
-  return Math.max(lastMessageTime, Number(conversation?.updatedAt) || 0);
 };
 
 const getConversationPreview = (conversation, currentUserId) => {
@@ -805,7 +802,7 @@ export default function ChatPage({ route }) {
 
   const chatDisplayName =
     conversationType === "group"
-      ? conversation?.groupName || "Group Chat"
+      ? groupDisplayName(conversation, language)
       : privateChatParticipant?.fullName || "";
 
   const openDetailsPanel = useCallback(() => {
@@ -1796,10 +1793,10 @@ export default function ChatPage({ route }) {
 
   const chatSidebarConversations = useMemo(() => {
     return [...conversations]
-      .sort((a, b) => getConversationSortTime(b) - getConversationSortTime(a))
+      .sort(compareConversations)
       .map((conv) => {
         const isGroup = conv.conversationType === "group";
-        let title = conv.groupName || "Group Chat";
+        let title = groupDisplayName(conv, language);
 
         if (!isGroup) {
           const participantIds = conv.participants || [];
@@ -1832,7 +1829,7 @@ export default function ChatPage({ route }) {
           sidebarPreview: getConversationPreview(conv, currentUser?.id),
         };
       });
-  }, [conversations, currentUser?.id]);
+  }, [conversations, currentUser?.id, language]);
 
   const filteredSidebarConversations = useMemo(() => {
     const query = String(sidebarSearchQuery || "").trim().toLowerCase();

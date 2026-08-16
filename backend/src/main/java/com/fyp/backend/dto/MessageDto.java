@@ -1,5 +1,6 @@
 package com.fyp.backend.dto;
 
+import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageDeliveryStatus;
 import com.fyp.backend.model.User;
@@ -58,10 +59,19 @@ public class MessageDto {
         this.reported = Boolean.TRUE.equals(message.getReported());
 
         // ✅ Extract recipient IDs (excluding sender)
-        this.recipientIds = message.getConversation().getParticipants().stream()
-                .filter(user -> !user.getId().equals(senderId))
-                .map(user -> user.getId())
-                .collect(Collectors.toList());
+        //
+        // Left empty for the app-level group: its recipients are the whole church,
+        // so a page of history would otherwise repeat several hundred ids on every
+        // message. Nothing downstream reads this field from a stored message —
+        // ChatService recomputes the real recipient list when it fans a message
+        // out (see buildResponseDto), and the client only echoes it back on send,
+        // where the server ignores what it was given.
+        if (!isAppLevelGroup(message)) {
+            this.recipientIds = message.getConversation().getParticipants().stream()
+                    .filter(user -> !user.getId().equals(senderId))
+                    .map(user -> user.getId())
+                    .collect(Collectors.toList());
+        }
 
         // ✅ Convert Long keys to String for correct JSON serialization
         this.deliveryStatus = message.getDeliveryStatuses().stream()
@@ -69,6 +79,10 @@ public class MessageDto {
                         status -> String.valueOf(status.getUser().getId()), // Convert Long to String
                         MessageDeliveryStatus::getStatus
                 ));
+    }
+
+    private static boolean isAppLevelGroup(Message message) {
+        return message.getConversation() instanceof GroupConversation group && group.isAppLevel();
     }
 
     private String displayFirstName(User user) {

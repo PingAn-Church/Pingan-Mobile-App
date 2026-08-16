@@ -1,6 +1,9 @@
 package com.fyp.backend.repository;
 
 import com.fyp.backend.model.GroupConversation;
+import com.fyp.backend.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -34,6 +37,24 @@ public interface GroupConversationRepository extends JpaRepository<GroupConversa
 
     @Query("SELECT g FROM GroupConversation g WHERE LOWER(g.groupName) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<GroupConversation> searchByGroupName(@Param("query") String query);
+
+    /**
+     * The app-level group. Deliberately NOT the @EntityGraph findById above: this
+     * group holds the entire membership, and most callers only need its id or its
+     * name, not several hundred eagerly-fetched User rows.
+     */
+    Optional<GroupConversation> findFirstByAppLevelTrue();
+
+    /** Size of a group without materialising its roster. */
+    @Query("SELECT COUNT(p) FROM GroupConversation g JOIN g.participants p WHERE g.id = :conversationId")
+    long countParticipants(@Param("conversationId") Long conversationId);
+
+    /**
+     * A page of a group's members. The only way to see who is in the app-level
+     * group, whose roster is left out of the conversation payload entirely.
+     */
+    @Query("SELECT p FROM GroupConversation g JOIN g.participants p WHERE g.id = :conversationId")
+    Page<User> findParticipantsPage(@Param("conversationId") Long conversationId, Pageable pageable);
 
     // Single-query membership check — safe to call from WebSocket threads
     // (no lazy collection access outside a transaction).

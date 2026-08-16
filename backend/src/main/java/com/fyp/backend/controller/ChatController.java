@@ -2,15 +2,24 @@ package com.fyp.backend.controller;
 
 import com.fyp.backend.dto.ConversationDto;
 import com.fyp.backend.dto.MessageDto;
+import com.fyp.backend.dto.UserSummaryDto;
+import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
+import com.fyp.backend.service.AppGroupChatService;
 import com.fyp.backend.service.ChatService;
 import com.fyp.backend.service.ConversationMuteService;
 import com.fyp.backend.service.ConversationService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
+import com.fyp.backend.util.Pagination;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,15 +35,18 @@ public class ChatController {
     private final UserService userService;
     private final JwtUtil jwtUtil;
     private final ConversationMuteService conversationMuteService;
+    private final AppGroupChatService appGroupChatService;
 
     @Autowired
     public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil,
-                          UserService userService, ConversationMuteService conversationMuteService) {
+                          UserService userService, ConversationMuteService conversationMuteService,
+                          AppGroupChatService appGroupChatService) {
         this.conversationService = conversationService;
         this.chatService = chatService;
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.conversationMuteService = conversationMuteService;
+        this.appGroupChatService = appGroupChatService;
     }
 
     // Fetch user's conversations
@@ -46,6 +58,48 @@ public class ChatController {
         }
         List<ConversationDto> conversations = conversationService.getConversationsByUserId(userId);
         return ResponseEntity.ok(conversations);
+    }
+
+    /**
+     * Renames the app-level group. Both languages at once: it is the only chat
+     * whose name is written twice, and letting one half be saved without the
+     * other would leave part of the church looking at a blank title.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/app-group/name")
+    public ResponseEntity<?> renameAppGroup(@RequestBody Map<String, String> body) {
+        try {
+            GroupConversation renamed = appGroupChatService.rename(
+                    body == null ? null : body.get("name"),
+                    body == null ? null : body.get("nameZh"));
+            return ResponseEntity.ok(conversationService.getConversationById(renamed.getId()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * A page of a group's members, for the group details screen. Only conversations
+     * you are in, and only the non-PII summary shape.
+     */
+    @GetMapping("/conversation/{conversationId}/participants")
+    public ResponseEntity<Map<String, Object>> listGroupParticipants(
+            @PathVariable Long conversationId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size,
+            HttpServletRequest request) {
+        Long loggedInUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (loggedInUserId == null || !conversationService.isUserPartOfConversation(conversationId, loggedInUserId)) {
+            return ResponseEntity.status(403).body(Map.of("success", false));
+        }
+        Pageable pageable = PageRequest.of(
+                Pagination.clampPage(page),
+                Pagination.clampSize(size),
+                Sort.by("firstName").ascending().and(Sort.by("id").ascending()));
+        Page<UserSummaryDto> members = conversationService.getGroupParticipants(conversationId, pageable);
+        return ResponseEntity.ok(Pagination.envelope(members.getContent(), members));
     }
 
     // Fetch a specific conversation
