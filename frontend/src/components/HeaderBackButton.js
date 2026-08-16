@@ -11,6 +11,10 @@ import { useNavigation } from "@react-navigation/native";
  * stack root (nothing behind it), so there'd be no back button and browser-back is
  * also at the entry — leaving the user stuck. This walks the back stack when it can,
  * and otherwise falls back to a sensible parent route.
+ *
+ * `fallbackRoute` is a route name, or `{ name, params }` when the destination is
+ * a screen nested inside a navigator — landing on the tab bar's default tab
+ * would otherwise drop someone somewhere unrelated to where they were.
  */
 export default function HeaderBackButton({ navigation: navigationProp, fallbackRoute = "HomeTabs", tintColor }) {
   const contextNavigation = useNavigation();
@@ -19,8 +23,10 @@ export default function HeaderBackButton({ navigation: navigationProp, fallbackR
   const onPress = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
-    } else {
+    } else if (typeof fallbackRoute === "string") {
       navigation.navigate(fallbackRoute);
+    } else {
+      navigation.navigate(fallbackRoute.name, fallbackRoute.params);
     }
   };
 

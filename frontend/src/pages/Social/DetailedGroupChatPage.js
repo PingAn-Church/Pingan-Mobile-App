@@ -257,7 +257,7 @@ const DetailedGroupChatPage = ({ route }) => {
         )
       );
 
-      navigation.navigate("ChatHome");
+      navigation.navigate("HomeTabs", { screen: "Chats" });
 
       // Optionally, you can navigate the user to another page, like the home page or chat list
     } catch (error) {
@@ -299,7 +299,7 @@ const DetailedGroupChatPage = ({ route }) => {
       //   prev.filter((c) => c.conversationId !== conversationId)
       // );
 
-      navigation.navigate("ChatHome");
+      navigation.navigate("HomeTabs", { screen: "Chats" });
     } catch (err) {
       showAlert(i18n.t("error"), err.message || i18n.t("deleteChatFailed"), [
         { text: i18n.t("ok") },

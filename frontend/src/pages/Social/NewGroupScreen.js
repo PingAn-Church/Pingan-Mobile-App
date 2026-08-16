@@ -118,7 +118,7 @@ const NewGroupScreen = () => {
         //   ],
         // });
         if (response.status === 200) {
-          navigation.navigate("ChatHome");
+          navigation.navigate("HomeTabs", { screen: "Chats" });
           navigation.navigate("Chat", {
             conversationId: response.data.conversationId,
           });

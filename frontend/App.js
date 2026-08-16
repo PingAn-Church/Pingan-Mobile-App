@@ -24,7 +24,6 @@ import GiftDiscoveryScreen from "./src/features/spiritualGifts/GiftDiscoveryScre
 import GiftAssessmentScreen from "./src/features/spiritualGifts/GiftAssessmentScreen";
 import GiftResultsScreen from "./src/features/spiritualGifts/GiftResultsScreen";
 import CommunityPage from "./src/pages/Activity/CommunityPage";
-import SocialPage from "./src/pages/Social/SocialPage";
 import ThreadHomePage from "./src/pages/Social/ThreadHomePage";
 import ThreadDetailPage from "./src/pages/Social/ThreadDetailPage";
 import CreateThreadPage from "./src/pages/Social/CreateThreadPage";
@@ -131,9 +130,15 @@ const Tab = createBottomTabNavigator();
 
 // Home tabs for every form factor: a left sidebar rail at landscape
 // tablet/desktop widths, classic bottom tabs otherwise. One Tab.Navigator for
-// both modes keeps Home/Events/Social/Settings registered under the same
-// navigator, so navigate("Social") etc. always resolves and per-tab state
+// both modes keeps Home/Events/Chats/Settings registered under the same
+// navigator, so navigate("Chats") etc. always resolves and per-tab state
 // survives rotation.
+//
+// The chat tab is registered as "Chats", not "Chat", because the root stack
+// already owns a "Chat" screen (a single conversation) that half the app
+// navigates to by name — two screens sharing a name would resolve by whichever
+// navigator was nearest. Its visible label comes from i18n.t(route.name), so
+// the "Chats" locale key holds the word the user actually reads.
 function HomeTabsNavigator() {
   const { language } = useContext(LanguageContext); // to listen to language change
   const { user } = useContext(UserContext);
@@ -165,7 +170,7 @@ function HomeTabsNavigator() {
             iconName = focused ? "home" : "home-outline";
           } else if (route.name === "Events") {
             iconName = focused ? "calendar" : "calendar-outline";
-          } else if (route.name === "Social") {
+          } else if (route.name === "Chats") {
             iconName = focused ? "chatbubble" : "chatbubble-outline";
           } else if (route.name === "Settings") {
             iconName = focused ? "settings" : "settings-outline";
@@ -216,15 +221,15 @@ function HomeTabsNavigator() {
           options={{ headerTitle: i18n.t("Events") }}
         />
       )}
-      {/* Chat/forum entry is hidden until verified; SocialPage keeps its own
-          not-verified guard for anyone who still lands there (e.g. deep link). */}
+      {/* Chat is hidden until the account is verified. The tab now renders the
+          conversation list itself rather than a hub screen, so the tab bar stays
+          on screen while browsing chats. */}
       {user?.verifiedUser && (
         <Tab.Screen
-          name="Social"
-          component={SocialPage}
+          name="Chats"
+          component={ChatHomeRoute}
           options={{
-            headerTitle: i18n.t("Social"),
-            // Chat is the only badged surface, and it lives under this tab.
+            headerTitle: i18n.t("Chats"),
             tabBarBadge: unreadBadge,
             tabBarIcon: ({ focused, color, size }) => (
               <Ionicons
@@ -262,13 +267,21 @@ const linking = {
   prefixes: ["http://localhost:8081", "exp://"],
   config: {
     screens: {
-      ChatHome: "chats",
+      // /chats is the tab now, not a standalone stack screen, so the URL has to
+      // resolve through HomeTabs — otherwise opening it directly would show a
+      // conversation list with no tab bar under it.
+      HomeTabs: { screens: { Chats: "chats" } },
       Chat: "chats/:conversationId",
       DetailedPrivateChat: "private/:otherParticipantId",
       DetailedGroupChat: "group/:conversationId",
     },
   },
 };
+
+// Backing out of a chat screen with nothing behind it (a deep link, a web
+// refresh) has to land on the Chat tab specifically; plain "HomeTabs" would
+// drop the user on Home.
+const CHAT_LIST_ROUTE = { name: "HomeTabs", params: { screen: "Chats" } };
 
 
 // Minimum time the branded entry overlay stays up so the ~1.6s dove animation
@@ -357,16 +370,15 @@ const ROOT_BACK_FALLBACKS = {
   Register: "Welcome",
   VerificationCode: "Register",
   ForgotPassword: "Login",
-  ThreadHomePage: "HomeTabs",
+  ThreadHomePage: CHAT_LIST_ROUTE,
   ThreadDetail: "ThreadHomePage",
   CreateThread: "ThreadHomePage",
   EditThread: "ThreadHomePage",
-  ChatHome: "HomeTabs",
-  Chat: "ChatHome",
-  NewChat: "ChatHome",
-  NewGroup: "ChatHome",
-  DetailedPrivateChat: "ChatHome",
-  DetailedGroupChat: "ChatHome",
+  Chat: CHAT_LIST_ROUTE,
+  NewChat: CHAT_LIST_ROUTE,
+  NewGroup: CHAT_LIST_ROUTE,
+  DetailedPrivateChat: CHAT_LIST_ROUTE,
+  DetailedGroupChat: CHAT_LIST_ROUTE,
   FormApplication: "HomeTabs",
   GiftDiscovery: "HomeTabs",
   GiftAssessment: "GiftDiscovery",
@@ -546,10 +558,9 @@ export default function App() {
                     component={CreateThreadPage}
                   />
                   <Stack.Screen name="EditThread" component={EditThreadPage} />
-                  <Stack.Screen
-                    name="ChatHome"
-                    component={ChatHomeRoute}
-                  />
+                  {/* No standalone ChatHome screen: the conversation list is the
+                      Chats tab, so there is exactly one of it and the tab bar is
+                      always underneath. */}
                   <Stack.Screen
                     name="Chat"
                     component={ChatPage}

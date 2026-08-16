@@ -168,7 +168,7 @@ const DetailedPrivateChatPage = ({ route }) => {
       //   prev.filter((c) => c.conversationId !== conv.conversationId)
       // );
 
-      navigation.navigate("ChatHome");
+      navigation.navigate("HomeTabs", { screen: "Chats" });
     } catch (err) {
       showAlert(i18n.t("error"), err.message || i18n.t("deleteChatFailed"), [
         { text: i18n.t("ok") },

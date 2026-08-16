@@ -30,6 +30,7 @@ import {
   startGroupChat,
 } from "../../service/UserService";
 import { useNavigation } from "@react-navigation/native";
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { ChatContext } from "../../context/ChatContext";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -62,6 +63,11 @@ const ChatHomePage = () => {
     (loading || loadingConversations || !user) && !refreshing;
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
+  // This list is the Chats tab, so the tab bar is drawn over its bottom edge and
+  // the compose button has to clear it. Read through the context rather than
+  // useBottomTabBarHeight(), which throws outside a tab navigator — the two-pane
+  // web layout renders this component in places that have no tab bar.
+  const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
 
   // console.log("conversations123", conversations)
 
@@ -159,7 +165,7 @@ const ChatHomePage = () => {
 
   useEffect(() => {
     navigation.setOptions({
-      title: i18n.t("chatHome"),
+      title: i18n.t("Chats"),
       headerBackTitle: i18n.t("back"),
     });
   }, [language]);
@@ -418,7 +424,7 @@ const ChatHomePage = () => {
       />
 
       <TouchableOpacity
-        style={styles.addButton}
+        style={[styles.addButton, { bottom: 24 + tabBarHeight }]}
         onPress={() => navigation.navigate("NewChat")}
       >
         <Text style={styles.addButtonText}>+</Text>
