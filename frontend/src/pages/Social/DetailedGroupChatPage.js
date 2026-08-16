@@ -12,6 +12,7 @@ import {
   Alert,
   TouchableOpacity,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { ChatContext } from "../../context/ChatContext";
 import { UserContext } from "../../context/UserContext";
 import AddParticipantsModal from "../../components/Chat/AddParticipantsModal"; // ✅ Import the modal
@@ -411,7 +412,9 @@ const DetailedGroupChatPage = ({ route }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    // The rename fields sit above the member list, so without this the keyboard
+    // covers the very inputs it was opened for.
+    <KeyboardAvoidingView style={styles.container} behavior="padding">
       {/* Group Icon and Name */}
       <View style={styles.headerContainer}>
         {/* <Image source={{ uri: chatIconUrl }} style={styles.chatIcon} /> */}
@@ -594,7 +597,7 @@ const DetailedGroupChatPage = ({ route }) => {
         conversationId={conversationId}
         existingParticipants={participants}
       />
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 };
 
