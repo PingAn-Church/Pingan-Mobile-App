@@ -23,6 +23,10 @@ public class MessageDto {
     private Long senderId;
     private String senderFirstName;
     private String senderLastName;
+    // Stored object path for the sender's avatar, so a group message can show who
+    // is speaking without the client first loading the whole participant roster —
+    // which the app-level group deliberately does not ship.
+    private String senderProfileImage;
 
     private List<Long> recipientIds = new ArrayList<>();
     private boolean edited = false;
@@ -50,6 +54,7 @@ public class MessageDto {
         this.senderId = message.getSender().getId();
         this.senderFirstName = displayFirstName(message.getSender());
         this.senderLastName = displayLastName(message.getSender());
+        this.senderProfileImage = displayProfileImage(message.getSender());
         this.reported = Boolean.TRUE.equals(message.getReported());
 
         // ✅ Extract recipient IDs (excluding sender)
@@ -78,5 +83,13 @@ public class MessageDto {
             return "User";
         }
         return user.isDeletedAccount() ? "Account" : user.getLastName();
+    }
+
+    /** A deleted account keeps no face, matching the name fields above. */
+    private String displayProfileImage(User user) {
+        if (user == null || user.isDeletedAccount()) {
+            return null;
+        }
+        return user.getProfileImage();
     }
 }

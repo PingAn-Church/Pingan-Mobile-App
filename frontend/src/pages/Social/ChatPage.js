@@ -26,6 +26,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import defaultProfileImage from "../../../assets/user.png";
+import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -2165,7 +2166,7 @@ export default function ChatPage({ route }) {
             ? item.id
             : String(item.messageId || item.localId || item.clientMessageId || `msg-${index}`)
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           if (item.type === "date") {
             return (
               <View style={styles.dateSeparator}>
@@ -2175,6 +2176,25 @@ export default function ChatPage({ route }) {
           }
 
           const isMe = item.senderId === currentUser?.id;
+          // In a group there is no other way to tell who is speaking, so incoming
+          // messages carry the sender's face and name. Your own don't — you know
+          // who you are — and a private chat has exactly one other person.
+          const showsSender = conversationType === "group" && !isMe;
+          // The list is inverted, so the message drawn ABOVE this one is the next
+          // index. Only the first message of a run is labelled; repeating the
+          // avatar and name down a burst of five replies is just noise.
+          const above = messages[index + 1];
+          const startsRun =
+            !above ||
+            above.type === "date" ||
+            String(above.senderId) !== String(item.senderId);
+          // The message carries the sender's avatar path itself, so this still works
+          // in the app-level group, whose roster is deliberately not sent to clients.
+          // The directory is the fallback for messages stored before that field existed.
+          const senderAvatarPath =
+            item.senderProfileImage || userDirectory[String(item.senderId)]?.profileImage || null;
+          const senderName =
+            formatName(item.senderFirstName, item.senderLastName) || i18n.t("unknownUser");
           const isFailed = item.failed;
           const isPending = item.pending;
           // Reported messages are shadow-hidden: everyone except the sender sees
@@ -2199,7 +2219,7 @@ export default function ChatPage({ route }) {
             translationEntry?.targetLang === expectedTargetLanguage &&
             translationEntry?.sourceContent === String(item.content || "").trim();
 
-          return (
+          const bubble = (
             <TouchableOpacity
               // Images handle their own long press inside <ChatImage>, but the
               // bubble has padding around the photo — catching it here too means a
@@ -2224,6 +2244,8 @@ export default function ChatPage({ route }) {
                     : (isMe ? styles.sentMessage : styles.receivedMessage),
                 isVoice ? styles.voiceMessageBubble : null,
                 isFailed ? styles.failedMessage : null,
+                // The avatar gutter replaces the bubble's own left margin.
+                showsSender ? styles.groupMessageBubble : null,
               ]}
             >
               {isShadowHidden ? (
@@ -2317,6 +2339,33 @@ export default function ChatPage({ route }) {
                 </Text>
               )}
             </TouchableOpacity>
+          );
+
+          if (!showsSender) return bubble;
+
+          return (
+            <View style={styles.groupMessageRow}>
+              {startsRun ? (
+                <CachedImage
+                  uri={senderAvatarPath}
+                  type="profile"
+                  fallbackSource={defaultProfileImage}
+                  style={styles.groupMessageAvatar}
+                />
+              ) : (
+                // Holds the gutter open so every bubble in a run stays on the
+                // same left edge as the one carrying the avatar.
+                <View style={styles.groupMessageAvatarSpacer} />
+              )}
+              <View style={styles.groupMessageColumn}>
+                {startsRun && (
+                  <Text style={styles.groupSenderName} numberOfLines={1}>
+                    {senderName}
+                  </Text>
+                )}
+                {bubble}
+              </View>
+            </View>
           );
         }}
       />
@@ -3317,6 +3366,40 @@ const styles = StyleSheet.create({
   failedMessage: {
     borderWidth: 1,
     borderColor: "#E35D5D",
+  },
+  // Group chats only: an incoming message is drawn as [avatar][name over bubble],
+  // so you can tell who is speaking without opening the participant list.
+  groupMessageRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingLeft: 12,
+    paddingRight: 12,
+  },
+  groupMessageAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 8,
+    marginTop: 4,
+    backgroundColor: "#E9E9EB",
+  },
+  groupMessageAvatarSpacer: {
+    width: 32,
+    marginRight: 8,
+  },
+  groupMessageColumn: {
+    flex: 1,
+    alignItems: "flex-start",
+  },
+  groupSenderName: {
+    fontSize: webFontSize(12),
+    fontWeight: "600",
+    color: "#6B7280",
+    marginLeft: 4,
+    marginBottom: 2,
+  },
+  groupMessageBubble: {
+    marginHorizontal: 0,
   },
   content: {
     fontSize: webFontSize(16),
