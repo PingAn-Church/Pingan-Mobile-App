@@ -465,11 +465,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Carousel
+  // Carousel. No height: the carousel sizes itself to the tallest announcement
+  // (each card follows its own picture's aspect ratio), so pinning it here would
+  // crop whatever doesn't fit the old 400px box.
   carouselWebContainer: {
     borderRadius: 15,
     overflow: 'hidden',
-    height: 400,
     marginHorizontal: 15,
   },
 

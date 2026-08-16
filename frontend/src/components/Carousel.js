@@ -6,32 +6,57 @@ import {
   Image,
   StyleSheet,
   Animated,
-  Platform,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { Linking } from "react-native";
 
-const CARD_HEIGHT = 400;
 const AUTO_SCROLL_INTERVAL = 4000; // Slower, more relaxed pace compared to 3000
+
+// Horizontal breathing room on each side of a card, inside the slide.
+const SLIDE_PADDING = 20;
+
+// Announcement posters are uploaded in whatever shape they were designed in —
+// wide banners, square graphics, tall portrait flyers — so the card takes its
+// height from the picture instead of forcing every picture into one box. The
+// bounds below only catch the extremes: anything outside them is fitted (never
+// cropped) onto the card background rather than being allowed to push the
+// title off the bottom of the screen.
+const MIN_ASPECT_RATIO = 0.7; // taller than ~7:10 portrait
+const MAX_ASPECT_RATIO = 2.5; // wider than ~5:2 panorama
+// Used until the real dimensions come back, and for images that fail to load.
+const FALLBACK_ASPECT_RATIO = 16 / 9;
+// However tall the picture is, leave room for the title and the rest of the page.
+const MAX_IMAGE_SCREEN_FRACTION = 0.55;
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
   // Use state for width to ensure re-render on layout calculation
   const [layout, setLayout] = useState({ width: 0, height: 0 });
+  // Real aspect ratio (width / height) of each picture, keyed by its URL.
+  const [aspectRatios, setAspectRatios] = useState({});
+  const { height: windowHeight } = useWindowDimensions();
 
   const scrollX = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef(null);
   const currentIndex = useRef(0);
   const timerRef = useRef(null);
+  // URLs already handed to Image.getSize. The caller rebuilds `data` on every
+  // render, so without this the measurement would be re-requested each time.
+  const measuredUrls = useRef(new Set());
+
+  const slideCount = data?.length ?? 0;
 
   // Helper to handle auto-scroll logic
   const startAutoScroll = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
-      if (!data?.length || layout.width === 0) return;
+      if (!slideCount || layout.width === 0) return;
 
       const nextIndex =
-        currentIndex.current + 1 >= data.length ? 0 : currentIndex.current + 1;
+        currentIndex.current + 1 >= slideCount ? 0 : currentIndex.current + 1;
 
       currentIndex.current = nextIndex;
 
@@ -39,8 +64,11 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
         x: nextIndex * layout.width,
         animated: true,
       });
+      // Depending on the slide count rather than the array itself keeps the timer
+      // alive: `data` is a fresh array on every render of the parent, and a new
+      // interval was being started (and the old one cleared mid-flight) each time.
     }, interval);
-  }, [data, interval, layout.width]);
+  }, [slideCount, interval, layout.width]);
 
   const stopAutoScroll = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -51,12 +79,51 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
     return () => stopAutoScroll();
   }, [startAutoScroll]);
 
+  // Ask each picture how big it really is, once. Until the answer arrives the
+  // card uses FALLBACK_ASPECT_RATIO, so slides never render at zero height.
+  useEffect(() => {
+    let cancelled = false;
+
+    (data || []).forEach((item) => {
+      const url = item?.imageUrl;
+      if (!url || measuredUrls.current.has(url)) return;
+      measuredUrls.current.add(url);
+
+      Image.getSize(
+        url,
+        (width, height) => {
+          if (cancelled || !width || !height) return;
+          setAspectRatios((previous) => ({ ...previous, [url]: width / height }));
+        },
+        () => {
+          // Unreadable (expired link, offline). Leave it on the fallback shape —
+          // the <Image> below will fail to draw too and show the card background.
+        }
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
+
   // Handle manual scroll (update current index)
   const handleScroll = (event) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     // Calculate index based on scroll position
     const index = Math.round(offsetX / layout.width);
     currentIndex.current = index;
+  };
+
+  const cardWidth = Math.max(layout.width - SLIDE_PADDING * 2, 0);
+
+  const imageHeightFor = (item) => {
+    const ratio = clamp(
+      aspectRatios[item?.imageUrl] || FALLBACK_ASPECT_RATIO,
+      MIN_ASPECT_RATIO,
+      MAX_ASPECT_RATIO
+    );
+    return Math.min(cardWidth / ratio, windowHeight * MAX_IMAGE_SCREEN_FRACTION);
   };
 
   if (!data || data.length === 0) return null;
@@ -105,12 +172,16 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
                       pressed && { opacity: 0.96 },
                     ]}
                   >
-                    {/* Shadow Wrapper */}
-                    <View style={styles.shadowLayer}>
+                    {/* Shadow Wrapper — sized to this picture's own proportions */}
+                    <View style={[styles.shadowLayer, { height: imageHeightFor(item) }]}>
                       <Image
                         source={{ uri: item.imageUrl }}
                         style={styles.cardImage}
-                        resizeMode="cover"
+                        // The frame already matches the picture, so nothing is
+                        // letterboxed in the normal case; "contain" only matters
+                        // for the clamped extremes, where fitting beats cropping
+                        // a poster whose text runs to the edge.
+                        resizeMode="contain"
                       />
                     </View>
 
@@ -119,7 +190,10 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
                       <Text style={styles.kickerText}>
                         {item.subtitle?.toUpperCase() || "FEATURED"}
                       </Text>
-                      <Text style={styles.titleText} numberOfLines={2}>
+                      {/* Deliberately unclamped: announcement titles are written
+                          as sentences and are often longer in Chinese, so they
+                          wrap onto as many lines as they need. */}
+                      <Text style={styles.titleText}>
                         {item.description}
                       </Text>
                     </View>
@@ -129,7 +203,9 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
             })}
           </ScrollView>
 
-          {/* Pagination */}
+          {/* Pagination. Sits below the cards in normal flow rather than floating
+              over them — with a variable card height there is no longer a fixed
+              bottom strip guaranteed to be empty. */}
           <View style={styles.paginationContainer}>
             {data.map((_, index) => {
               const inputRange = [
@@ -168,26 +244,24 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
 };
 
 const styles = StyleSheet.create({
+  // No fixed height anywhere below: the row of slides is as tall as its tallest
+  // card, and the carousel is as tall as that row.
   container: {
-    height: CARD_HEIGHT,
     width: "100%",
     backgroundColor: "#fff", // Clean canvas
   },
   slide: {
-    height: CARD_HEIGHT,
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
-    paddingHorizontal: 20
+    paddingHorizontal: SLIDE_PADDING,
   },
   cardContainer: {
     width: "100%",
-    height: "100%",
     justifyContent: "flex-start", // Top align items
     paddingTop: 10,
   },
   shadowLayer: {
     width: "100%",
-    height: 280,
     borderRadius: 18,
     backgroundColor: "#f0f0f0", // Placeholder color
     shadowColor: "#000",
@@ -221,12 +295,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5, // Tighter tracking for headlines
   },
   paginationContainer: {
-    position: "absolute",
-    bottom: 20,
     flexDirection: "row",
     width: "100%",
     justifyContent: "center",
     alignItems: "center",
+    paddingVertical: 16,
   },
   dot: {
     width: 8,
