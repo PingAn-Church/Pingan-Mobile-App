@@ -76,6 +76,22 @@ export const getUserById = async (userId) => {
   }
 };
 
+/**
+ * A member's public profile: name, avatar and roles.
+ *
+ * Not getUserById — that one returns the full record including their email, and
+ * this backs a screen any member can open from a group message.
+ */
+export const getUserSummary = async (userId) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No token found.");
+
+  const response = await axios.get(apiUrl(`/api/users/${userId}/summary`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
 // Admin-only paged user directory. Returns { success, data, pagination }.
 export const getAllUsers = async ({ q = "", page = 0, size = 20, verified, active = true, role } = {}) => {
   const token = await getAuthToken();

@@ -77,6 +77,21 @@ public class UserController {
         }
     }
 
+    /**
+     * The public face of a member: name, avatar and roles, nothing else.
+     *
+     * Deliberately separate from GET /{userId}, which returns the full profile
+     * including their email — this backs the in-app profile screen anyone can
+     * open from a group message, so it must not hand out contact details.
+     */
+    @GetMapping("/{userId}/summary")
+    public ResponseEntity<UserSummaryDto> getUserSummary(@PathVariable Long userId) {
+        return userRepository.findById(userId)
+                .map(UserSummaryDto::from)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404).body(null));
+    }
+
     // New endpoint to get all users (excluding the currently logged-in user)
     /**
      * Directory search for chat pickers: any authenticated user, paginated, and

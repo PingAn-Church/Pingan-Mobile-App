@@ -2356,12 +2356,18 @@ export default function ChatPage({ route }) {
           return (
             <View style={styles.groupMessageRow}>
               {startsRun ? (
-                <CachedImage
-                  uri={senderAvatarPath}
-                  type="profile"
-                  fallbackSource={defaultProfileImage}
-                  style={styles.groupMessageAvatar}
-                />
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
+                  accessibilityRole="button"
+                  accessibilityLabel={senderName}
+                >
+                  <CachedImage
+                    uri={senderAvatarPath}
+                    type="profile"
+                    fallbackSource={defaultProfileImage}
+                    style={styles.groupMessageAvatar}
+                  />
+                </TouchableOpacity>
               ) : (
                 // Holds the gutter open so every bubble in a run stays on the
                 // same left edge as the one carrying the avatar.
@@ -2369,9 +2375,13 @@ export default function ChatPage({ route }) {
               )}
               <View style={styles.groupMessageColumn}>
                 {startsRun && (
-                  <Text style={styles.groupSenderName} numberOfLines={1}>
-                    {senderName}
-                  </Text>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
+                  >
+                    <Text style={styles.groupSenderName} numberOfLines={1}>
+                      {senderName}
+                    </Text>
+                  </TouchableOpacity>
                 )}
                 {bubble}
               </View>

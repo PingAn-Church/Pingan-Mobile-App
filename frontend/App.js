@@ -30,6 +30,7 @@ import CreateThreadPage from "./src/pages/Social/CreateThreadPage";
 import EditThreadPage from "./src/pages/Social/EditThreadPage";
 import ChatHomePage from "./src/pages/Social/ChatHomePage";
 import NewChatScreen from "./src/pages/Social/NewChatScreen";
+import UserProfilePage from "./src/pages/Social/UserProfilePage";
 import NewGroupScreen from "./src/pages/Social/NewGroupScreen";
 import DetailedGroupChatPage from "./src/pages/Social/DetailedGroupChatPage";
 import DetailedPrivateChatPage from "./src/pages/Social/DetailedPrivateChatPage";
@@ -377,6 +378,7 @@ const ROOT_BACK_FALLBACKS = {
   Chat: CHAT_LIST_ROUTE,
   NewChat: CHAT_LIST_ROUTE,
   NewGroup: CHAT_LIST_ROUTE,
+  UserProfile: CHAT_LIST_ROUTE,
   DetailedPrivateChat: CHAT_LIST_ROUTE,
   DetailedGroupChat: CHAT_LIST_ROUTE,
   FormApplication: "HomeTabs",
@@ -566,6 +568,11 @@ export default function App() {
                     component={ChatPage}
                   />
                   <Stack.Screen name="NewChat" component={NewChatScreen} />
+                  <Stack.Screen
+                    name="UserProfile"
+                    component={UserProfilePage}
+                    options={{ headerTitle: "" }}
+                  />
                   <Stack.Screen name="NewGroup" component={NewGroupScreen} />
                   <Stack.Screen
                     name="DetailedPrivateChat"
