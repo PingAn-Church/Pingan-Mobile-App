@@ -425,12 +425,19 @@ public class ChatService {
         }
         checkUserIsParticipant(message.getConversation(), userId);
 
+        // Group messages carry no receipts by design — read state there is a
+        // watermark — but clients still report delivered/read for every message
+        // they draw, and builds released before that change always will. Saying
+        // "nothing was recorded" here is what lets the caller skip a broadcast
+        // that would otherwise wake every member of the conversation: several
+        // hundred sockets per receipt in the church-wide group, to no effect.
+        if (!(message.getConversation() instanceof PrivateConversation)) {
+            return null;
+        }
+
         MessageDeliveryStatus deliveryStatus = getDeliveryStatus(messageId, userId);
         if (deliveryStatus == null) {
-            // Group messages carry no receipts by design, and clients still report
-            // delivered/read for them. Nothing to record, but it is not an error —
-            // the read watermark is what tracks a group message being read.
-            return message.getConversationType();
+            return null;
         }
         deliveryStatus.setStatus(status);
         deliveryStatus.setTimestamp(new Timestamp(System.currentTimeMillis()));

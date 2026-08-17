@@ -72,6 +72,13 @@ public class WebSocketController {
             return;
         }
 
+        // Null means nothing was recorded — a group, which keeps no receipts. There
+        // is nothing to tell anyone, and fanning out anyway would cost one socket
+        // write per member per message drawn.
+        if (conversationType == null) {
+            return;
+        }
+
         statusUpdateDto.setConversationType(conversationType);
         statusUpdateDto.setDeliveryStatus(Map.of(String.valueOf(currentUserId), status));
         List<User> participants = chatService.getConversationParticipants(
