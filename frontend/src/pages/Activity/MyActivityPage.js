@@ -5,7 +5,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Image,
   ActivityIndicator,
   Platform,
   useWindowDimensions,
@@ -14,6 +13,7 @@ import { getAllEvents } from "../../service/EventService";
 import { UserContext } from "../../context/UserContext";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { fetchPictures } from "../../service/OSSService";
+import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { Ionicons } from "@expo/vector-icons";
 import { showAlert } from "../../utils/showAlert";
@@ -207,8 +207,13 @@ export default function MyActivityPage() {
         numColumns === 3 ? styles.imageContainerThreeCol : styles.imageContainerTwoCol,
       ]}
     >
-      <Image
-        source={{ uri: item }}
+      {/* The listing hands back a signed, single-use URL, so it is stripped back to
+          the plain object URL before being cached — the signature changes on every
+          load and would otherwise make the same photo a new cache entry each time.
+          The download button keeps the signed one, which is what it needs. */}
+      <CachedImage
+        uri={String(item).split("?")[0]}
+        type="event"
         style={styles.image}
         resizeMode="contain"
         onError={() => console.error("Error loading image:", item)}

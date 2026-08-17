@@ -19,6 +19,7 @@ import {
   getPresignedUploadUrl,
   uploadFileToOSS,
 } from "../../service/OSSService";
+import CachedImage from "../../components/CachedImage";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -141,8 +142,11 @@ export default function ManagePicturesPage() {
                 numColumns === 3 ? styles.imageContainerThreeCol : styles.imageContainerTwoCol,
               ]}
             >
-              <Image
-                source={{ uri: picture }}
+              {/* Stripped of its signature before caching: the listing signs every
+                  URL afresh, so the raw one is a different cache key each load. */}
+              <CachedImage
+                uri={String(picture).split("?")[0]}
+                type="event"
                 style={styles.image}
                 resizeMode="contain"
                 onError={() => console.error("Error loading image:", picture)}
