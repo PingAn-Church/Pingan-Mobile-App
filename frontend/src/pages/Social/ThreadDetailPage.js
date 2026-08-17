@@ -371,15 +371,15 @@ const ThreadDetailPage = ({ route }) => {
     if (repliesLoading || !repliesHasMore) return;
     setRepliesLoading(true);
     try {
-      const repliesPage = await fetchReplies(thread.id, { after: replyCursor, size: 20 });
+      const repliesPage = await fetchReplies(thread.id, { before: replyCursor, size: 20 });
       const items = Array.isArray(repliesPage?.data) ? repliesPage.data : [];
-      // Re-sort after merging: a reply posted locally sits at the end of the list
-      // and would otherwise appear before older pages fetched later.
+      // Newest first throughout: older pages join the bottom, and re-sorting
+      // descending keeps a locally posted reply at the top where it was put.
       setReplies((prev) =>
         [
           ...prev,
           ...items.filter((reply) => !prev.some((existing) => existing.id === reply.id)),
-        ].sort((a, b) => Number(a.id) - Number(b.id))
+        ].sort((a, b) => Number(b.id) - Number(a.id))
       );
       setReplyCursor(repliesPage?.pagination?.nextCursor || replyCursor);
       setRepliesHasMore(Boolean(repliesPage?.pagination?.hasMore));
@@ -441,10 +441,11 @@ const ThreadDetailPage = ({ route }) => {
         content: newReply,
         imageUrl: uploadedImage,
       });
-      setReplies((prev) => [...prev.filter((r) => r.id !== reply.id), reply]);
+      // Straight to the top, where the newest reply belongs.
+      setReplies((prev) => [reply, ...prev.filter((r) => r.id !== reply.id)]);
 
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }, 100);
 
       setNewReply("");

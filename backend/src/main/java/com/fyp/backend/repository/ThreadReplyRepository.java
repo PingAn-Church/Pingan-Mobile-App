@@ -31,9 +31,11 @@ public interface ThreadReplyRepository extends JpaRepository<ThreadReply, Long> 
     @Query("SELECT r.id FROM ThreadReply r WHERE r.thread.id = :threadId")
     List<Long> findIdsByThreadId(@Param("threadId") Long threadId);
 
-    List<ThreadReply> findByThreadIdOrderByIdAsc(Long threadId, Pageable pageable);
+    // Newest-first, walking backwards: a topic reads like a discussion where the
+    // latest answer is the one you want, not like a chat you scroll to the end of.
+    List<ThreadReply> findByThreadIdOrderByIdDesc(Long threadId, Pageable pageable);
 
-    List<ThreadReply> findByThreadIdAndIdGreaterThanOrderByIdAsc(Long threadId, Long afterId, Pageable pageable);
+    List<ThreadReply> findByThreadIdAndIdLessThanOrderByIdDesc(Long threadId, Long beforeId, Pageable pageable);
 
     long countByAuthorId(Long userId);
 

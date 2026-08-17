@@ -101,14 +101,22 @@ public class ThreadController {
     }
 
 
-    // Get replies for a thread
+    /**
+     * Replies to a topic, newest first.
+     *
+     * `after` is the name this cursor had while replies were oldest-first, and is
+     * still accepted: clients built against that version hand back the same
+     * nextCursor they were given, and paging backwards from it lands on the same
+     * next page. Nothing has to be released in step for their pagination to work.
+     */
     @GetMapping("/{id}/replies")
     public Map<String, Object> getReplies(
             @PathVariable Long id,
+            @RequestParam(required = false) Long before,
             @RequestParam(required = false) Long after,
             @RequestParam(defaultValue = "20") int size,
             @RequestHeader("Authorization") String token) {
-        return replyService.getRepliesPage(id, after, size, token);
+        return replyService.getRepliesPage(id, before != null ? before : after, size, token);
     }
 
     // Add reply to a thread

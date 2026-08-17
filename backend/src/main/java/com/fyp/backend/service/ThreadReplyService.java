@@ -36,12 +36,21 @@ public class ThreadReplyService {
     private final PushNotificationService pushNotificationService;
     private final PushMessages pushMessages;
 
-    public Map<String, Object> getRepliesPage(Long threadId, Long after, int size, String token) {
+    /**
+     * One page of replies, newest first.
+     *
+     * {@code before} is the smallest reply id already held; paging walks backwards
+     * into older replies, so the cursor is still the last id of the page returned.
+     * That is the same shape the previous oldest-first version used, which is why
+     * clients built against it keep paginating correctly against this one — they
+     * hand back whatever nextCursor they were given and get the next page along.
+     */
+    public Map<String, Object> getRepliesPage(Long threadId, Long before, int size, String token) {
         User requester = requireUser(token);
         int safeSize = Pagination.clampSize(size);
-        List<ThreadReply> fetched = after == null
-                ? replyRepository.findByThreadIdOrderByIdAsc(threadId, PageRequest.of(0, safeSize + 1))
-                : replyRepository.findByThreadIdAndIdGreaterThanOrderByIdAsc(threadId, after, PageRequest.of(0, safeSize + 1));
+        List<ThreadReply> fetched = before == null
+                ? replyRepository.findByThreadIdOrderByIdDesc(threadId, PageRequest.of(0, safeSize + 1))
+                : replyRepository.findByThreadIdAndIdLessThanOrderByIdDesc(threadId, before, PageRequest.of(0, safeSize + 1));
         boolean hasMore = fetched.size() > safeSize;
         List<ThreadReply> page = hasMore ? fetched.subList(0, safeSize) : fetched;
         List<ThreadReplyDto> data = page.stream()
@@ -49,7 +58,7 @@ public class ThreadReplyService {
                 .collect(Collectors.toList());
 
         Map<String, Object> pagination = new LinkedHashMap<>();
-        pagination.put("nextCursor", page.isEmpty() ? after : page.get(page.size() - 1).getId());
+        pagination.put("nextCursor", page.isEmpty() ? before : page.get(page.size() - 1).getId());
         pagination.put("hasMore", hasMore);
         pagination.put("size", safeSize);
 

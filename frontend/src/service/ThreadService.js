@@ -54,13 +54,17 @@ export const createThread = async (threadData) => {
  * Get all replies for a specific thread (requires auth)
  * @param {number} threadId
  */
-export const fetchReplies = async (threadId, { after, size = 20 } = {}) => {
+/**
+ * A page of replies, newest first. `before` is the smallest reply id already
+ * held; paging walks backwards into older replies.
+ */
+export const fetchReplies = async (threadId, { before, size = 20 } = {}) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No token found.");
 
   try {
     const response = await axios.get(`${baseUrl()}/${threadId}/replies`, {
-      params: { ...(after ? { after } : {}), size },
+      params: { ...(before ? { before } : {}), size },
       headers: {
         Authorization: `Bearer ${token}`,
       },

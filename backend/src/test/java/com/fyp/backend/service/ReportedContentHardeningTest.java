@@ -158,7 +158,7 @@ class ReportedContentHardeningTest {
         when(jwtUtil.extractEmail("author")).thenReturn("user1@example.com");
         when(userRepository.findByEmail("user2@example.com")).thenReturn(Optional.of(user(2L, false)));
         when(userRepository.findByEmail("user1@example.com")).thenReturn(Optional.of(author));
-        when(threadReplyRepository.findByThreadIdOrderByIdAsc(7L, PageRequest.of(0, 21)))
+        when(threadReplyRepository.findByThreadIdOrderByIdDesc(7L, PageRequest.of(0, 21)))
                 .thenReturn(List.of(reply));
         when(threadReplyRepository.findById(8L)).thenReturn(Optional.of(reply));
 
