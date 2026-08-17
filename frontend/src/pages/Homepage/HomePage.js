@@ -18,7 +18,6 @@ import { getAllEvents } from "../../service/EventService";
 import { fetchVideos } from "../../service/VideoService";
 import { Ionicons } from "@expo/vector-icons";
 import PlatformWebView from "../../components/PlatformWebView";
-import { resolvePresignedAssetUrl } from "../../service/OSSService";
 import { getPublishedCourses } from "../../learning/services/courseService";
 import CourseCoverImage from "../../learning/components/CourseCoverImage";
 import i18n from "../../../i18n";
@@ -51,7 +50,6 @@ export default function HomePage() {
   const [announcements, setAnnouncements] = useState([]);
   const [events, setEvents] = useState([]);
   const [videos, setVideos] = useState([]);
-  const [announcementImages, setAnnouncementImages] = useState({});
   const [courses, setCourses] = useState([]);
 
   const convertToDateTime = (dateString, timeString) => {
@@ -87,25 +85,14 @@ export default function HomePage() {
     } catch (error) { console.error(error); }
   };
 
+  // Covers are handed to the carousel as their stored object path and resolved by
+  // CachedImage, not signed here. Signing produces a single-use URL, so doing it
+  // on every focus gave the same poster a new identity each visit — nothing could
+  // cache it and it visibly reloaded on every return to this page.
   const loadAnnouncements = async () => {
     try {
-      const data = await getAllAnnouncements();
-      setAnnouncements(data);
-      const pairs = await Promise.all(
-        data.map(async (announcement) => {
-          if (!announcement?.imageUrl) return [announcement.id, null];
-          return [
-            announcement.id,
-            await resolvePresignedAssetUrl(announcement.imageUrl, "announcement"),
-          ];
-        })
-      );
-      setAnnouncementImages(Object.fromEntries(pairs));
+      setAnnouncements(await getAllAnnouncements());
     } catch (error) { console.error(error); }
-  };
-
-  const getImageForAnnouncement = (announcement) => {
-    return announcementImages[announcement.id] || null;
   };
 
   const loadEvents = async () => {
@@ -158,7 +145,7 @@ export default function HomePage() {
               <Carousel
                 data={announcements.map((announcement) => ({
                   key: announcement.id.toString(),
-                  imageUrl: getImageForAnnouncement(announcement),
+                  imageUrl: announcement.imageUrl || null,
                   description: announcement.title,
                   link: announcement.announcementLink
                 }))}

@@ -15,11 +15,11 @@ import {
   deleteAnnouncement,
 } from "../../service/AnnouncementService";
 import {
-  resolvePresignedAssetUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
   deleteOwnUpload,
 } from "../../service/OSSService";
+import CachedImage from "../../components/CachedImage";
 import { confirmAction } from "../../utils/confirmAction";
 import { showAlert } from "../../utils/showAlert";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -30,7 +30,6 @@ import { LanguageContext } from "../../context/LanguageContext";
 export default function ManageAnnouncementsPage() {
   const navigation = useNavigation();
   const [announcements, setAnnouncements] = useState([]);
-  const [announcementImages, setAnnouncementImages] = useState({});
   const { language } = useContext(LanguageContext);
 
   useEffect(() => {
@@ -46,29 +45,14 @@ export default function ManageAnnouncementsPage() {
     }, [])
   );
 
+  // Covers stay as their stored object path here; CachedImage signs them once and
+  // then serves the local copy, so revisiting this screen costs no downloads.
   const loadAnnouncements = async () => {
     try {
-      const data = await getAllAnnouncements();
-      console.log("Announcements:", data);
-      setAnnouncements(data);
-      const pairs = await Promise.all(
-        data.map(async (announcement) => {
-          if (!announcement?.imageUrl) return [announcement.id, null];
-          return [
-            announcement.id,
-            await resolvePresignedAssetUrl(announcement.imageUrl, "announcement"),
-          ];
-        })
-      );
-      setAnnouncementImages(Object.fromEntries(pairs));
+      setAnnouncements(await getAllAnnouncements());
     } catch (error) {
       console.error("Error fetching announcements:", error);
     }
-  };
-
-  // Map each announcement to its respective image
-  const getImageForAnnouncement = (announcement) => {
-    return announcementImages[announcement.id] || null;
   };
 
   const handleDeleteAnnouncement = async (announcement) => {
@@ -88,11 +72,6 @@ export default function ManageAnnouncementsPage() {
 
       // Update UI
       setAnnouncements(announcements.filter((a) => a.id !== announcement.id));
-      setAnnouncementImages((prev) => {
-        const next = { ...prev };
-        delete next[announcement.id];
-        return next;
-      });
     } catch (error) {
       showAlert(i18n.t("error"), i18n.t("deleteAnnouncementFailed"), [
         { text: i18n.t("ok") },
@@ -107,8 +86,9 @@ export default function ManageAnnouncementsPage() {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.announcementContainer}>
-            <Image
-              source={{ uri: getImageForAnnouncement(item) }}
+            <CachedImage
+              uri={item.imageUrl}
+              type="announcement"
               style={styles.image}
             />
             <Text style={styles.title}>{item.title}</Text>

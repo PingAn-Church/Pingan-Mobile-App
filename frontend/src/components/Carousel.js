@@ -3,13 +3,13 @@ import {
   View,
   ScrollView,
   Text,
-  Image,
   StyleSheet,
   Animated,
   Pressable,
   useWindowDimensions,
 } from "react-native";
 import { Linking } from "react-native";
+import CachedImage from "./CachedImage";
 
 const AUTO_SCROLL_INTERVAL = 4000; // Slower, more relaxed pace compared to 3000
 
@@ -31,10 +31,27 @@ const MAX_IMAGE_SCREEN_FRACTION = 0.55;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
+// The real pixel size of a picture that has just finished loading. React Native
+// reports it as `source` on iOS/Android and as the underlying DOM <img> on web.
+// Reading it off the load event means the measurement rides along with bytes the
+// card was fetching anyway, instead of costing a second request the way
+// Image.getSize did.
+const naturalSizeOf = (event) => {
+  const source = event?.nativeEvent?.source;
+  if (source?.width > 0 && source?.height > 0) return source;
+  const target = event?.nativeEvent?.target;
+  if (target?.naturalWidth > 0 && target?.naturalHeight > 0) {
+    return { width: target.naturalWidth, height: target.naturalHeight };
+  }
+  return null;
+};
+
 const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
   // Use state for width to ensure re-render on layout calculation
   const [layout, setLayout] = useState({ width: 0, height: 0 });
-  // Real aspect ratio (width / height) of each picture, keyed by its URL.
+  // Real aspect ratio (width / height) of each picture, keyed by its stored
+  // object path — the same identity CachedImage caches under, and stable across
+  // visits, unlike the short-lived signed URL the path resolves to.
   const [aspectRatios, setAspectRatios] = useState({});
   const { height: windowHeight } = useWindowDimensions();
 
@@ -42,9 +59,6 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
   const scrollViewRef = useRef(null);
   const currentIndex = useRef(0);
   const timerRef = useRef(null);
-  // URLs already handed to Image.getSize. The caller rebuilds `data` on every
-  // render, so without this the measurement would be re-requested each time.
-  const measuredUrls = useRef(new Set());
 
   const slideCount = data?.length ?? 0;
 
@@ -79,33 +93,16 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
     return () => stopAutoScroll();
   }, [startAutoScroll]);
 
-  // Ask each picture how big it really is, once. Until the answer arrives the
-  // card uses FALLBACK_ASPECT_RATIO, so slides never render at zero height.
-  useEffect(() => {
-    let cancelled = false;
-
-    (data || []).forEach((item) => {
-      const url = item?.imageUrl;
-      if (!url || measuredUrls.current.has(url)) return;
-      measuredUrls.current.add(url);
-
-      Image.getSize(
-        url,
-        (width, height) => {
-          if (cancelled || !width || !height) return;
-          setAspectRatios((previous) => ({ ...previous, [url]: width / height }));
-        },
-        () => {
-          // Unreadable (expired link, offline). Leave it on the fallback shape —
-          // the <Image> below will fail to draw too and show the card background.
-        }
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data]);
+  // Record each picture's real shape the first time it draws. Until then the card
+  // uses FALLBACK_ASPECT_RATIO, so slides never render at zero height; a picture
+  // that never loads simply stays on that shape.
+  const handleImageLoaded = useCallback((key, event) => {
+    const size = naturalSizeOf(event);
+    if (!key || !size) return;
+    setAspectRatios((previous) =>
+      previous[key] ? previous : { ...previous, [key]: size.width / size.height }
+    );
+  }, []);
 
   // Handle manual scroll (update current index)
   const handleScroll = (event) => {
@@ -174,14 +171,16 @@ const Carousel = ({ data, interval = AUTO_SCROLL_INTERVAL }) => {
                   >
                     {/* Shadow Wrapper — sized to this picture's own proportions */}
                     <View style={[styles.shadowLayer, { height: imageHeightFor(item) }]}>
-                      <Image
-                        source={{ uri: item.imageUrl }}
+                      <CachedImage
+                        uri={item.imageUrl}
+                        type="announcement"
                         style={styles.cardImage}
                         // The frame already matches the picture, so nothing is
                         // letterboxed in the normal case; "contain" only matters
                         // for the clamped extremes, where fitting beats cropping
                         // a poster whose text runs to the edge.
                         resizeMode="contain"
+                        onLoad={(event) => handleImageLoaded(item.imageUrl, event)}
                       />
                     </View>
 
