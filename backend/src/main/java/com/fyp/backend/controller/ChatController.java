@@ -28,6 +28,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/chat")
+@PreAuthorize("hasRole('VERIFIED')")
 public class ChatController {
 
     private final ConversationService conversationService;
