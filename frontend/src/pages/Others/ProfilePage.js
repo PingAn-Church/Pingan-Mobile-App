@@ -16,7 +16,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
-  Image, Platform,
+  Platform,
   useWindowDimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,8 +29,8 @@ import { deleteOwnAccount, getUserById } from "../../service/UserService";
 import { getAllApplications } from "../../service/ApplicationService";
 import { useNavigation } from "@react-navigation/native";
 import { logoutUser } from "../../service/AuthService";
-import { getPresignedDownloadUrl } from "../../service/OSSService";
 import { clearAll as clearMediaCache } from "../../service/MediaCacheService";
+import CachedImage from "../../components/CachedImage";
 import { changePassword } from "../../service/AuthService";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
@@ -64,25 +64,6 @@ export default function ProfilePage() {
     });
   }, [navigation, language]);
 
-  // useEffect(() => {
-  //   if (!user) return;
-  //   const fetchUserData = async () => {
-  //     try {
-  //       const data = await getUserById(user.id);
-  //       let iconUrl = null;
-
-  //       if (data.profileImage != null) {
-  //         iconUrl = await fetchViewingPresignedUrl(
-  //           data.profileImage,
-  //           "profile"
-  //         );
-  //         console.log("profile url: ", iconUrl);
-  //       }
-
-  //       setProfileImage(iconUrl);
-
-  //       setUserDetails([
-
   useFocusEffect(
     useCallback(() => {
       if (!user?.id) return;
@@ -90,17 +71,10 @@ export default function ProfilePage() {
       const fetchUserData = async () => {
         try {
           const data = await getUserById(user.id);
-          let iconUrl = null;
-
-          if (data.profileImage) {
-            iconUrl = await fetchViewingPresignedUrl(
-              data.profileImage,
-              "profile"
-            );
-            console.log("profile url: ", iconUrl);
-          }
-
-          setProfileImage(iconUrl);
+          // Kept as the stored object path rather than a signed URL: this screen
+          // reloads on every focus, and a fresh signature each time would make the
+          // same avatar look like a new picture and be downloaded again.
+          setProfileImage(data.profileImage || null);
 
           setUserDetails([
             {
@@ -130,17 +104,6 @@ export default function ProfilePage() {
       fetchUserData();
     }, [user])
   );
-
-  const fetchViewingPresignedUrl = async (imageUrl, type) => {
-    try {
-      const fileName = imageUrl.split("/").pop();
-      const presignedUrl = await getPresignedDownloadUrl(fileName, type);
-      return presignedUrl;
-    } catch (error) {
-      console.error(`Error getting presigned URL for ${type}:`, error);
-      return null;
-    }
-  };
 
   const options = [
     {
@@ -377,8 +340,9 @@ export default function ProfilePage() {
         <View style={styles.profileHeader}>
           <View style={styles.profileCircle}>
             {profileImage ? (
-              <Image
-                source={{ uri: profileImage }}
+              <CachedImage
+                uri={profileImage}
+                type="profile"
                 style={styles.profileImage}
               />
             ) : (

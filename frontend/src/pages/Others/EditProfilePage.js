@@ -6,7 +6,6 @@ import {
   Button,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Platform,
   ScrollView,
   Alert,
@@ -18,11 +17,11 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation } from "@react-navigation/native";
 import { getUserById, updateUserProfile } from "../../service/UserService";
 import {
-  getPresignedDownloadUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
   deleteOwnUpload,
 } from "../../service/OSSService";
+import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { Ionicons } from "@expo/vector-icons";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -56,21 +55,17 @@ const EditProfile = () => {
     const fetchUser = async () => {
       try {
         const data = await getUserById(user.id);
-        let iconUrl = null;
         setFirstName(data.firstName);
         setLastName(data.lastName);
         setEmail(data.email);
         console.log("data check: ", data);
         if (data.birthday) setBirthday(data.birthday);
-        if (data.profileImage) {
-          iconUrl = await fetchViewingPresignedUrl(
-            data.profileImage,
-            "profile"
-          );
-        }
-        setProfileImage(iconUrl);
-        setOriginalProfileImage(iconUrl); // Save initial image for comparison
-        console.log("pic check: ", profileImage);
+        // The stored object path, not a signed URL: CachedImage below serves it
+        // from the same on-device copy the rest of the app already uses. Once the
+        // picker runs this holds a local file:// URI instead, which is exactly how
+        // the comparison against originalProfileImage detects a new picture.
+        setProfileImage(data.profileImage || null);
+        setOriginalProfileImage(data.profileImage || null);
       } catch (error) {
         console.error("Failed to fetch user data:", error);
       }
@@ -78,17 +73,6 @@ const EditProfile = () => {
 
     fetchUser();
   }, [user]);
-
-  const fetchViewingPresignedUrl = async (imageUrl, type) => {
-    try {
-      const fileName = imageUrl.split("/").pop();
-      const presignedUrl = await getPresignedDownloadUrl(fileName, type);
-      return presignedUrl;
-    } catch (error) {
-      console.error(`Error getting presigned URL for ${type}:`, error);
-      return null;
-    }
-  };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -226,7 +210,7 @@ const EditProfile = () => {
     >
       <View style={styles.profileContainer}>
         {profileImage ? (
-          <Image source={{ uri: profileImage }} style={styles.image} />
+          <CachedImage uri={profileImage} type="profile" style={styles.image} />
         ) : (
           <Ionicons name="person-circle" size={100} color="#6e6e6e" />
         )}
