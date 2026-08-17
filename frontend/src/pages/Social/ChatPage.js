@@ -964,15 +964,17 @@ export default function ChatPage({ route }) {
       if (message?.mentionsEveryone) labels.push("all");
       (message?.mentionedUserIds || []).forEach((id) => {
         const key = String(id);
-        const known =
-          participants.find((p) => String(p.id) === key) || userDirectory[key];
+        const isCurrentUser = key === String(currentUser?.id);
+        const known = isCurrentUser
+          ? currentUser
+          : participants.find((p) => String(p.id) === key) || userDirectory[key];
         const name =
           known?.fullName || formatName(known?.firstName, known?.lastName);
         if (name) labels.push(name);
       });
       return labels;
     },
-    [participants, userDirectory]
+    [participants, userDirectory, currentUser]
   );
 
   const clearPendingMentions = useCallback(() => {
@@ -1240,10 +1242,36 @@ export default function ChatPage({ route }) {
   // per-message receipts below can only speak for messages the client has loaded,
   // so without this one call everything older stays unread on the server and the
   // badge comes back the next time the conversation list refreshes.
+  const latestVisibleMessageId = conversation?.chatHistory?.length
+    ? conversation.chatHistory[conversation.chatHistory.length - 1]?.messageId
+    : null;
   useEffect(() => {
     if (!currentUser?.id || !conversationId || !conversationType) return;
-    markConversationRead(conversationId, conversationType);
-  }, [conversationId, conversationType, currentUser?.id]);
+    let active = true;
+
+    (async () => {
+      const result = await markConversationRead(conversationId, conversationType);
+      if (!active || result === null) return;
+
+      setConversations((prev) =>
+        prev.map((conv) =>
+          String(conv.conversationId) === String(conversationId)
+            ? { ...conv, unreadCount: 0, mentioned: false }
+            : conv
+        )
+      );
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    conversationId,
+    conversationType,
+    currentUser?.id,
+    latestVisibleMessageId,
+    setConversations,
+  ]);
 
   const updateConversationHistory = (updater) => {
     setConversations((prev) =>
@@ -1261,7 +1289,11 @@ export default function ChatPage({ route }) {
   };
 
   useEffect(() => {
-    if (!currentUser?.id || !conversationId || !conversationType) return;
+    if (
+      !currentUser?.id ||
+      !conversationId ||
+      conversationType !== "private"
+    ) return;
 
     const history = conversation?.chatHistory || [];
     if (!history.length) return;
@@ -1309,16 +1341,6 @@ export default function ChatPage({ route }) {
       }
     });
 
-    // Viewing the conversation clears its unread badge (incremented live on receipt).
-    if (conversation?.unreadCount) {
-      setConversations((prev) =>
-        prev.map((c) =>
-          Number(c.conversationId) === Number(conversationId)
-            ? { ...c, unreadCount: 0 }
-            : c
-        )
-      );
-    }
   }, [
     conversation?.chatHistory,
     conversationId,

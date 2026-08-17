@@ -50,6 +50,11 @@ export const ChatProvider = ({ children }) => {
   const { user, userReady, setUserStatus } = useContext(UserContext);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const socialSessionKey = userReady && user?.id && user?.verifiedUser
+    ? String(user.id)
+    : null;
+  const socialSessionKeyRef = useRef(socialSessionKey);
+  socialSessionKeyRef.current = socialSessionKey;
   // Delivery receipts already sent this session. handleWebSocketMessage sends
   // from inside a state updater, which React may invoke more than once — this
   // set makes the send idempotent.
@@ -72,15 +77,27 @@ export const ChatProvider = ({ children }) => {
   const resetChat = () => {
     setConversations([]);
     setTopicUnread(0);
-    setLoading(true);
+    setLoading(false);
   };
   
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (prefetchedConversations = null) => {
     if (!user?.id || !user?.verifiedUser) return;
+    const requestedSessionKey = String(user.id);
     try {
       setLoading(true);
-      const fetched = await getConversations(user.id);
+      const fetched = Array.isArray(prefetchedConversations)
+        ? prefetchedConversations
+        : await getConversations(user.id);
+
+      // Subscribe before loading history. Messages committed after this point
+      // arrive live, while the REST page covers everything committed before it.
+      fetched.forEach((conv) => {
+        if (conv.conversationType === "group") {
+          subscribeToConversation(conv.conversationId);
+        }
+      });
+
       const enriched = await Promise.all(
         fetched.map(async (conv) => {
           // Load only the newest page; older messages stream in on scroll-back.
@@ -93,16 +110,19 @@ export const ChatProvider = ({ children }) => {
           };
         })
       );
+      if (socialSessionKeyRef.current !== requestedSessionKey) return;
       setConversations(enriched);
     } catch (err) {
       console.error("❌ Failed to fetch conversations:", err);
     } finally {
-      setLoading(false);
+      if (socialSessionKeyRef.current === requestedSessionKey) {
+        setLoading(false);
+      }
     }
   };
 
-  const fetchInitialData = async () => {
-    await fetchConversations();
+  const fetchInitialData = async (prefetchedConversations = null) => {
+    await fetchConversations(prefetchedConversations);
   };
 
   // Tracks in-flight scroll-back loads so concurrent onEndReached calls coalesce.
@@ -172,13 +192,25 @@ export const ChatProvider = ({ children }) => {
         // A genuinely new message from someone else bumps the unread badge live;
         // it resets to 0 when the conversation is viewed (see ChatPage read effect).
         const isNewIncoming =
-          message.senderId !== user?.id &&
+          String(message.senderId) !== String(user?.id) &&
           !message.deleted &&
           exists === -1 &&
           optimisticIndex === -1;
 
-        // 📡 Send delivery status if needed
-        if (message.senderId !== user?.id && !message.deleted) {
+        const mentionsCurrentUser =
+          isNewIncoming &&
+          (Boolean(message.mentionsEveryone) ||
+            (message.mentionedUserIds || []).some(
+              (mentionedUserId) => String(mentionedUserId) === String(user?.id)
+            ));
+
+        // Group delivery/read receipts are intentionally not tracked. Group
+        // messages use the shared topic and REST read watermark instead.
+        if (
+          conv.conversationType === "private" &&
+          String(message.senderId) !== String(user?.id) &&
+          !message.deleted
+        ) {
           sendDeliveryStatusUpdate({
             messageId: message.messageId,
             conversationId: message.conversationId,
@@ -192,6 +224,7 @@ export const ChatProvider = ({ children }) => {
           ...conv,
           chatHistory,
           unreadCount: (conv.unreadCount || 0) + (isNewIncoming ? 1 : 0),
+          mentioned: Boolean(conv.mentioned || mentionsCurrentUser),
         };
       });
 
@@ -378,7 +411,7 @@ export const ChatProvider = ({ children }) => {
   };
 
   const markMessagesAsDelivered = (conv) => {
-    if (!conv.chatHistory?.length) return;
+    if (conv.conversationType !== "private" || !conv.chatHistory?.length) return;
     conv.chatHistory.forEach((msg) => {
       if (msg.senderId !== user?.id && msg.deliveryStatus?.[user.id] !== "DELIVERED") {
         sendDeliveryStatusUpdate({

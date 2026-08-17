@@ -45,7 +45,7 @@ const AppBadgeSync = () => {
 
     // Signed out or browsing as a guest — nothing of theirs is waiting. Covers
     // logout, where ChatContext also clears the conversation list.
-    if (!user) {
+    if (!user?.verifiedUser) {
       setBadge(0);
       return;
     }
