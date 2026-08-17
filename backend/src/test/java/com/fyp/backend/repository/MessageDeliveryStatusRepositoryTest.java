@@ -19,11 +19,12 @@ import com.fyp.backend.model.PrivateConversation;
 import com.fyp.backend.model.User;
 
 /**
- * The bulk "mark this conversation read" statement behind opening a chat.
+ * The bulk "mark this conversation read" statement behind the ✓✓ / Seen tick.
  *
- * Per-message read receipts only ever cover the history page the client loaded,
- * so a conversation with more unread than that page left the rest unread on the
- * server and the badge came back on the next refetch. In-memory H2, no Docker.
+ * Receipts are a private-chat feature now — groups would need a row per member
+ * per message, and read state there is a watermark instead. What is tested here
+ * is the receipt flip itself: every row for this reader in this conversation, not
+ * just the page the client had loaded, and nobody else's. In-memory H2, no Docker.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
@@ -31,7 +32,6 @@ import com.fyp.backend.model.User;
 class MessageDeliveryStatusRepositoryTest {
 
     @Autowired private MessageDeliveryStatusRepository deliveryStatusRepository;
-    @Autowired private MessageRepository messageRepository;
     @Autowired private TestEntityManager em;
 
     private User me;
@@ -75,6 +75,24 @@ class MessageDeliveryStatusRepositoryTest {
         return m;
     }
 
+    /** Receipts for this reader that are not yet READ, across every conversation. */
+    private long unreadReceipts(User reader) {
+        return em.getEntityManager()
+                .createQuery("SELECT COUNT(d) FROM MessageDeliveryStatus d "
+                        + "WHERE d.user.id = :u AND d.status <> 'READ'", Long.class)
+                .setParameter("u", reader.getId())
+                .getSingleResult();
+    }
+
+    private long unreadReceipts(User reader, Conversation target) {
+        return em.getEntityManager()
+                .createQuery("SELECT COUNT(d) FROM MessageDeliveryStatus d "
+                        + "WHERE d.user.id = :u AND d.status <> 'READ' AND d.message.conversation.id = :c", Long.class)
+                .setParameter("u", reader.getId())
+                .setParameter("c", target.getId())
+                .getSingleResult();
+    }
+
     @BeforeEach
     void setUp() {
         me = persistUser("me@example.com");
@@ -83,16 +101,14 @@ class MessageDeliveryStatusRepositoryTest {
     }
 
     @Test
-    void markConversationReadClearsEveryUnreadMessageNotJustALoadedPage() {
+    void markConversationReadFlipsEveryReceiptNotJustALoadedPage() {
         for (int i = 0; i < 50; i++) {
             delivered(conversation, other, me, "message " + i);
         }
         em.flush();
-        assertEquals(50, messageRepository.countUnread(conversation.getId(), me.getId()));
 
         assertEquals(50, deliveryStatusRepository.markConversationRead(conversation.getId(), me.getId()));
-
-        assertEquals(0, messageRepository.countUnread(conversation.getId(), me.getId()));
+        assertEquals(0, unreadReceipts(me));
     }
 
     @Test
@@ -105,8 +121,8 @@ class MessageDeliveryStatusRepositoryTest {
 
         // Reading my copy of the conversation says nothing about whether the other
         // person has read what I sent them.
-        assertEquals(0, messageRepository.countUnread(conversation.getId(), me.getId()));
-        assertEquals(1, messageRepository.countUnread(conversation.getId(), other.getId()));
+        assertEquals(0, unreadReceipts(me));
+        assertEquals(1, unreadReceipts(other));
     }
 
     @Test
@@ -119,8 +135,8 @@ class MessageDeliveryStatusRepositoryTest {
 
         deliveryStatusRepository.markConversationRead(conversation.getId(), me.getId());
 
-        assertEquals(0, messageRepository.countUnread(conversation.getId(), me.getId()));
-        assertEquals(1, messageRepository.countUnread(elsewhere.getId(), me.getId()));
+        assertEquals(0, unreadReceipts(me, conversation));
+        assertEquals(1, unreadReceipts(me, elsewhere));
     }
 
     @Test

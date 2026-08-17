@@ -41,6 +41,7 @@ public class ChatService {
     private final UserBlockService userBlockService;
     private final ContentSanitizer contentSanitizer;
     private final PushMessages pushMessages;
+    private final ConversationReadStateService conversationReadStateService;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -54,7 +55,8 @@ public class ChatService {
                        PushNotificationService pushNotificationService,
                        UserBlockService userBlockService,
                        ContentSanitizer contentSanitizer,
-                       PushMessages pushMessages) {
+                       PushMessages pushMessages,
+                       ConversationReadStateService conversationReadStateService) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -68,6 +70,7 @@ public class ChatService {
         this.userBlockService = userBlockService;
         this.contentSanitizer = contentSanitizer;
         this.pushMessages = pushMessages;
+        this.conversationReadStateService = conversationReadStateService;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -97,7 +100,21 @@ public class ChatService {
         }
     }
 
+    /**
+     * Writes the per-recipient receipts behind the ✓✓ / Seen tick.
+     *
+     * Private chats only. A group would write one row per member per message —
+     * hundreds per message in the church-wide group — and the client collapses
+     * the whole map to a single word anyway, so nothing could read the detail
+     * back out. Groups get no ticks, which is the same call Telegram makes;
+     * whether a group message has been read is answered by the read watermark
+     * instead (see ConversationReadStateService).
+     */
     private void createDeliveryStatuses(Conversation conversation, User sender, Message message, Timestamp timestamp) {
+        if (!(conversation instanceof PrivateConversation)) {
+            return;
+        }
+
         List<User> recipients = conversation.getParticipants()
                 .stream()
                 .filter(user -> !user.getId().equals(sender.getId()))
@@ -410,7 +427,10 @@ public class ChatService {
 
         MessageDeliveryStatus deliveryStatus = getDeliveryStatus(messageId, userId);
         if (deliveryStatus == null) {
-            throw new IllegalArgumentException("No delivery status exists for this user");
+            // Group messages carry no receipts by design, and clients still report
+            // delivered/read for them. Nothing to record, but it is not an error —
+            // the read watermark is what tracks a group message being read.
+            return message.getConversationType();
         }
         deliveryStatus.setStatus(status);
         deliveryStatus.setTimestamp(new Timestamp(System.currentTimeMillis()));
@@ -421,10 +441,12 @@ public class ChatService {
     /**
      * Marks every message in a conversation as read for one user.
      *
-     * The client's per-message receipts only cover the history page it has loaded
-     * (the newest 30), so opening a conversation with hundreds of unread left the
-     * rest unread on the server: the badge cleared locally and then reappeared on
-     * the next refetch. This clears the whole conversation in one go.
+     * One watermark move, whatever the size of the history — the old version had
+     * to touch a row per message per member, which in a large group was thousands
+     * of writes to clear one badge.
+     *
+     * Private chats also flip their receipts, so the other person's ✓✓ turns to
+     * Seen. Groups have no receipts to flip.
      *
      * @return the user's remaining unread in this conversation — zero unless
      *         something arrived mid-flight.
@@ -434,12 +456,11 @@ public class ChatService {
         Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
         checkUserIsParticipant(conversation, userId);
 
-        // Anyone added to a group after a message was sent has no delivery row for
-        // it, and updateMessageStatus only ever touches rows that already exist —
-        // so backfill first, then flip. Same pairing as ConversationService uses
-        // when adding a participant.
-        messageDeliveryStatusRepository.insertSentStatusesForConversation(conversationId, userId);
-        messageDeliveryStatusRepository.markConversationRead(conversationId, userId);
+        conversationReadStateService.markRead(conversationId, userId);
+
+        if (conversation instanceof PrivateConversation) {
+            messageDeliveryStatusRepository.markConversationRead(conversationId, userId);
+        }
 
         return messageRepository.countUnread(conversationId, userId);
     }

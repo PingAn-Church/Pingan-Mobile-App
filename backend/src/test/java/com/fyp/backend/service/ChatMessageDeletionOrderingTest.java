@@ -46,6 +46,7 @@ class ChatMessageDeletionOrderingTest {
     @Mock private UserBlockService userBlockService;
     @Mock private ContentSanitizer contentSanitizer;
     @Mock private PushMessages pushMessages;
+    @Mock private ConversationReadStateService conversationReadStateService;
 
     private ChatService chatService;
 
@@ -55,7 +56,8 @@ class ChatMessageDeletionOrderingTest {
         chatService = new ChatService(messageRepository, groupConversationRepository,
                 privateConversationRepository, userRepository, messageDeliveryStatusRepository,
                 messagingTemplate, cleanupService, redisService, messagePublisher,
-                pushNotificationService, userBlockService, contentSanitizer, pushMessages);
+                pushNotificationService, userBlockService, contentSanitizer, pushMessages,
+                conversationReadStateService);
         TransactionSynchronizationManager.initSynchronization();
     }
 

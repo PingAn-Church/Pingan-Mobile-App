@@ -39,6 +39,7 @@ class AppGroupChatServiceTest {
 
     @Mock private GroupConversationRepository groupConversationRepository;
     @Mock private UserRepository userRepository;
+    @Mock private ConversationReadStateService conversationReadStateService;
 
     @InjectMocks private AppGroupChatService appGroupChatService;
 

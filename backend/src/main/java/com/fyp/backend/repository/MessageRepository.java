@@ -37,10 +37,22 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("senderId") Long senderId,
             Pageable pageable);
 
-    // Unread = messages from other people in this conversation not yet READ by the user.
+    /** The newest message in a conversation — where a read watermark is set to. */
+    @Query("SELECT MAX(m.id) FROM Message m WHERE m.conversation.id = :conversationId")
+    Long findNewestMessageId(@Param("conversationId") Long conversationId);
+
+    /**
+     * Unread = messages from other people in this conversation newer than the
+     * user's read watermark.
+     *
+     * A range comparison on the id, so it rides the existing
+     * (conversation_id, id) index instead of testing every message against a
+     * delivery row. COALESCE covers somebody who has never opened the
+     * conversation: no watermark yet means everything counts.
+     */
     @Query("SELECT COUNT(m) FROM Message m WHERE m.conversation.id = :conversationId AND m.sender.id <> :userId "
-            + "AND NOT EXISTS (SELECT 1 FROM MessageDeliveryStatus ds WHERE ds.message.id = m.id "
-            + "AND ds.user.id = :userId AND ds.status = 'READ')")
+            + "AND m.id > COALESCE((SELECT r.lastReadMessageId FROM ConversationReadState r "
+            + "WHERE r.conversationId = :conversationId AND r.userId = :userId), 0)")
     long countUnread(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
     /**
@@ -52,8 +64,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
      */
     @Query("SELECT DISTINCT m.conversation.id FROM Message m WHERE m.sender.id <> :userId "
             + "AND (m.mentionsEveryone = true OR :userId MEMBER OF m.mentionedUserIds) "
-            + "AND NOT EXISTS (SELECT 1 FROM MessageDeliveryStatus ds WHERE ds.message.id = m.id "
-            + "AND ds.user.id = :userId AND ds.status = 'READ')")
+            + "AND m.id > COALESCE((SELECT r.lastReadMessageId FROM ConversationReadState r "
+            + "WHERE r.conversationId = m.conversation.id AND r.userId = :userId), 0)")
     List<Long> findConversationIdsWithUnreadMention(@Param("userId") Long userId);
 
     // Unread across every conversation the user belongs to — the number that goes on
@@ -61,8 +73,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     // just for pushes. Reading m.conversation.id uses the FK column directly, so this
     // never has to resolve the TABLE_PER_CLASS Conversation hierarchy.
     @Query("SELECT COUNT(m) FROM Message m WHERE m.sender.id <> :userId "
-            + "AND NOT EXISTS (SELECT 1 FROM MessageDeliveryStatus ds WHERE ds.message.id = m.id "
-            + "AND ds.user.id = :userId AND ds.status = 'READ') "
+            + "AND m.id > COALESCE((SELECT r.lastReadMessageId FROM ConversationReadState r "
+            + "WHERE r.conversationId = m.conversation.id AND r.userId = :userId), 0) "
             + "AND NOT EXISTS (SELECT 1 FROM ConversationMute cm WHERE cm.userId = :userId "
             + "AND cm.conversationId = m.conversation.id) "
             + "AND (m.conversation.id IN "

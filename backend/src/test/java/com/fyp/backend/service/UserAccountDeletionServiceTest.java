@@ -23,6 +23,7 @@ import org.mockito.quality.Strictness;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CertificateRepository;
+import com.fyp.backend.repository.ConversationReadStateRepository;
 import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
@@ -69,6 +70,7 @@ class UserAccountDeletionServiceTest {
     @Mock private GroupConversationRepository groupConversationRepository;
     @Mock private MessageRepository messageRepository;
     @Mock private MessageDeliveryStatusRepository messageDeliveryStatusRepository;
+    @Mock private ConversationReadStateRepository conversationReadStateRepository;
     @Mock private PushTokenRepository pushTokenRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private ThreadRepository threadRepository;

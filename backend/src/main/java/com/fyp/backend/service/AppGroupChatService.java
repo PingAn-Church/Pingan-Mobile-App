@@ -47,6 +47,7 @@ public class AppGroupChatService {
 
     private final GroupConversationRepository groupConversationRepository;
     private final UserRepository userRepository;
+    private final ConversationReadStateService conversationReadStateService;
 
     /** The app-level group, or empty before the first startup pass has run. */
     public Optional<GroupConversation> findAppGroup() {
@@ -103,12 +104,17 @@ public class AppGroupChatService {
         Set<Long> currentIds = participants.stream().map(User::getId).collect(Collectors.toSet());
 
         boolean changed = participants.removeIf(u -> !eligibleIds.contains(u.getId()));
+        List<User> joining = new ArrayList<>();
         for (User candidate : eligible) {
             if (!currentIds.contains(candidate.getId())) {
                 participants.add(candidate);
+                joining.add(candidate);
                 changed = true;
             }
         }
+        // Same rule as syncMembership: joining is not the same as having missed
+        // everything said before you arrived.
+        joining.forEach(user -> conversationReadStateService.markCaughtUp(group.getId(), user.getId()));
 
         // Group admin powers here follow app admin, not a per-group list somebody
         // could edit into an inconsistent state.
@@ -154,6 +160,15 @@ public class AppGroupChatService {
         group.setParticipants(participants);
         group.setUpdatedAt(Timestamp.from(Instant.now()));
         groupConversationRepository.save(group);
+
+        // A newly verified member joins at the end of the conversation. Without
+        // this their first look at the church-wide group would be every message
+        // ever posted in it, all marked unread.
+        if (belongs) {
+            conversationReadStateService.markCaughtUp(group.getId(), user.getId());
+        } else {
+            conversationReadStateService.forget(group.getId(), user.getId());
+        }
     }
 
     /**

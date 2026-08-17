@@ -2,7 +2,9 @@ package com.fyp.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -11,12 +13,12 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fyp.backend.model.GroupConversation;
+import com.fyp.backend.model.PrivateConversation;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageDeliveryStatusRepository;
@@ -24,8 +26,12 @@ import com.fyp.backend.repository.MessageRepository;
 import com.fyp.backend.repository.PrivateConversationRepository;
 
 /**
- * Opening a conversation marks all of it read — for participants only, and in an
- * order that also covers messages sent before the reader joined the group.
+ * Opening a conversation marks all of it read, for participants only.
+ *
+ * Reading is a single watermark move whatever the size of the history — the old
+ * version wrote a row per message per member, which is thousands of writes to
+ * clear one badge in a large group. Private chats additionally flip their
+ * receipts so the sender's tick becomes Seen; groups have no receipts to flip.
  */
 @ExtendWith(MockitoExtension.class)
 class MarkConversationReadTest {
@@ -34,6 +40,7 @@ class MarkConversationReadTest {
     @Mock private GroupConversationRepository groupConversationRepository;
     @Mock private PrivateConversationRepository privateConversationRepository;
     @Mock private MessageDeliveryStatusRepository deliveryStatusRepository;
+    @Mock private ConversationReadStateService conversationReadStateService;
 
     @InjectMocks private ChatService chatService;
 
@@ -52,19 +59,37 @@ class MarkConversationReadTest {
         return conversation;
     }
 
+    private PrivateConversation privateChat(Long id, User a, User b) {
+        PrivateConversation conversation = new PrivateConversation();
+        conversation.setId(id);
+        conversation.setUserOne(a);
+        conversation.setUserTwo(b);
+        return conversation;
+    }
+
     @Test
-    void backfillsMissingDeliveryRowsBeforeFlippingThemToRead() {
+    void readingAGroupMovesTheWatermarkAndWritesNoReceipts() {
         when(groupConversationRepository.findById(42L))
                 .thenReturn(Optional.of(group(42L, user(1L), user(2L))));
         when(messageRepository.countUnread(42L, 1L)).thenReturn(0L);
 
         assertEquals(0, chatService.markConversationRead(1L, 42L, "group"));
 
-        // Order matters: the UPDATE only touches rows that exist, so anyone added to
-        // the group after a message was sent needs their row created first.
-        InOrder order = inOrder(deliveryStatusRepository);
-        order.verify(deliveryStatusRepository).insertSentStatusesForConversation(42L, 1L);
-        order.verify(deliveryStatusRepository).markConversationRead(42L, 1L);
+        verify(conversationReadStateService).markRead(42L, 1L);
+        // The whole point: no per-message writes, however big the group or its history.
+        verifyNoInteractions(deliveryStatusRepository);
+    }
+
+    @Test
+    void readingAPrivateChatAlsoFlipsTheReceiptsBehindTheSeenTick() {
+        when(privateConversationRepository.findById(7L))
+                .thenReturn(Optional.of(privateChat(7L, user(1L), user(2L))));
+        when(messageRepository.countUnread(7L, 1L)).thenReturn(0L);
+
+        assertEquals(0, chatService.markConversationRead(1L, 7L, "private"));
+
+        verify(conversationReadStateService).markRead(7L, 1L);
+        verify(deliveryStatusRepository).markConversationRead(7L, 1L);
     }
 
     @Test
@@ -85,6 +110,7 @@ class MarkConversationReadTest {
                 () -> chatService.markConversationRead(1L, 42L, "group"));
 
         verifyNoInteractions(deliveryStatusRepository);
+        verify(conversationReadStateService, never()).markRead(anyLong(), anyLong());
     }
 
     @Test
@@ -93,5 +119,6 @@ class MarkConversationReadTest {
                 () -> chatService.markConversationRead(1L, 42L, "learning"));
 
         verifyNoInteractions(deliveryStatusRepository);
+        verifyNoInteractions(conversationReadStateService);
     }
 }

@@ -38,6 +38,7 @@ public class ConversationService {
     private final MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     private final ConversationMuteRepository conversationMuteRepository;
     private final OssCleanupService ossCleanupService;
+    private final ConversationReadStateService conversationReadStateService;
 
     @Autowired
     public ConversationService(GroupConversationRepository groupConversationRepository,
@@ -48,7 +49,8 @@ public class ConversationService {
                                MessageRepository messageRepository,
                                MessageDeliveryStatusRepository messageDeliveryStatusRepository,
                                ConversationMuteRepository conversationMuteRepository,
-                               OssCleanupService ossCleanupService) {
+                               OssCleanupService ossCleanupService,
+                               ConversationReadStateService conversationReadStateService) {
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
         this.userRepository = userRepository;
@@ -58,6 +60,7 @@ public class ConversationService {
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
         this.conversationMuteRepository = conversationMuteRepository;
         this.ossCleanupService = ossCleanupService;
+        this.conversationReadStateService = conversationReadStateService;
     }
 
     /**
@@ -360,7 +363,9 @@ public class ConversationService {
         groupConversation.setUpdatedAt(now());
         groupConversationRepository.save(groupConversation);
 
-        messageDeliveryStatusRepository.insertSentStatusesForConversation(conversationId, userId);
+        // Somebody joining now starts at the end of the conversation rather than
+        // with every message ever sent in it marked unread.
+        conversationReadStateService.markCaughtUp(conversationId, userId);
 
         // ✅ Prepare updated DTO
         ConversationDto updatedConversation = new ConversationDto(groupConversation);
@@ -421,6 +426,7 @@ public class ConversationService {
         groupConversationRepository.save(groupConversation);
 
         messageDeliveryStatusRepository.deleteByConversationIdAndUserId(conversationId, userId);
+        conversationReadStateService.forget(conversationId, userId);
 
         // ✅ Build and notify
         ConversationDto updatedConversation = new ConversationDto(groupConversation);
@@ -704,6 +710,7 @@ public class ConversationService {
         }
 
         messageDeliveryStatusRepository.deleteByConversationId(conversationId);
+        conversationReadStateService.forgetConversation(conversationId);
         messageRepository.deleteReadReceiptsByConversationId(conversationId);
         messageRepository.deleteByConversationIdBulk(conversationId);
         deleteObjectsAfterCommit(objectUrls);

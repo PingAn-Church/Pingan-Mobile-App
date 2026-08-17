@@ -22,6 +22,7 @@ import com.fyp.backend.model.PrivateConversation;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CertificateRepository;
+import com.fyp.backend.repository.ConversationReadStateRepository;
 import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
@@ -75,6 +76,7 @@ public class UserAccountDeletionService {
     @Autowired private GroupConversationRepository groupConversationRepository;
     @Autowired private MessageRepository messageRepository;
     @Autowired private MessageDeliveryStatusRepository messageDeliveryStatusRepository;
+    @Autowired private ConversationReadStateRepository conversationReadStateRepository;
 
     // Auth / devices
     @Autowired private PushTokenRepository pushTokenRepository;
@@ -191,6 +193,7 @@ public class UserAccountDeletionService {
 
         messageRepository.deleteReadReceiptsByUserId(userId);
         messageDeliveryStatusRepository.deleteByUserId(userId);
+        conversationReadStateRepository.deleteByUserId(userId);
 
         threadReplyRepository.deleteByAuthorId(userId);
         for (Thread t : threadRepository.findByCreatedById(userId)) {
@@ -296,6 +299,7 @@ public class UserAccountDeletionService {
     private void purgeConversationMessages(Long conversationId) {
         List<String> objectUrls = collectConversationMediaUrls(conversationId, null);
         messageDeliveryStatusRepository.deleteByConversationId(conversationId);
+        conversationReadStateRepository.deleteByConversationId(conversationId);
         messageRepository.deleteReadReceiptsByConversationId(conversationId);
         messageRepository.deleteByConversationIdBulk(conversationId);
         deleteObjectsAfterCommit(objectUrls);

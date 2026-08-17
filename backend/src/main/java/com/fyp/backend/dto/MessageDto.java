@@ -3,6 +3,7 @@ package com.fyp.backend.dto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageDeliveryStatus;
+import com.fyp.backend.model.PrivateConversation;
 import com.fyp.backend.model.User;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -83,11 +84,18 @@ public class MessageDto {
         }
 
         // ✅ Convert Long keys to String for correct JSON serialization
-        this.deliveryStatus = message.getDeliveryStatuses().stream()
-                .collect(Collectors.toMap(
-                        status -> String.valueOf(status.getUser().getId()), // Convert Long to String
-                        MessageDeliveryStatus::getStatus
-                ));
+        //
+        // Private chats only. Group messages stopped storing receipts when read
+        // state moved to a watermark, and leaving the map empty for them keeps the
+        // ticks consistent: without this, group messages written before that change
+        // would still show Seen while newer ones showed nothing.
+        this.deliveryStatus = message.getConversation() instanceof PrivateConversation
+                ? message.getDeliveryStatuses().stream()
+                        .collect(Collectors.toMap(
+                                status -> String.valueOf(status.getUser().getId()), // Convert Long to String
+                                MessageDeliveryStatus::getStatus
+                        ))
+                : Map.of();
     }
 
     private static boolean isAppLevelGroup(Message message) {

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import com.fyp.backend.model.Conversation;
 import com.fyp.backend.model.ConversationMute;
+import com.fyp.backend.model.ConversationReadState;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageDeliveryStatus;
@@ -54,16 +56,20 @@ class MessageRepositoryTest {
         return em.persist(u);
     }
 
+    private PrivateConversation privateConversation(User a, User b) {
+        PrivateConversation c = new PrivateConversation();
+        c.setUserOne(a);
+        c.setUserTwo(b);
+        c.setCreatedAt(now());
+        c.setUpdatedAt(now());
+        return em.persist(c);
+    }
+
     @BeforeEach
     void setUp() {
         me = persistUser("me@example.com");
         other = persistUser("other@example.com");
-        conversation = new PrivateConversation();
-        conversation.setUserOne(me);
-        conversation.setUserTwo(other);
-        conversation.setCreatedAt(now());
-        conversation.setUpdatedAt(now());
-        em.persist(conversation);
+        conversation = privateConversation(me, other);
     }
 
     private Message message(User sender, String content) {
@@ -81,8 +87,25 @@ class MessageRepositoryTest {
         return em.persist(m);
     }
 
-    private void markRead(Message m, User reader) {
-        em.persist(new MessageDeliveryStatus(m, reader, "READ", now()));
+    /**
+     * Reads everything up to and including this message, the way opening a chat
+     * does — read state is a watermark per (conversation, user), not a receipt per
+     * message, so "this one is read" necessarily means "and everything before it".
+     */
+    private void markReadUpTo(Message m, User reader) {
+        ConversationReadState state = em.getEntityManager()
+                .createQuery("SELECT r FROM ConversationReadState r "
+                        + "WHERE r.conversationId = :c AND r.userId = :u", ConversationReadState.class)
+                .setParameter("c", m.getConversation().getId())
+                .setParameter("u", reader.getId())
+                .getResultStream().findFirst().orElse(null);
+
+        if (state == null) {
+            em.persist(new ConversationReadState(m.getConversation().getId(), reader.getId(), m.getId()));
+        } else {
+            state.setLastReadMessageId(m.getId());
+            em.persist(state);
+        }
     }
 
     private GroupConversation group(String name, User... members) {
@@ -99,16 +122,84 @@ class MessageRepositoryTest {
     }
 
     @Test
-    void countUnreadExcludesOwnMessagesAndReadOnes() {
-        message(other, "unread one");
-        Message readByMe = message(other, "will be read");
+    void countUnreadExcludesOwnMessagesAndAnythingBelowTheWatermark() {
+        Message seen = message(other, "will be read");
         message(me, "my own message"); // sent by me -> never unread for me
-        markRead(readByMe, me);
+        message(other, "arrived after I looked");
+        markReadUpTo(seen, me);
         em.flush();
 
+        // Only the one that arrived after the watermark.
         assertEquals(1, messageRepository.countUnread(conversation.getId(), me.getId()));
-        // The other participant has two unread (both of my... no, just my one message)
+        // The other participant has never looked, so my one message is unread for them.
         assertEquals(1, messageRepository.countUnread(conversation.getId(), other.getId()));
+    }
+
+    @Test
+    void countUnreadTreatsNoWatermarkAsEverythingUnread() {
+        message(other, "one");
+        message(other, "two");
+        em.flush();
+
+        assertEquals(2, messageRepository.countUnread(conversation.getId(), me.getId()));
+    }
+
+    @Test
+    void aWatermarkOnlyCoversItsOwnConversation() {
+        User third = persistUser("third@example.com");
+        PrivateConversation elsewhere = privateConversation(me, third);
+        Message here = message(other, "here");
+        message(elsewhere, "private", third, "somewhere else");
+        markReadUpTo(here, me);
+        em.flush();
+
+        assertEquals(0, messageRepository.countUnread(conversation.getId(), me.getId()));
+        assertEquals(1, messageRepository.countUnread(elsewhere.getId(), me.getId()));
+    }
+
+    @Test
+    void unreadMentionsAreFoundAboveTheWatermarkAndForgottenBelowIt() {
+        GroupConversation prayerGroup = group("Prayer", me, other);
+        Message callsMeOut = message(prayerGroup, "group", other, "@me are you coming?");
+        callsMeOut.setMentionedUserIds(Set.of(me.getId()));
+        em.persist(callsMeOut);
+        em.flush();
+
+        assertEquals(List.of(prayerGroup.getId()),
+                messageRepository.findConversationIdsWithUnreadMention(me.getId()));
+
+        // Reading past it clears the marker; the mention is no longer waiting.
+        markReadUpTo(callsMeOut, me);
+        em.flush();
+        assertTrue(messageRepository.findConversationIdsWithUnreadMention(me.getId()).isEmpty());
+    }
+
+    @Test
+    void anAtAllMentionCountsWithoutNamingAnybody() {
+        GroupConversation prayerGroup = group("Prayer", me, other);
+        Message everyone = message(prayerGroup, "group", other, "@all service is moved");
+        everyone.setMentionsEveryone(true);
+        em.persist(everyone);
+        em.flush();
+
+        // @all is a flag, not a mention row per member — the church-wide group would
+        // otherwise write one per person per message.
+        assertTrue(everyone.getMentionedUserIds().isEmpty());
+        assertEquals(List.of(prayerGroup.getId()),
+                messageRepository.findConversationIdsWithUnreadMention(me.getId()));
+    }
+
+    @Test
+    void yourOwnMentionOfSomebodyElseIsNotWaitingForYou() {
+        GroupConversation prayerGroup = group("Prayer", me, other);
+        Message mine = message(prayerGroup, "group", me, "@other over to you");
+        mine.setMentionedUserIds(Set.of(other.getId()));
+        em.persist(mine);
+        em.flush();
+
+        assertTrue(messageRepository.findConversationIdsWithUnreadMention(me.getId()).isEmpty());
+        assertEquals(List.of(prayerGroup.getId()),
+                messageRepository.findConversationIdsWithUnreadMention(other.getId()));
     }
 
     @Test
@@ -143,11 +234,11 @@ class MessageRepositoryTest {
     }
 
     @Test
-    void totalUnreadIgnoresOwnMessagesAndAlreadyReadOnes() {
+    void totalUnreadIgnoresOwnMessagesAndAnythingBelowTheWatermark() {
         message(me, "my own message");
-        Message read = message(other, "already seen");
+        Message seen = message(other, "already seen");
         message(other, "still waiting");
-        markRead(read, me);
+        markReadUpTo(seen, me);
         em.flush();
 
         assertEquals(1, messageRepository.countTotalUnread(me.getId()));

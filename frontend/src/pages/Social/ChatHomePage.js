@@ -265,10 +265,12 @@ const ChatHomePage = () => {
       lastMessage.previewContent = lastMessage.content;
     }
 
-    const deliveryStatuses = Object.values(lastMessage.deliveryStatus || []);
+    const deliveryStatuses = Object.values(lastMessage.deliveryStatus || {});
 
-    // Determine delivery icon based on minimum status
-    let deliveryIcon = "✔"; // Default: SENT
+    // Determine delivery icon based on minimum status. Group messages carry no
+    // receipts — read state there is a watermark, not a row per recipient — so
+    // there is nothing to tick and the row shows none.
+    let deliveryIcon = deliveryStatuses.length ? "✔" : "";
     if (deliveryStatuses.includes("SENT")) {
       deliveryIcon = "✔";
     } else if (deliveryStatuses.includes("DELIVERED")) {
@@ -438,11 +440,12 @@ const ChatHomePage = () => {
                 </Text>
                 {lastMessage.previewContent}{" "}
                 {/* <Text style={styles.deliveryStatus}>({lastMessage.deliveryStatusIcon})</Text> */}
-                {String(lastMessage.senderId) === String(user.id) && (
-                  <Text style={styles.deliveryStatus}>
-                    ({lastMessage.deliveryStatusIcon})
-                  </Text>
-                )}
+                {String(lastMessage.senderId) === String(user.id) &&
+                  !!lastMessage.deliveryStatusIcon && (
+                    <Text style={styles.deliveryStatus}>
+                      ({lastMessage.deliveryStatusIcon})
+                    </Text>
+                  )}
               </>
             ) : (
               <Text>{i18n.t("noMsg")}</Text>
