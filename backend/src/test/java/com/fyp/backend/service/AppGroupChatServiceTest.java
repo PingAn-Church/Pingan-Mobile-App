@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.User;
@@ -40,6 +41,7 @@ class AppGroupChatServiceTest {
     @Mock private GroupConversationRepository groupConversationRepository;
     @Mock private UserRepository userRepository;
     @Mock private ConversationReadStateService conversationReadStateService;
+    @Mock private AppGroupCreator appGroupCreator;
 
     @InjectMocks private AppGroupChatService appGroupChatService;
 
@@ -66,19 +68,29 @@ class AppGroupChatServiceTest {
     }
 
     @Test
-    void theGroupIsCreatedWithBothNamesWhenItDoesNotExistYet() {
-        when(groupConversationRepository.findFirstByAppLevelTrue()).thenReturn(Optional.empty());
-        when(groupConversationRepository.save(any(GroupConversation.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+    void aMissingGroupIsCreatedInAnIndependentTransactionThenReloaded() {
+        GroupConversation created = appGroup(List.of(), List.of());
+        when(groupConversationRepository.findFirstByAppLevelTrue())
+                .thenReturn(Optional.empty(), Optional.of(created));
         when(userRepository.findChatEligibleMembers()).thenReturn(List.of());
 
         appGroupChatService.ensureAppGroup();
 
-        verify(groupConversationRepository, org.mockito.Mockito.atLeastOnce())
-                .save(org.mockito.ArgumentMatchers.argThat(g ->
-                        g.isAppLevel()
-                                && AppGroupChatService.DEFAULT_NAME_EN.equals(g.getGroupName())
-                                && AppGroupChatService.DEFAULT_NAME_ZH.equals(g.getGroupNameZh())));
+        verify(appGroupCreator).createIfMissing();
+    }
+
+    @Test
+    void aConcurrentCreateConflictReloadsTheWinningGroup() {
+        GroupConversation winner = appGroup(List.of(), List.of());
+        when(groupConversationRepository.findFirstByAppLevelTrue())
+                .thenReturn(Optional.empty(), Optional.of(winner));
+        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("unique index"))
+                .when(appGroupCreator).createIfMissing();
+        when(userRepository.findChatEligibleMembers()).thenReturn(List.of());
+
+        appGroupChatService.ensureAppGroup();
+
+        verify(userRepository).findChatEligibleMembers();
     }
 
     @Test

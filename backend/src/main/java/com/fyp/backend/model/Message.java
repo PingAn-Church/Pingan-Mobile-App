@@ -56,6 +56,8 @@ public class Message {
      * Stored as ids chosen from a picker rather than parsed back out of the text:
      * names contain spaces, two people can share one, and a mention has to keep
      * pointing at the same person after they change theirs.
+     * DatabaseIntegrityMigration adds cascading message/user foreign keys while
+     * this remains an ElementCollection for normal entity writes.
      */
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "message_mentions", joinColumns = @JoinColumn(name = "message_id"), indexes = {

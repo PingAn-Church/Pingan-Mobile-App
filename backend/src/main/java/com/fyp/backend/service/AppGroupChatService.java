@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +49,7 @@ public class AppGroupChatService {
     private final GroupConversationRepository groupConversationRepository;
     private final UserRepository userRepository;
     private final ConversationReadStateService conversationReadStateService;
+    private final AppGroupCreator appGroupCreator;
 
     /** The app-level group, or empty before the first startup pass has run. */
     public Optional<GroupConversation> findAppGroup() {
@@ -75,23 +77,20 @@ public class AppGroupChatService {
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void ensureAppGroup() {
-        GroupConversation group = findAppGroup().orElseGet(this::createAppGroup);
+        GroupConversation group = findAppGroup().orElse(null);
+        if (group == null) {
+            try {
+                appGroupCreator.createIfMissing();
+            } catch (DataIntegrityViolationException race) {
+                // Another instance won the partial-unique-index race. Its
+                // REQUIRES_NEW transaction has completed before this exception
+                // is observed, so the winner is visible to the next read.
+                log.info("Another backend instance created the app-level group first.");
+            }
+            group = findAppGroup().orElseThrow(() -> new IllegalStateException(
+                    "The app-level group could not be created or loaded."));
+        }
         reconcile(group);
-    }
-
-    private GroupConversation createAppGroup() {
-        Timestamp now = Timestamp.from(Instant.now());
-        GroupConversation group = new GroupConversation();
-        group.setAppLevel(true);
-        group.setGroupName(DEFAULT_NAME_EN);
-        group.setGroupNameZh(DEFAULT_NAME_ZH);
-        group.setParticipants(new ArrayList<>());
-        group.setAdmins(new ArrayList<>());
-        group.setCreatedAt(now);
-        group.setUpdatedAt(now);
-        GroupConversation saved = groupConversationRepository.save(group);
-        log.info("Created the app-level group chat (conversation #{}).", saved.getId());
-        return saved;
     }
 
     private void reconcile(GroupConversation group) {

@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -23,6 +24,7 @@ import org.mockito.quality.Strictness;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.ThreadSubscription;
 import com.fyp.backend.repository.ThreadReplyRepository;
+import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.ThreadSubscriptionRepository;
 
 /**
@@ -37,6 +39,7 @@ class TopicSubscriptionServiceTest {
 
     @Mock private ThreadSubscriptionRepository subscriptionRepository;
     @Mock private ThreadReplyRepository replyRepository;
+    @Mock private ThreadRepository threadRepository;
 
     @InjectMocks private TopicSubscriptionService topicSubscriptionService;
 
@@ -49,6 +52,7 @@ class TopicSubscriptionServiceTest {
     @Test
     void followingATopicStartsYouCaughtUpOnWhatIsAlreadyThere() {
         when(subscriptionRepository.findByThreadIdAndUserId(7L, 3L)).thenReturn(Optional.empty());
+        when(threadRepository.existsById(7L)).thenReturn(true);
         when(replyRepository.findTopByThreadIdOrderByIdDesc(7L)).thenReturn(Optional.of(reply(120L)));
 
         assertTrue(topicSubscriptionService.setSubscribed(7L, 3L, true));
@@ -63,6 +67,7 @@ class TopicSubscriptionServiceTest {
     @Test
     void followingATopicWithNoRepliesYetLeavesTheMarkerEmpty() {
         when(subscriptionRepository.findByThreadIdAndUserId(7L, 3L)).thenReturn(Optional.empty());
+        when(threadRepository.existsById(7L)).thenReturn(true);
         when(replyRepository.findTopByThreadIdOrderByIdDesc(7L)).thenReturn(Optional.empty());
 
         topicSubscriptionService.setSubscribed(7L, 3L, true);
@@ -143,5 +148,30 @@ class TopicSubscriptionServiceTest {
                 new ThreadSubscription(7L, 5L, null)));
 
         assertEquals(List.of(5L), topicSubscriptionService.subscriberIdsExcept(7L, 3L));
+    }
+
+    @Test
+    void followingATopicThatHasSinceBeenDeletedIsRefusedRatherThanLeftToTheForeignKey() {
+        // Somebody can hold a stale list open while an admin deletes the topic. The
+        // FK would refuse the insert regardless, but as a 500 rather than an answer.
+        when(subscriptionRepository.findByThreadIdAndUserId(7L, 3L)).thenReturn(Optional.empty());
+        when(threadRepository.existsById(7L)).thenReturn(false);
+
+        assertThrows(TopicSubscriptionService.TopicNotFoundException.class,
+                () -> topicSubscriptionService.setSubscribed(7L, 3L, true));
+
+        verify(subscriptionRepository, never()).save(any(ThreadSubscription.class));
+    }
+
+    @Test
+    void unfollowingADeletedTopicStillWorks() {
+        // Cleaning up after yourself must not depend on the topic still being there.
+        ThreadSubscription existing = new ThreadSubscription(7L, 3L, 40L);
+        when(subscriptionRepository.findByThreadIdAndUserId(7L, 3L)).thenReturn(Optional.of(existing));
+
+        assertFalse(topicSubscriptionService.setSubscribed(7L, 3L, false));
+
+        verify(subscriptionRepository).delete(existing);
+        verify(threadRepository, never()).existsById(any());
     }
 }

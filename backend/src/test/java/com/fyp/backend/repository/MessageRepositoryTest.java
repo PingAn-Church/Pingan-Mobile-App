@@ -203,6 +203,73 @@ class MessageRepositoryTest {
     }
 
     @Test
+    void bulkConversationDeleteRemovesElementCollectionRowsFirst() {
+        GroupConversation prayerGroup = group("Prayer", me, other);
+        Message mentioned = message(prayerGroup, "group", other, "@me please pray");
+        mentioned.setMentionedUserIds(Set.of(me.getId()));
+        em.persist(mentioned);
+        em.flush();
+
+        messageRepository.deleteByConversationIdBulk(prayerGroup.getId());
+        em.flush();
+
+        Number messages = (Number) em.getEntityManager()
+                .createNativeQuery("SELECT COUNT(*) FROM messages WHERE conversation_id = ?")
+                .setParameter(1, prayerGroup.getId())
+                .getSingleResult();
+        Number mentions = (Number) em.getEntityManager()
+                .createNativeQuery("SELECT COUNT(*) FROM message_mentions WHERE message_id = ?")
+                .setParameter(1, mentioned.getId())
+                .getSingleResult();
+        assertEquals(0L, messages.longValue());
+        assertEquals(0L, mentions.longValue());
+    }
+
+    @Test
+    void senderScopedBulkDeleteLeavesOtherMessagesAndMentionsAlone() {
+        GroupConversation prayerGroup = group("Prayer", me, other);
+        Message mine = message(prayerGroup, "group", me, "@other mine");
+        mine.setMentionedUserIds(Set.of(other.getId()));
+        Message theirs = message(prayerGroup, "group", other, "@me theirs");
+        theirs.setMentionedUserIds(Set.of(me.getId()));
+        em.persist(mine);
+        em.persist(theirs);
+        em.flush();
+
+        messageRepository.deleteByConversationIdAndSenderIdBulk(prayerGroup.getId(), me.getId());
+        em.flush();
+
+        assertTrue(messageRepository.findById(mine.getId()).isEmpty());
+        assertTrue(messageRepository.findById(theirs.getId()).isPresent());
+        Number remainingMention = (Number) em.getEntityManager()
+                .createNativeQuery("SELECT COUNT(*) FROM message_mentions WHERE message_id = ? AND user_id = ?")
+                .setParameter(1, theirs.getId())
+                .setParameter(2, me.getId())
+                .getSingleResult();
+        assertEquals(1L, remainingMention.longValue());
+    }
+
+    @Test
+    void deletingMentionReferencesForAUserKeepsMessagesAndOtherTargets() {
+        User third = persistUser("third-mention@example.com");
+        GroupConversation prayerGroup = group("Prayer", me, other, third);
+        Message message = message(prayerGroup, "group", other, "@me @third");
+        message.setMentionedUserIds(Set.of(me.getId(), third.getId()));
+        em.persist(message);
+        em.flush();
+
+        assertEquals(1, messageRepository.deleteMentionReferencesByUserId(me.getId()));
+        em.flush();
+
+        assertTrue(messageRepository.findById(message.getId()).isPresent());
+        Number targetCount = (Number) em.getEntityManager()
+                .createNativeQuery("SELECT COUNT(*) FROM message_mentions WHERE message_id = ?")
+                .setParameter(1, message.getId())
+                .getSingleResult();
+        assertEquals(1L, targetCount.longValue());
+    }
+
+    @Test
     void cursorPaginationReturnsNewestFirstAndWalksOlder() {
         for (int i = 1; i <= 5; i++) {
             message(other, "m" + i);

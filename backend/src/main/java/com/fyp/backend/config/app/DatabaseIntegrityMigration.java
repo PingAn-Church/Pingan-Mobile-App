@@ -1,0 +1,151 @@
+package com.fyp.backend.config.app;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+
+import javax.sql.DataSource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/** Installs database guarantees that Hibernate's ddl-auto cannot express. */
+@Configuration
+public class DatabaseIntegrityMigration {
+
+    private static final Logger log = LoggerFactory.getLogger(DatabaseIntegrityMigration.class);
+
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    ApplicationRunner enforceDatabaseIntegrity(JdbcTemplate jdbc, TransactionTemplate transactions) {
+        return args -> {
+            if (!isPostgres(jdbc.getDataSource())) {
+                log.debug("Skipping PostgreSQL-specific integrity migration on this database.");
+                return;
+            }
+            transactions.executeWithoutResult(status -> migratePostgres(jdbc));
+        };
+    }
+
+    void migratePostgres(JdbcTemplate jdbc) {
+        // Rolling deployments can start multiple instances together. Serialize
+        // this DDL inside the transaction so two nodes never race to replace the
+        // same foreign key or create the same constraint.
+        jdbc.execute("SELECT pg_advisory_xact_lock(7046029254386353131)");
+
+        List<Long> appGroupIds = jdbc.queryForList(
+                "SELECT id FROM group_conversations WHERE app_level = TRUE ORDER BY id", Long.class);
+        requireSingleAppGroup(appGroupIds);
+
+        int orphanMentions = jdbc.update("""
+                DELETE FROM message_mentions mm
+                WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = mm.message_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = mm.user_id)
+                """);
+        int orphanSubscriptions = jdbc.update("""
+                DELETE FROM thread_subscriptions ts
+                WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = ts.thread_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ts.user_id)
+                """);
+        if (orphanMentions + orphanSubscriptions > 0) {
+            log.warn("Removed {} orphan mention row(s) and {} orphan topic subscription row(s).",
+                    orphanMentions, orphanSubscriptions);
+        }
+
+        ensureCascadeForeignKey(jdbc, "message_mentions", "message_id",
+                "messages", "id", "fk_message_mentions_message");
+        ensureCascadeForeignKey(jdbc, "message_mentions", "user_id",
+                "users", "id", "fk_message_mentions_user");
+        ensureCascadeForeignKey(jdbc, "thread_subscriptions", "thread_id",
+                "threads", "id", "fk_thread_subscriptions_thread");
+        ensureCascadeForeignKey(jdbc, "thread_subscriptions", "user_id",
+                "users", "id", "fk_thread_subscriptions_user");
+
+        jdbc.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_group_conversations_single_app_level
+                ON group_conversations (app_level)
+                WHERE app_level = TRUE
+                """);
+    }
+
+    static void requireSingleAppGroup(List<Long> ids) {
+        if (ids.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple app-level groups exist; resolve them before startup. IDs: " + ids);
+        }
+    }
+
+    /**
+     * Replaces whatever foreign key sits on this column with a named cascading one.
+     *
+     * Expect this to do real work on every boot rather than settling into a no-op.
+     * Hibernate matches foreign keys by name, so `ddl-auto=update` re-adds its own
+     * generated `FK…` on columns it maps — this runner then drops it and reinstates
+     * the cascading one. That churn is by design and harmless (one DDL statement
+     * per column, under the advisory lock above); it is only worth investigating if
+     * the log shows something other than that steady state.
+     */
+    private void ensureCascadeForeignKey(JdbcTemplate jdbc, String table, String column,
+            String targetTable, String targetColumn, String desiredName) {
+        List<Map<String, Object>> constraints = jdbc.queryForList("""
+                SELECT con.conname,
+                       con.confdeltype::text AS delete_action,
+                       target.relname AS target_table,
+                       target_att.attname AS target_column
+                FROM pg_constraint con
+                JOIN pg_class source ON source.oid = con.conrelid
+                JOIN pg_namespace source_ns ON source_ns.oid = source.relnamespace
+                JOIN pg_attribute source_att
+                  ON source_att.attrelid = source.oid AND source_att.attnum = con.conkey[1]
+                JOIN pg_class target ON target.oid = con.confrelid
+                JOIN pg_attribute target_att
+                  ON target_att.attrelid = target.oid AND target_att.attnum = con.confkey[1]
+                WHERE con.contype = 'f'
+                  AND source_ns.nspname = current_schema()
+                  AND source.relname = ?
+                  AND source_att.attname = ?
+                """, table, column);
+
+        boolean desiredExists = false;
+        for (Map<String, Object> constraint : constraints) {
+            String name = String.valueOf(constraint.get("conname"));
+            boolean desired = desiredName.equals(name)
+                    && "c".equals(String.valueOf(constraint.get("delete_action")))
+                    && targetTable.equals(String.valueOf(constraint.get("target_table")))
+                    && targetColumn.equals(String.valueOf(constraint.get("target_column")));
+            if (desired) {
+                desiredExists = true;
+            } else {
+                jdbc.execute("ALTER TABLE " + quote(table) + " DROP CONSTRAINT " + quote(name));
+            }
+        }
+
+        if (!desiredExists) {
+            jdbc.execute("ALTER TABLE " + quote(table)
+                    + " ADD CONSTRAINT " + quote(desiredName)
+                    + " FOREIGN KEY (" + quote(column) + ") REFERENCES " + quote(targetTable)
+                    + " (" + quote(targetColumn) + ") ON DELETE CASCADE");
+        }
+    }
+
+    private static String quote(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
+    static boolean isPostgres(DataSource dataSource) {
+        if (dataSource == null) return false;
+        try (Connection connection = dataSource.getConnection()) {
+            return connection.getMetaData().getDatabaseProductName().toLowerCase().contains("postgresql");
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not identify the database for integrity migration", e);
+        }
+    }
+}

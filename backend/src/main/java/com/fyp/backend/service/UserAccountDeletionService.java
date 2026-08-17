@@ -20,6 +20,7 @@ import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.MessageReport;
 import com.fyp.backend.model.PrivateConversation;
 import com.fyp.backend.model.Thread;
+import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CertificateRepository;
 import com.fyp.backend.repository.ConversationReadStateRepository;
@@ -42,6 +43,7 @@ import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.SpiritualGiftResultRepository;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
+import com.fyp.backend.repository.ThreadSubscriptionRepository;
 import com.fyp.backend.repository.UserAchievementRepository;
 import com.fyp.backend.repository.UserAnalyticsRepository;
 import com.fyp.backend.repository.UserBlockRepository;
@@ -89,6 +91,8 @@ public class UserAccountDeletionService {
     // Forum
     @Autowired private ThreadRepository threadRepository;
     @Autowired private ThreadReplyRepository threadReplyRepository;
+    @Autowired private ThreadSubscriptionRepository threadSubscriptionRepository;
+    @Autowired private ThreadContentCleanupService threadContentCleanupService;
 
     // Events / forms
     @Autowired private EventRepository eventRepository;
@@ -193,11 +197,20 @@ public class UserAccountDeletionService {
 
         messageDeliveryStatusRepository.deleteByUserId(userId);
         conversationReadStateRepository.deleteByUserId(userId);
+        messageRepository.deleteMentionReferencesByUserId(userId);
 
-        threadReplyRepository.deleteByAuthorId(userId);
-        for (Thread t : threadRepository.findByCreatedById(userId)) {
-            threadRepository.delete(t);
+        // Delete authored topics first because that also removes their replies.
+        // Then query again for this user's replies on topics owned by other users.
+        List<Long> authoredThreadIds = threadRepository.findByCreatedById(userId).stream()
+                .map(Thread::getId)
+                .toList();
+        for (Long threadId : authoredThreadIds) {
+            threadContentCleanupService.deleteThreadById(threadId);
         }
+        for (ThreadReply reply : threadReplyRepository.findByAuthorId(userId)) {
+            threadContentCleanupService.deleteReply(reply);
+        }
+        threadSubscriptionRepository.deleteByUserId(userId);
 
         pushTokenRepository.deleteByUserId(userId);
         refreshTokenRepository.deleteByUserEmail(email);

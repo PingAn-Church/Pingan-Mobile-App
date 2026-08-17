@@ -21,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import com.fyp.backend.model.GroupConversation;
+import com.fyp.backend.model.Thread;
+import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.CertificateRepository;
 import com.fyp.backend.repository.ConversationReadStateRepository;
@@ -43,6 +45,7 @@ import com.fyp.backend.repository.ResourceProgressRepository;
 import com.fyp.backend.repository.SpiritualGiftResultRepository;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
+import com.fyp.backend.repository.ThreadSubscriptionRepository;
 import com.fyp.backend.repository.UserAchievementRepository;
 import com.fyp.backend.repository.UserAnalyticsRepository;
 import com.fyp.backend.repository.UserBlockRepository;
@@ -75,6 +78,8 @@ class UserAccountDeletionServiceTest {
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private ThreadRepository threadRepository;
     @Mock private ThreadReplyRepository threadReplyRepository;
+    @Mock private ThreadSubscriptionRepository threadSubscriptionRepository;
+    @Mock private ThreadContentCleanupService threadContentCleanupService;
     @Mock private MessageReportRepository messageReportRepository;
     @Mock private EventRepository eventRepository;
     @Mock private FormApplicationRepository formApplicationRepository;
@@ -134,6 +139,7 @@ class UserAccountDeletionServiceTest {
         when(groupConversationRepository.findByParticipantId(ID)).thenReturn(List.of());
         when(groupConversationRepository.findByAdminId(ID)).thenReturn(List.of());
         when(threadRepository.findByCreatedById(ID)).thenReturn(List.of());
+        when(threadReplyRepository.findByAuthorId(ID)).thenReturn(List.of());
         when(eventRepository.findByCheckedInUserId(ID)).thenReturn(List.of());
         when(messageReportRepository.findBySenderIdOrReporterIdOrResolvedById(ID, ID, ID))
                 .thenReturn(List.of());
@@ -153,7 +159,9 @@ class UserAccountDeletionServiceTest {
         verify(pushTokenRepository).deleteByUserId(ID);
         verify(refreshTokenRepository).deleteByUserEmail(EMAIL);
         verify(redisService).clearUserOnlineStatus(EMAIL);
-        verify(threadReplyRepository).deleteByAuthorId(ID);
+        verify(threadReplyRepository).findByAuthorId(ID);
+        verify(threadSubscriptionRepository).deleteByUserId(ID);
+        verify(messageRepository).deleteMentionReferencesByUserId(ID);
         // A representative slice of the e-learning cleanup.
         verify(quizAttemptRepository).deleteByUserId(ID);
         verify(courseEnrollmentRepository).deleteByUserId(ID);
@@ -175,13 +183,31 @@ class UserAccountDeletionServiceTest {
         verify(userRepository).deleteById(ID);
         verify(userRepository, never()).save(any(User.class));
         // Shared UGC is now removed too (previously kept under the tombstone).
-        verify(threadReplyRepository).deleteByAuthorId(ID);
+        verify(threadReplyRepository).findByAuthorId(ID);
+        verify(threadSubscriptionRepository).deleteByUserId(ID);
         verify(conversationReadStateRepository).deleteByUserId(ID);
         // Private data / auth / avatar swept.
         verify(pushTokenRepository).deleteByUserId(ID);
         verify(refreshTokenRepository).deleteByUserEmail(EMAIL);
         verify(redisService).clearUserOnlineStatus(EMAIL);
         verify(ossCleanupService).deleteAfterCommit(any(java.util.Collection.class));
+    }
+
+    @Test
+    void forumDeletionUsesLifecycleCleanupAndRemovesScalarReferences() {
+        User target = user(false, false);
+        Thread ownedThread = Thread.builder().id(70L).createdBy(target).build();
+        ThreadReply externalReply = ThreadReply.builder().id(80L).author(target).build();
+        when(userRepository.findById(ID)).thenReturn(Optional.of(target));
+        when(threadRepository.findByCreatedById(ID)).thenReturn(List.of(ownedThread));
+        when(threadReplyRepository.findByAuthorId(ID)).thenReturn(List.of(externalReply));
+
+        service.deleteUserCompletely(ID);
+
+        verify(threadContentCleanupService).deleteThreadById(70L);
+        verify(threadContentCleanupService).deleteReply(externalReply);
+        verify(threadSubscriptionRepository).deleteByUserId(ID);
+        verify(messageRepository).deleteMentionReferencesByUserId(ID);
     }
 
     @Test

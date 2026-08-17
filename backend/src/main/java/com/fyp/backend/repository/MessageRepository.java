@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
@@ -86,14 +87,49 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     void deleteById(Long messageId);
 
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM message_mentions WHERE message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId)", nativeQuery = true)
+    int deleteMentionRowsByConversationId(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM message_mentions WHERE message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId AND sender_id = :senderId)",
+            nativeQuery = true)
+    int deleteMentionRowsByConversationIdAndSenderId(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
+
+    /** Removes references to an account from messages that remain after account cleanup. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "DELETE FROM message_mentions WHERE user_id = :userId", nativeQuery = true)
+    int deleteMentionReferencesByUserId(@Param("userId") Long userId);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Message m WHERE m.conversation.id = :conversationId")
-    void deleteByConversationIdBulk(@Param("conversationId") Long conversationId);
+    int deleteMessageRowsByConversationId(@Param("conversationId") Long conversationId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Message m WHERE m.conversation.id = :conversationId AND m.sender.id = :senderId")
-    void deleteByConversationIdAndSenderIdBulk(
+    int deleteMessageRowsByConversationIdAndSenderId(
             @Param("conversationId") Long conversationId,
             @Param("senderId") Long senderId);
+
+    /**
+     * Bulk JPQL bypasses ElementCollection cascades, so mention rows must go first.
+     * Keep this wrapper as the public operation used by conversation cleanup.
+     */
+    @Transactional
+    default void deleteByConversationIdBulk(Long conversationId) {
+        deleteMentionRowsByConversationId(conversationId);
+        deleteMessageRowsByConversationId(conversationId);
+    }
+
+    /** Same ordering as {@link #deleteByConversationIdBulk(Long)}, scoped to one sender. */
+    @Transactional
+    default void deleteByConversationIdAndSenderIdBulk(Long conversationId, Long senderId) {
+        deleteMentionRowsByConversationIdAndSenderId(conversationId, senderId);
+        deleteMessageRowsByConversationIdAndSenderId(conversationId, senderId);
+    }
 
 }

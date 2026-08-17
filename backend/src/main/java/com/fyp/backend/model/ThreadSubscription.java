@@ -22,6 +22,8 @@ import lombok.NoArgsConstructor;
  * {@code lastSeenReplyId} is the read marker behind the badge on the Topics row:
  * anything newer than it, from somebody else, is unread. Ids are strictly
  * increasing, so that is a plain comparison and needs no timestamps.
+ * PostgreSQL foreign keys for the scalar ids are installed by
+ * DatabaseIntegrityMigration so thread/user deletion cascades safely.
  */
 @Entity
 @Data

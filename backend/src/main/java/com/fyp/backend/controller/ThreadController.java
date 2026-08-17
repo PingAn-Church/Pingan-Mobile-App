@@ -7,6 +7,9 @@ import com.fyp.backend.service.ThreadService;
 import com.fyp.backend.service.TopicSubscriptionService;
 import com.fyp.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,6 +18,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/threads")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('VERIFIED')")
 public class ThreadController {
 
     private final ThreadService threadService;
@@ -27,14 +31,20 @@ public class ThreadController {
      * opts somebody into hearing about replies.
      */
     @PutMapping("/{id}/subscription")
-    public Map<String, Object> setSubscription(
+    public ResponseEntity<Map<String, Object>> setSubscription(
             @PathVariable Long id,
             @RequestBody Map<String, Boolean> body,
             @RequestHeader("Authorization") String token) {
         Long userId = requireUserId(token);
         boolean wanted = body != null && Boolean.TRUE.equals(body.get("subscribed"));
-        boolean subscribed = topicSubscriptionService.setSubscribed(id, userId, wanted);
-        return Map.of("success", true, "subscribed", subscribed);
+        try {
+            boolean subscribed = topicSubscriptionService.setSubscribed(id, userId, wanted);
+            return ResponseEntity.ok(Map.of("success", true, "subscribed", subscribed));
+        } catch (TopicSubscriptionService.TopicNotFoundException gone) {
+            // The topic was deleted while this client still had it on screen.
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "subscribed", false));
+        }
     }
 
     /**
@@ -102,21 +112,18 @@ public class ThreadController {
 
 
     /**
-     * Replies to a topic, newest first.
-     *
-     * `after` is the name this cursor had while replies were oldest-first, and is
-     * still accepted: clients built against that version hand back the same
-     * nextCursor they were given, and paging backwards from it lands on the same
-     * next page. Nothing has to be released in step for their pagination to work.
+     * Current clients explicitly request newest-first pages. Requests without an
+     * order retain the original oldest-first contract for older app builds.
      */
     @GetMapping("/{id}/replies")
     public Map<String, Object> getReplies(
             @PathVariable Long id,
             @RequestParam(required = false) Long before,
             @RequestParam(required = false) Long after,
+            @RequestParam(required = false) String order,
             @RequestParam(defaultValue = "20") int size,
             @RequestHeader("Authorization") String token) {
-        return replyService.getRepliesPage(id, before != null ? before : after, size, token);
+        return replyService.getRepliesPage(id, before, after, size, order, token);
     }
 
     // Add reply to a thread

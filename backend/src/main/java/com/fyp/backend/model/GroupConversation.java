@@ -22,7 +22,8 @@ public class GroupConversation extends Conversation {
     private String groupNameZh;
 
     // Marks the single app-level group that every verified member belongs to.
-    // Exactly one row ever carries this; see AppGroupChatService.
+    // PostgreSQL enforces this with a partial unique index installed by
+    // DatabaseIntegrityMigration; see AppGroupChatService for creation.
     @ColumnDefault("false")
     @Column(nullable = false)
     private boolean appLevel = false;

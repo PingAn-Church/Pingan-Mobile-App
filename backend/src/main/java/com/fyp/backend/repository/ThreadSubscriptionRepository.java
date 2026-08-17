@@ -37,7 +37,11 @@ public interface ThreadSubscriptionRepository extends JpaRepository<ThreadSubscr
             + "WHERE s2.userId = :userId AND s2.threadId = r.thread.id), 0)")
     long countUnseenRepliesFor(@Param("userId") Long userId);
 
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM ThreadSubscription s WHERE s.threadId = :threadId")
-    void deleteByThreadId(@Param("threadId") Long threadId);
+    int deleteByThreadId(@Param("threadId") Long threadId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM ThreadSubscription s WHERE s.userId = :userId")
+    int deleteByUserId(@Param("userId") Long userId);
 }

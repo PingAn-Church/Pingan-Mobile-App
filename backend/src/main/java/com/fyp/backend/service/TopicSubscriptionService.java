@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.ThreadSubscription;
 import com.fyp.backend.repository.ThreadReplyRepository;
+import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.ThreadSubscriptionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class TopicSubscriptionService {
 
     private final ThreadSubscriptionRepository subscriptionRepository;
     private final ThreadReplyRepository replyRepository;
+    private final ThreadRepository threadRepository;
 
     public boolean isSubscribed(Long threadId, Long userId) {
         if (threadId == null || userId == null) return false;
@@ -51,6 +53,8 @@ public class TopicSubscriptionService {
      * A new subscription starts already caught up on what is there — following a
      * long-running topic should not immediately show a badge for a hundred
      * replies posted before you were interested.
+     *
+     * @throws TopicNotFoundException if the topic has since been deleted
      */
     @Transactional
     public boolean setSubscribed(Long threadId, Long userId, boolean subscribed) {
@@ -63,9 +67,24 @@ public class TopicSubscriptionService {
         }
         if (existing.isPresent()) return true;
 
+        // Somebody can hold a stale list open while an admin deletes the topic out
+        // from under them. The foreign key would refuse the insert anyway, so the
+        // row can never be orphaned — but that surfaces as a 500, and "the topic is
+        // gone" deserves a straight answer instead.
+        if (!threadRepository.existsById(threadId)) {
+            throw new TopicNotFoundException(threadId);
+        }
+
         subscriptionRepository.save(
                 new ThreadSubscription(threadId, userId, newestReplyId(threadId)));
         return true;
+    }
+
+    /** Raised when somebody tries to follow a topic that no longer exists. */
+    public static class TopicNotFoundException extends RuntimeException {
+        public TopicNotFoundException(Long threadId) {
+            super("Topic " + threadId + " no longer exists.");
+        }
     }
 
     /**
