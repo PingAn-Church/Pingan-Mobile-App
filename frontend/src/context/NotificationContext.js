@@ -58,7 +58,7 @@ export const NotificationProvider = ({ children }) => {
 
         const listener2 = Notifications.addNotificationResponseReceivedListener(async (response) => {
           const data = response.notification.request.content.data;
-          const { conversationId, conversationType } = data;
+          const { conversationId, conversationType, threadId } = data;
 
           await waitForUserToBeReady();
 
@@ -67,10 +67,12 @@ export const NotificationProvider = ({ children }) => {
           } else if (conversationType === "quiz-graded") {
             // "Quiz graded" learning notification: quizId rides on conversationId.
             navigation.navigate("QuizResults", { quizId: conversationId });
-          } else if (conversationType === "thread") {
-            // A reply in a topic this person follows; conversationId is the
-            // thread. ThreadDetail loads the rest from the id.
-            navigation.navigate("ThreadDetail", { thread: { id: conversationId } });
+          } else if (conversationType === "thread" && threadId != null) {
+            // A reply in a topic this person follows. The id arrives in its own
+            // field rather than as a conversation id, so builds that predate
+            // topics fall through to merely opening the app instead of being
+            // sent into an unrelated chat. ThreadDetail loads the rest from it.
+            navigation.navigate("ThreadDetail", { thread: { id: threadId } });
           } else if (conversationType === "new-member") {
             // Admin alert: someone registered and is waiting to be verified.
             // Manage Users is where that happens, so land them there rather

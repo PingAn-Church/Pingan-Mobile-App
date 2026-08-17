@@ -52,6 +52,9 @@ public class PushNotificationService {
      */
     static final String NEW_MEMBER_TYPE = "new-member";
 
+    /** Tags a "somebody replied in a topic you follow" push. */
+    static final String TOPIC_TYPE = "thread";
+
     private final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
     // Reused across sends — RestTemplate is thread-safe once built, and a new one
@@ -203,7 +206,23 @@ public class PushNotificationService {
      * rendered against the language their device last reported.
      */
     public void sendPushNotification(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long conversationId, String conversationType) {
-        fanOut(recipientIds, message, title, conversationId, conversationType, true);
+        fanOut(recipientIds, message, title, conversationId, conversationType, null, true);
+    }
+
+    /**
+     * A reply in a topic somebody follows.
+     *
+     * The thread id travels in its own field and conversationId is deliberately
+     * left null. App versions released before topics existed route notifications
+     * on "is there a conversation id", so putting the thread id there would send
+     * them into a chat — and because threads and conversations draw ids from
+     * different sequences, that id is usually a real conversation's too, so they
+     * would land in somebody else's chat rather than on an error. With no
+     * conversation id those clients fall through to simply opening the app.
+     */
+    public void sendTopicPush(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long threadId) {
+        if (recipientIds == null || recipientIds.isEmpty()) return;
+        fanOut(recipientIds, message, title, null, TOPIC_TYPE, threadId, true);
     }
 
     /**
@@ -218,11 +237,11 @@ public class PushNotificationService {
         if (mentionedIds == null || mentionedIds.isEmpty()) return;
         LocalizedText body = language ->
                 pushMessages.get(language, "push.chat.mentionedYou", senderName.render(language));
-        fanOut(mentionedIds, body, title, conversationId, conversationType, false);
+        fanOut(mentionedIds, body, title, conversationId, conversationType, null, false);
     }
 
     private void fanOut(List<Long> recipientIds, LocalizedText message, LocalizedText title,
-            Long conversationId, String conversationType, boolean respectMute) {
+            Long conversationId, String conversationType, Long threadId, boolean respectMute) {
         List<Long> targets = respectMute
                 ? filterMutedRecipients(recipientIds, conversationId, conversationType)
                 : recipientIds;
@@ -244,7 +263,7 @@ public class PushNotificationService {
                 // Only send notification if the token is active
                 if (token.isActive()) {
                     sendPushToDevice(token.getToken(), localizedBody, localizedTitle, conversationId, conversationType,
-                            badge, token.getDeviceType());
+                            threadId, badge, token.getDeviceType());
                 }
             }
         }
@@ -319,15 +338,20 @@ public class PushNotificationService {
      * message count.
      */
     private void sendPushToDevice(String token, String message, String title, Long conversationId,
-            String conversationType, Integer badge, String deviceType) {
-        // conversationId is absent for learning pushes; omit the key rather than
-        // shipping the literal string "null" the concatenated payload produced.
+            String conversationType, Long threadId, Integer badge, String deviceType) {
+        // conversationId is absent for learning and topic pushes; omit the key
+        // rather than shipping the literal string "null" the concatenated payload
+        // produced.
         Map<String, Object> data = new LinkedHashMap<>();
         if (conversationId != null) {
             data.put("conversationId", String.valueOf(conversationId));
         }
         if (conversationType != null) {
             data.put("conversationType", conversationType);
+        }
+        // Its own key, never conversationId — see sendTopicPush.
+        if (threadId != null) {
+            data.put("threadId", String.valueOf(threadId));
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();

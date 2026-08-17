@@ -114,12 +114,11 @@ public class ThreadReplyService {
                         authorName.render(language), shown);
             };
 
-            pushNotificationService.sendPushNotification(
+            pushNotificationService.sendTopicPush(
                     subscribers,
                     body,
                     pushMessages.literal(thread.getTitle()),
-                    thread.getId(),
-                    "thread");
+                    thread.getId());
         } catch (Exception ignored) {
             // best-effort notification; never disrupt the reply that triggered it
         }
