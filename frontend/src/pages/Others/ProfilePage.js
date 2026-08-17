@@ -857,7 +857,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     flexWrap: "wrap",
   },
-  // Matches the unread pill used on the chat card in SocialPage, so a count on
+  // Matches the unread pill on a conversation row in ChatHomePage, so a count on
   // an admin tile reads the same way as a count anywhere else in the app.
   optionBadge: {
     position: "absolute",

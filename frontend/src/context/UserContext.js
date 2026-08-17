@@ -61,9 +61,9 @@ export const UserProvider = ({ children }) => {
 
   // Force a fresh profile fetch — unlike fetchUserData, this does NOT short-circuit
   // once a user is loaded — and swap it into context only when something actually
-  // changed. That way pages gated on user.verifiedUser (SocialPage, activities)
-  // re-render the moment permissions change, mirroring a fresh sign-in, while
-  // unchanged polls cause no re-render.
+  // changed. That way surfaces gated on user.verifiedUser (the Chat tab, activities)
+  // re-render the moment permissions change, mirroring a fresh sign-in, while a
+  // refresh that finds nothing new costs no re-render.
   const refreshUser = useCallback(async () => {
     try {
       const token = await getAuthToken();
