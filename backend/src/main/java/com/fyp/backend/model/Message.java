@@ -47,14 +47,6 @@ public class Message {
     @JoinColumn(name = "sender_id", nullable = false)
     private User sender;
 
-    @ManyToMany
-    @JoinTable(
-            name = "message_read_receipts",
-            joinColumns = @JoinColumn(name = "message_id"),
-            inverseJoinColumns = @JoinColumn(name = "user_id")
-    )
-    private List<User> readByUsers;
-
     @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<MessageDeliveryStatus> deliveryStatuses = new ArrayList<>();
 

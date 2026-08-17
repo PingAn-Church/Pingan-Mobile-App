@@ -86,25 +86,6 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     void deleteById(Long messageId);
 
-    // Account-deletion sweep: drop this user's read-receipt join rows across every
-    // message (the join table has no entity, so it can't be cascaded otherwise).
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query(value = "DELETE FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
-    void deleteReadReceiptsByUserId(@Param("userId") Long userId);
-
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query(value = "DELETE FROM message_read_receipts WHERE message_id IN "
-            + "(SELECT id FROM messages WHERE conversation_id = :conversationId)", nativeQuery = true)
-    void deleteReadReceiptsByConversationId(@Param("conversationId") Long conversationId);
-
-    @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query(value = "DELETE FROM message_read_receipts WHERE message_id IN "
-            + "(SELECT id FROM messages WHERE conversation_id = :conversationId AND sender_id = :senderId)",
-            nativeQuery = true)
-    void deleteReadReceiptsByConversationIdAndSenderId(
-            @Param("conversationId") Long conversationId,
-            @Param("senderId") Long senderId);
-
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Message m WHERE m.conversation.id = :conversationId")
     void deleteByConversationIdBulk(@Param("conversationId") Long conversationId);
@@ -115,6 +96,4 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("conversationId") Long conversationId,
             @Param("senderId") Long senderId);
 
-    @Query(value = "SELECT COUNT(*) FROM message_read_receipts WHERE user_id = :userId", nativeQuery = true)
-    long countReadReceiptsByUserId(@Param("userId") Long userId);
 }

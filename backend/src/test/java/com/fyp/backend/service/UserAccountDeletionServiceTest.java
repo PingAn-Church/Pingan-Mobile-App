@@ -148,8 +148,8 @@ class UserAccountDeletionServiceTest {
         // The user row itself is removed.
         verify(userRepository).deleteById(ID);
         // Foreign-key sweeps that unblock the row delete.
-        verify(messageRepository).deleteReadReceiptsByUserId(ID);
         verify(messageDeliveryStatusRepository).deleteByUserId(ID);
+        verify(conversationReadStateRepository).deleteByUserId(ID);
         verify(pushTokenRepository).deleteByUserId(ID);
         verify(refreshTokenRepository).deleteByUserEmail(EMAIL);
         verify(redisService).clearUserOnlineStatus(EMAIL);
@@ -176,7 +176,7 @@ class UserAccountDeletionServiceTest {
         verify(userRepository, never()).save(any(User.class));
         // Shared UGC is now removed too (previously kept under the tombstone).
         verify(threadReplyRepository).deleteByAuthorId(ID);
-        verify(messageRepository).deleteReadReceiptsByUserId(ID);
+        verify(conversationReadStateRepository).deleteByUserId(ID);
         // Private data / auth / avatar swept.
         verify(pushTokenRepository).deleteByUserId(ID);
         verify(refreshTokenRepository).deleteByUserEmail(EMAIL);

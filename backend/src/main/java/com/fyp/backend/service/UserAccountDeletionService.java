@@ -191,7 +191,6 @@ public class UserAccountDeletionService {
                     .ifPresent(g -> purgeUserFromGroup(g, userId, true));
         }
 
-        messageRepository.deleteReadReceiptsByUserId(userId);
         messageDeliveryStatusRepository.deleteByUserId(userId);
         conversationReadStateRepository.deleteByUserId(userId);
 
@@ -295,12 +294,11 @@ public class UserAccountDeletionService {
         }
     }
 
-    /** Delete every message in a conversation (media + delivery statuses + read receipts). */
+    /** Delete every message in a conversation (media + delivery statuses + read state). */
     private void purgeConversationMessages(Long conversationId) {
         List<String> objectUrls = collectConversationMediaUrls(conversationId, null);
         messageDeliveryStatusRepository.deleteByConversationId(conversationId);
         conversationReadStateRepository.deleteByConversationId(conversationId);
-        messageRepository.deleteReadReceiptsByConversationId(conversationId);
         messageRepository.deleteByConversationIdBulk(conversationId);
         deleteObjectsAfterCommit(objectUrls);
     }
@@ -361,7 +359,6 @@ public class UserAccountDeletionService {
     private void deleteOwnMessages(Long conversationId, Long userId) {
         List<String> objectUrls = collectConversationMediaUrls(conversationId, userId);
         messageDeliveryStatusRepository.deleteByConversationIdAndSenderId(conversationId, userId);
-        messageRepository.deleteReadReceiptsByConversationIdAndSenderId(conversationId, userId);
         messageRepository.deleteByConversationIdAndSenderIdBulk(conversationId, userId);
         deleteObjectsAfterCommit(objectUrls);
     }

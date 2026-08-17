@@ -711,7 +711,6 @@ public class ConversationService {
 
         messageDeliveryStatusRepository.deleteByConversationId(conversationId);
         conversationReadStateService.forgetConversation(conversationId);
-        messageRepository.deleteReadReceiptsByConversationId(conversationId);
         messageRepository.deleteByConversationIdBulk(conversationId);
         deleteObjectsAfterCommit(objectUrls);
     }
