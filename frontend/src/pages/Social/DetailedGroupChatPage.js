@@ -5,7 +5,6 @@ import {
   Text,
   TextInput,
   View,
-  Image,
   StyleSheet,
   FlatList,
   ActivityIndicator,
@@ -79,6 +78,7 @@ const DetailedGroupChatPage = ({ route }) => {
         id,
         firstName: profile?.firstName,
         lastName: profile?.lastName,
+        profileImage: profile?.profileImage || null,
         fallbackName: found.participantNames?.[index] || i18n.t("unknownUser"),
       };
     });
@@ -103,6 +103,7 @@ const DetailedGroupChatPage = ({ route }) => {
           id: p.id,
           firstName: p.firstName,
           lastName: p.lastName,
+          profileImage: p.profileImage || null,
           fallbackName: i18n.t("unknownUser"),
         }));
         setParticipants((previous) => (page === 0 ? rows : [...previous, ...rows]));
@@ -490,12 +491,10 @@ const DetailedGroupChatPage = ({ route }) => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.participantCard}>
-            <Image
-              source={
-                item.profileImageUrl
-                  ? { uri: item.profileImageUrl }
-                  : defaultProfileImage
-              }
+            <CachedImage
+              uri={item.profileImage}
+              type="profile"
+              fallbackSource={defaultProfileImage}
               style={styles.profileImage}
             />
             <View style={styles.textContainer}>
