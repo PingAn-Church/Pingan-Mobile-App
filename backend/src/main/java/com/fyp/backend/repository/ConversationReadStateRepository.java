@@ -11,7 +11,8 @@ import org.springframework.stereotype.Repository;
 import com.fyp.backend.model.ConversationReadState;
 
 @Repository
-public interface ConversationReadStateRepository extends JpaRepository<ConversationReadState, Long> {
+public interface ConversationReadStateRepository extends JpaRepository<ConversationReadState, Long>,
+        ConversationReadStateRepositoryCustom {
 
     Optional<ConversationReadState> findByConversationIdAndUserId(Long conversationId, Long userId);
 

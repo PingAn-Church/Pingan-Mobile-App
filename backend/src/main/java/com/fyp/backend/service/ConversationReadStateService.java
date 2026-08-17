@@ -3,7 +3,6 @@ package com.fyp.backend.service;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fyp.backend.model.ConversationReadState;
 import com.fyp.backend.repository.ConversationReadStateRepository;
 import com.fyp.backend.repository.MessageRepository;
 
@@ -43,17 +42,8 @@ public class ConversationReadStateService {
     }
 
     private void setWatermark(Long conversationId, Long userId, Long messageId) {
-        ConversationReadState state = readStateRepository
-                .findByConversationIdAndUserId(conversationId, userId)
-                .orElseGet(() -> new ConversationReadState(conversationId, userId, null));
-
-        // Only ever moves forward. Re-reading older history must not resurrect
-        // unread badges for everything after it.
-        Long current = state.getLastReadMessageId();
-        if (messageId != null && (current == null || messageId > current)) {
-            state.setLastReadMessageId(messageId);
-        }
-        readStateRepository.save(state);
+        if (messageId == null) return;
+        readStateRepository.advanceWatermark(conversationId, userId, messageId);
     }
 
     @Transactional
