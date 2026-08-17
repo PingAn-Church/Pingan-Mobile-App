@@ -73,6 +73,7 @@ class MessageReportServiceTest {
     @Mock private ChatService chatService;
     @Mock private ReviewService reviewService;
     @Mock private ModerationEventPublisher moderationEventPublisher;
+    @Mock private ThreadContentCleanupService threadContentCleanupService;
 
     @InjectMocks private MessageReportService service;
 
@@ -377,18 +378,17 @@ class MessageReportServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1, "Bad", "Actor")));
         when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
         when(messageRepository.existsById(5L)).thenReturn(true);
-        when(threadReplyRepository.existsById(8L)).thenReturn(true);
         when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ReportResolutionDto result = service.resolveReport(
                 9L, MessageReport.ACTION_DEACTIVATE_USER, 3L);
 
-        verify(threadReplyRepository).deleteById(8L);
+        verify(threadContentCleanupService).deleteReplyById(8L);
         InOrder messageOrder = inOrder(chatService, userService);
         messageOrder.verify(chatService).deleteMessageAndBroadcast(5L);
         messageOrder.verify(userService).updateUserActiveStatus(1L, false);
-        InOrder replyOrder = inOrder(threadReplyRepository, userService);
-        replyOrder.verify(threadReplyRepository).deleteById(8L);
+        InOrder replyOrder = inOrder(threadContentCleanupService, userService);
+        replyOrder.verify(threadContentCleanupService).deleteReplyById(8L);
         replyOrder.verify(userService).updateUserActiveStatus(1L, false);
         assertEquals(Set.of(9L, 10L), Set.copyOf(result.getAffectedReportIds()));
         assertEquals(MessageReport.ACTION_DEACTIVATE_USER, replyReport.getResolution());
@@ -401,8 +401,7 @@ class MessageReportServiceTest {
         replyReport.setSenderId(4L);
         when(messageReportRepository.findById(9L)).thenReturn(Optional.of(threadReport));
         when(messageReportRepository.findById(10L)).thenReturn(Optional.of(replyReport));
-        when(threadRepository.existsById(7L)).thenReturn(true);
-        when(threadReplyRepository.findIdsByThreadId(7L)).thenReturn(List.of(8L));
+        when(threadContentCleanupService.deleteThreadById(7L)).thenReturn(List.of(8L));
         when(messageReportRepository.findByContentTypeAndContentIdInAndStatus(
                 MessageReport.TYPE_THREAD_REPLY, List.of(8L), MessageReport.STATUS_PENDING))
                 .thenReturn(List.of(replyReport));
@@ -412,7 +411,12 @@ class MessageReportServiceTest {
         ReportResolutionDto result = service.resolveReport(
                 9L, MessageReport.ACTION_DELETE_MESSAGE, 3L);
 
-        verify(threadRepository).deleteById(7L);
+        verify(threadContentCleanupService).deleteThreadById(7L);
+        verify(moderationEventPublisher).publishAfterCommit(
+                org.mockito.ArgumentMatchers.argThat(event ->
+                        MessageReport.TYPE_THREAD.equals(event.getContentType())
+                                && Long.valueOf(7L).equals(event.getContentId())
+                                && ModerationEvent.STATE_DELETED.equals(event.getState())));
         assertEquals(MessageReport.ACTION_DELETE_MESSAGE, replyReport.getResolution());
         assertEquals(Set.of(9L, 10L), Set.copyOf(result.getAffectedReportIds()));
     }
@@ -462,13 +466,13 @@ class MessageReportServiceTest {
     void resolveDeleteThreadDeletesThread() {
         when(messageReportRepository.findById(9L))
                 .thenReturn(Optional.of(pendingReport(9L, MessageReport.TYPE_THREAD, 7L)));
-        when(threadRepository.existsById(7L)).thenReturn(true);
+        when(threadContentCleanupService.deleteThreadById(7L)).thenReturn(List.of());
         when(userRepository.findById(3L)).thenReturn(Optional.of(user(3, "Ad", "Min")));
         when(messageReportRepository.save(any(MessageReport.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.resolveReport(9L, MessageReport.ACTION_DELETE_MESSAGE, 3L);
 
-        verify(threadRepository).deleteById(7L);
+        verify(threadContentCleanupService).deleteThreadById(7L);
     }
 
     @Test

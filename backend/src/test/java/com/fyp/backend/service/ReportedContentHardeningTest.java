@@ -30,7 +30,7 @@ import com.fyp.backend.model.Message;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
-import com.fyp.backend.mq.MessagePublisher;
+import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.GroupConversationRepository;
@@ -52,9 +52,7 @@ class ReportedContentHardeningTest {
     @Mock private MessageDeliveryStatusRepository deliveryStatusRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private OssCleanupService ossCleanupService;
-    @Mock private RedisService redisService;
-    @Mock private MessagePublisher messagePublisher;
-    @Mock private PushNotificationService pushNotificationService;
+    @Mock private FanoutPublisher fanoutPublisher;
     @Mock private UserBlockService userBlockService;
     @Mock private ThreadRepository threadRepository;
     @Mock private ThreadReplyRepository threadReplyRepository;
@@ -64,6 +62,7 @@ class ReportedContentHardeningTest {
     @Mock private CourseRepository courseRepository;
     @Mock private ModerationEventPublisher moderationEventPublisher;
     @Mock private TopicSubscriptionService topicSubscriptionService;
+    @Mock private ThreadContentCleanupService threadContentCleanupService;
     @Mock private PushMessages pushMessages;
     // Real instance — masking is deterministic and test fixtures use clean text.
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
@@ -158,7 +157,7 @@ class ReportedContentHardeningTest {
         when(jwtUtil.extractEmail("author")).thenReturn("user1@example.com");
         when(userRepository.findByEmail("user2@example.com")).thenReturn(Optional.of(user(2L, false)));
         when(userRepository.findByEmail("user1@example.com")).thenReturn(Optional.of(author));
-        when(threadReplyRepository.findByThreadIdOrderByIdDesc(7L, PageRequest.of(0, 21)))
+        when(threadReplyRepository.findByThreadIdOrderByIdAsc(7L, PageRequest.of(0, 21)))
                 .thenReturn(List.of(reply));
         when(threadReplyRepository.findById(8L)).thenReturn(Optional.of(reply));
 

@@ -36,6 +36,7 @@ public class ThreadService {
     private final ModerationEventPublisher moderationEventPublisher;
     private final ContentSanitizer contentSanitizer;
     private final TopicSubscriptionService topicSubscriptionService;
+    private final ThreadContentCleanupService threadContentCleanupService;
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size, String token) {
@@ -73,7 +74,7 @@ public class ThreadService {
         Thread thread = Thread.builder()
                 .title(contentSanitizer.mask(dto.getTitle()))
                 .content(contentSanitizer.mask(dto.getContent()))
-                .coverImage(normaliseCoverImage(dto.getCoverImage()))
+                .coverImage(normaliseNewCoverImage(dto.getCoverImage(), user.getId()))
                 .createdBy(user)
                 .createdAt(LocalDateTime.now()) // 👈 add this
                 .build();
@@ -112,6 +113,7 @@ public class ThreadService {
                 .build();
     }
 
+    @Transactional
     public ThreadDto editThread(Long threadId, ThreadDto updatedDto, String token) {
         Thread thread = threadRepository.findById(threadId)
                 .orElseThrow(() -> new RuntimeException("Thread not found"));
@@ -130,9 +132,11 @@ public class ThreadService {
         // Update fields
         thread.setTitle(contentSanitizer.mask(updatedDto.getTitle()));
         thread.setContent(contentSanitizer.mask(updatedDto.getContent()));
-        applyCoverImage(thread, updatedDto.getCoverImage());
+        String previousCover = thread.getCoverImage();
+        applyCoverImage(thread, updatedDto.getCoverImage(), user.getId());
 
         thread = threadRepository.save(thread);
+        threadContentCleanupService.cleanupReplacedReference(previousCover, thread.getCoverImage());
         return mapToDto(thread, user, topicSubscriptionService.isSubscribed(threadId, user.getId()));
     }
 
@@ -142,10 +146,9 @@ public class ThreadService {
      * turn every thread into a way to load a third party's image on every reader's
      * device. Blank means "no picture", which is the normal case.
      */
-    private String normaliseCoverImage(String coverImage) {
+    private String normaliseNewCoverImage(String coverImage, Long ownerId) {
         if (coverImage == null || coverImage.isBlank()) return null;
-        String trimmed = coverImage.trim();
-        return OSSService.isManagedKeyOrUrl(trimmed) ? trimmed : null;
+        return threadContentCleanupService.requireOwnedImageReference(coverImage, ownerId);
     }
 
     /**
@@ -158,10 +161,10 @@ public class ThreadService {
      * Removing is therefore an explicit empty string, which is what the edit screen
      * sends once the picture is cleared.
      *
-     * A non-empty value that is not one of our own object paths is ignored rather
-     * than applied: it is a malformed request, not an instruction to delete.
+     * A non-empty new value must be one of the current author's uploads. Invalid
+     * references fail the edit; they are never interpreted as a request to delete.
      */
-    private void applyCoverImage(Thread thread, String requested) {
+    private void applyCoverImage(Thread thread, String requested, Long ownerId) {
         if (requested == null) return;
 
         String trimmed = requested.trim();
@@ -169,9 +172,12 @@ public class ThreadService {
             thread.setCoverImage(null);
             return;
         }
-        if (OSSService.isManagedKeyOrUrl(trimmed)) {
-            thread.setCoverImage(trimmed);
+        // The same stored value may be a legacy, pre-owner-prefix object. It is
+        // safe to retain; only a newly introduced reference must prove ownership.
+        if (trimmed.equals(thread.getCoverImage())) {
+            return;
         }
+        thread.setCoverImage(threadContentCleanupService.requireOwnedImageReference(trimmed, ownerId));
     }
 
     @Transactional
@@ -189,14 +195,13 @@ public class ThreadService {
             throw new RuntimeException("Unauthorized to delete this thread.");
         }
 
-        topicSubscriptionService.forgetThread(threadId);
-        threadRepository.delete(thread); // Optionally cascade delete replies via JPA
         moderationEventPublisher.publishAfterCommit(ModerationEvent.builder()
                 .contentType(com.fyp.backend.model.MessageReport.TYPE_THREAD)
                 .contentId(threadId)
                 .threadId(threadId)
                 .state(ModerationEvent.STATE_DELETED)
                 .build());
+        threadContentCleanupService.deleteThread(thread);
     }
 
     private User requireUser(String token) {

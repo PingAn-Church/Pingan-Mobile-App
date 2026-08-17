@@ -62,6 +62,7 @@ public class MessageReportService {
     private final ChatService chatService;
     private final ReviewService reviewService;
     private final ModerationEventPublisher moderationEventPublisher;
+    private final ThreadContentCleanupService threadContentCleanupService;
 
     public MessageReportService(MessageReportRepository messageReportRepository,
             MessageRepository messageRepository,
@@ -74,7 +75,8 @@ public class MessageReportService {
             ConversationService conversationService,
             ChatService chatService,
             ReviewService reviewService,
-            ModerationEventPublisher moderationEventPublisher) {
+            ModerationEventPublisher moderationEventPublisher,
+            ThreadContentCleanupService threadContentCleanupService) {
         this.messageReportRepository = messageReportRepository;
         this.messageRepository = messageRepository;
         this.threadRepository = threadRepository;
@@ -87,6 +89,7 @@ public class MessageReportService {
         this.chatService = chatService;
         this.reviewService = reviewService;
         this.moderationEventPublisher = moderationEventPublisher;
+        this.threadContentCleanupService = threadContentCleanupService;
     }
 
     /** Legacy entry point: report a chat message. */
@@ -395,26 +398,21 @@ public class MessageReportService {
                         eventFor(report, ModerationEvent.STATE_DELETED));
             }
             case MessageReport.TYPE_THREAD -> {
-                if (threadRepository.existsById(contentId)) {
-                    List<Long> replyIds = threadReplyRepository.findIdsByThreadId(contentId);
-                    if (!replyIds.isEmpty()) {
-                        messageReportRepository.findByContentTypeAndContentIdInAndStatus(
-                                MessageReport.TYPE_THREAD_REPLY,
-                                replyIds,
-                                MessageReport.STATUS_PENDING)
-                                .forEach(pending -> cascadeReportIds.add(pending.getId()));
-                    }
-                    threadRepository.deleteById(contentId); // cascades to replies
-                }
                 moderationEventPublisher.publishAfterCommit(
                         eventFor(report, ModerationEvent.STATE_DELETED));
+                List<Long> replyIds = threadContentCleanupService.deleteThreadById(contentId);
+                if (!replyIds.isEmpty()) {
+                    messageReportRepository.findByContentTypeAndContentIdInAndStatus(
+                            MessageReport.TYPE_THREAD_REPLY,
+                            replyIds,
+                            MessageReport.STATUS_PENDING)
+                            .forEach(pending -> cascadeReportIds.add(pending.getId()));
+                }
             }
             case MessageReport.TYPE_THREAD_REPLY -> {
-                if (threadReplyRepository.existsById(contentId)) {
-                    threadReplyRepository.deleteById(contentId);
-                }
                 moderationEventPublisher.publishAfterCommit(
                         eventFor(report, ModerationEvent.STATE_DELETED));
+                threadContentCleanupService.deleteReplyById(contentId);
             }
             case MessageReport.TYPE_COURSE_REVIEW -> courseRatingRepository.findById(contentId)
                     .ifPresent(rating -> {

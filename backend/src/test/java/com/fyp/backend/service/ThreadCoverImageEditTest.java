@@ -3,7 +3,9 @@ package com.fyp.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import java.util.Optional;
 
@@ -44,6 +46,7 @@ class ThreadCoverImageEditTest {
     @Mock private JwtUtil jwtUtil;
     @Mock private ModerationEventPublisher moderationEventPublisher;
     @Mock private TopicSubscriptionService topicSubscriptionService;
+    @Mock private ThreadContentCleanupService threadContentCleanupService;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
 
     @InjectMocks private ThreadService threadService;
@@ -73,6 +76,8 @@ class ThreadCoverImageEditTest {
         when(threadRepository.findById(7L)).thenReturn(Optional.of(thread));
         when(userService.getUserFromToken("Bearer t")).thenReturn(Optional.of(author()));
         when(threadRepository.save(any(Thread.class))).thenAnswer(i -> i.getArgument(0));
+        when(threadContentCleanupService.requireOwnedImageReference(any(String.class), anyLong()))
+                .thenAnswer(i -> i.getArgument(0));
 
         threadService.editThread(7L, dto, "Bearer t");
         return thread;
@@ -95,19 +100,21 @@ class ThreadCoverImageEditTest {
     @Test
     void anEmptyStringIsHowTheCoverIsActuallyRemoved() {
         assertNull(edit(dto("")).getCoverImage());
-        assertNull(edit(dto("   ")).getCoverImage());
+        verify(threadContentCleanupService).cleanupReplacedReference(COVER, null);
     }
 
     @Test
     void aNewCoverReplacesTheOldOne() {
-        assertEquals("threadPictures/new-999.jpg",
-                edit(dto("threadPictures/new-999.jpg")).getCoverImage());
+        String replacement = "threadPictures/u1_new-999.jpg";
+        assertEquals(replacement, edit(dto(replacement)).getCoverImage());
+        verify(threadContentCleanupService).requireOwnedImageReference(replacement, 1L);
+        verify(threadContentCleanupService).cleanupReplacedReference(COVER, replacement);
     }
 
     @Test
-    void somethingThatIsNotOursIsIgnoredRatherThanWipingWhatIsThere() {
-        // A malformed request is not an instruction to delete. Storing it would
-        // also let a topic pull an image off a third party's server for every reader.
-        assertEquals(COVER, edit(dto("https://example.com/tracker.png")).getCoverImage());
+    void retainingTheExactLegacyCoverDoesNotRequireNewOwnershipProof() {
+        assertEquals(COVER, edit(dto(COVER)).getCoverImage());
+        verify(threadContentCleanupService, org.mockito.Mockito.never())
+                .requireOwnedImageReference(any(String.class), anyLong());
     }
 }

@@ -3,6 +3,7 @@ package com.fyp.backend.service;
 import com.fyp.backend.dto.ThreadReplyDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.dto.ModerationEvent;
+import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.model.Thread;
 import com.fyp.backend.model.ThreadReply;
 import com.fyp.backend.model.User;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -33,24 +36,35 @@ public class ThreadReplyService {
     private final ModerationEventPublisher moderationEventPublisher;
     private final ContentSanitizer contentSanitizer;
     private final TopicSubscriptionService topicSubscriptionService;
-    private final PushNotificationService pushNotificationService;
+    private final FanoutPublisher fanoutPublisher;
     private final PushMessages pushMessages;
+    private final ThreadContentCleanupService threadContentCleanupService;
 
     /**
-     * One page of replies, newest first.
-     *
-     * {@code before} is the smallest reply id already held; paging walks backwards
-     * into older replies, so the cursor is still the last id of the page returned.
-     * That is the same shape the previous oldest-first version used, which is why
-     * clients built against it keep paginating correctly against this one — they
-     * hand back whatever nextCursor they were given and get the next page along.
+     * Strict dual ordering. Current clients explicitly request {@code newest} and
+     * page backwards with {@code before}; clients without an order retain the old
+     * ascending {@code after} contract.
      */
-    public Map<String, Object> getRepliesPage(Long threadId, Long before, int size, String token) {
+    public Map<String, Object> getRepliesPage(Long threadId, Long before, Long after,
+            int size, String order, String token) {
         User requester = requireUser(token);
         int safeSize = Pagination.clampSize(size);
-        List<ThreadReply> fetched = before == null
-                ? replyRepository.findByThreadIdOrderByIdDesc(threadId, PageRequest.of(0, safeSize + 1))
-                : replyRepository.findByThreadIdAndIdLessThanOrderByIdDesc(threadId, before, PageRequest.of(0, safeSize + 1));
+        boolean newestFirst = "newest".equalsIgnoreCase(order == null ? "" : order.trim());
+        Long cursor = newestFirst ? before : after;
+        List<ThreadReply> fetched;
+        if (newestFirst) {
+            fetched = before == null
+                    ? replyRepository.findByThreadIdOrderByIdDesc(
+                            threadId, PageRequest.of(0, safeSize + 1))
+                    : replyRepository.findByThreadIdAndIdLessThanOrderByIdDesc(
+                            threadId, before, PageRequest.of(0, safeSize + 1));
+        } else {
+            fetched = after == null
+                    ? replyRepository.findByThreadIdOrderByIdAsc(
+                            threadId, PageRequest.of(0, safeSize + 1))
+                    : replyRepository.findByThreadIdAndIdGreaterThanOrderByIdAsc(
+                            threadId, after, PageRequest.of(0, safeSize + 1));
+        }
         boolean hasMore = fetched.size() > safeSize;
         List<ThreadReply> page = hasMore ? fetched.subList(0, safeSize) : fetched;
         List<ThreadReplyDto> data = page.stream()
@@ -58,7 +72,7 @@ public class ThreadReplyService {
                 .collect(Collectors.toList());
 
         Map<String, Object> pagination = new LinkedHashMap<>();
-        pagination.put("nextCursor", page.isEmpty() ? before : page.get(page.size() - 1).getId());
+        pagination.put("nextCursor", page.isEmpty() ? cursor : page.get(page.size() - 1).getId());
         pagination.put("hasMore", hasMore);
         pagination.put("size", safeSize);
 
@@ -69,6 +83,11 @@ public class ThreadReplyService {
         return body;
     }
 
+    /** Legacy service signature retained while controllers migrate to the order parameter. */
+    public Map<String, Object> getRepliesPage(Long threadId, Long after, int size, String token) {
+        return getRepliesPage(threadId, null, after, size, null, token);
+    }
+
     public ThreadReplyDto getReplyById(Long replyId, String token) {
         User requester = requireUser(token);
         ThreadReply reply = replyRepository.findById(replyId)
@@ -76,6 +95,7 @@ public class ThreadReplyService {
         return mapToDto(reply, requester);
     }
 
+    @Transactional
     public ThreadReplyDto addReply(ThreadReplyDto dto, String token) {
         Thread thread = threadRepository.findById(dto.getThreadId())
                 .orElseThrow(() -> new RuntimeException("Thread not found"));
@@ -87,9 +107,8 @@ public class ThreadReplyService {
 
         ThreadReply reply = ThreadReply.builder()
                 .content(contentSanitizer.mask(dto.getContent()))
-                // Only object paths this app owns; an arbitrary external URL here
-                // would load a third party's image on every reader's device.
-                .imageUrl(OSSService.isManagedKeyOrUrl(dto.getImageUrl()) ? dto.getImageUrl().trim() : null)
+                .imageUrl(threadContentCleanupService.requireOwnedImageReference(
+                        dto.getImageUrl(), author.getId()))
                 .author(author)
                 .thread(thread)
                 .createdAt(LocalDateTime.now())
@@ -123,11 +142,14 @@ public class ThreadReplyService {
                         authorName.render(language), shown);
             };
 
-            pushNotificationService.sendTopicPush(
-                    subscribers,
-                    body,
-                    pushMessages.literal(thread.getTitle()),
-                    thread.getId());
+            LocalizedText title = pushMessages.literal(thread.getTitle());
+            Long threadId = thread.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    fanoutPublisher.publishTopic(subscribers, title, body, threadId);
+                }
+            });
         } catch (Exception ignored) {
             // best-effort notification; never disrupt the reply that triggered it
         }
@@ -189,13 +211,13 @@ public class ThreadReplyService {
         }
 
         Long threadId = reply.getThread() != null ? reply.getThread().getId() : null;
-        replyRepository.delete(reply);
         moderationEventPublisher.publishAfterCommit(ModerationEvent.builder()
                 .contentType(com.fyp.backend.model.MessageReport.TYPE_THREAD_REPLY)
                 .contentId(replyId)
                 .threadId(threadId)
                 .state(ModerationEvent.STATE_DELETED)
                 .build());
+        threadContentCleanupService.deleteReply(reply);
     }
 
     private User requireUser(String token) {

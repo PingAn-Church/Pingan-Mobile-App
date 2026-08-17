@@ -64,7 +64,14 @@ export const fetchReplies = async (threadId, { before, size = 20 } = {}) => {
 
   try {
     const response = await axios.get(`${baseUrl()}/${threadId}/replies`, {
-      params: { ...(before ? { before } : {}), size },
+      params: {
+        order: "newest",
+        // Current servers page backwards with `before`. Keeping the legacy
+        // `after` alias lets this build continue paging against an older server;
+        // current servers give `before` precedence when both are present.
+        ...(before != null ? { before, after: before } : {}),
+        size,
+      },
       headers: {
         Authorization: `Bearer ${token}`,
       },
