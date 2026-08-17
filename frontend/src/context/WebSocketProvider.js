@@ -6,11 +6,15 @@ import { UserContext } from "./UserContext";
 import { emitModerationEvent } from "../service/ModerationEventService";
 
 const WebSocketProvider = ({ children }) => {
-  const { user, userReady } = useContext(UserContext);
+  const { user, userReady, applyPermissionUpdate } = useContext(UserContext);
   const chat = useContext(ChatContext);
   const appState = useRef(AppState.currentState);
   const isConnectedRef = useRef(false);
-  const socketEligible = Boolean(userReady && user?.verifiedUser);
+  // Any signed-in account gets a socket, verified or not. An unverified one
+  // subscribes to nothing but its own permission feed, which is how being
+  // approved takes effect without a poll or a sign-in.
+  const socketEligible = Boolean(userReady && user?.id);
+  const verified = Boolean(user?.verifiedUser);
 
   const handleModerationEvent = (event) => {
     chat.handleModerationEvent(event);
@@ -26,6 +30,7 @@ const WebSocketProvider = ({ children }) => {
     onGroupAdminUpdate: chat.handleGroupAdminUpdate,
     onGroupIconUpdate: chat.handleGroupIconUpdate,
     onModerationEvent: handleModerationEvent,
+    onPermissionUpdate: applyPermissionUpdate,
   });
 
   // Reconnect when the app returns to the foreground; drop the socket in background.
@@ -36,10 +41,14 @@ const WebSocketProvider = ({ children }) => {
 
       if (prevState.match(/inactive|background/) && nextState === "active") {
         if (socketEligible && !isConnectedRef.current) {
-          await connectWebSocket(buildHandlers(), () => {
-            chat.fetchInitialData();
-            isConnectedRef.current = true;
-          });
+          await connectWebSocket(
+            buildHandlers(),
+            (prefetchedConversations) => {
+              chat.fetchInitialData(prefetchedConversations);
+              isConnectedRef.current = true;
+            },
+            { verified }
+          );
         }
       }
 
@@ -51,7 +60,7 @@ const WebSocketProvider = ({ children }) => {
 
     const subscription = AppState.addEventListener("change", onAppStateChange);
     return () => subscription.remove();
-  }, [socketEligible, user?.id]);
+  }, [socketEligible, user?.id, verified]);
 
   // Initial connection once the user session is restored.
   useEffect(() => {
@@ -61,16 +70,22 @@ const WebSocketProvider = ({ children }) => {
       return;
     }
 
-    connectWebSocket(buildHandlers(), () => {
-      chat.fetchInitialData();
-      isConnectedRef.current = true;
-    });
+    connectWebSocket(
+      buildHandlers(),
+      (prefetchedConversations) => {
+        chat.fetchInitialData(prefetchedConversations);
+        isConnectedRef.current = true;
+      },
+      { verified }
+    );
 
     return () => {
       disconnectWebSocket();
       isConnectedRef.current = false;
     };
-  }, [socketEligible, user?.id]);
+    // `verified` is a dependency on purpose: being approved has to rebuild the
+    // socket so the chat subscriptions this session skipped are established.
+  }, [socketEligible, user?.id, verified]);
 
   return <>{children}</>;
 };

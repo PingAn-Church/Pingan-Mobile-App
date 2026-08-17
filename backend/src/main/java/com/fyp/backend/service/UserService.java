@@ -40,6 +40,9 @@ public class UserService {
     @Autowired
     private AppGroupChatService appGroupChatService;
 
+    @Autowired
+    private PermissionBroadcaster permissionBroadcaster;
+
     /**
      * Retrieves the user profile of the currently authenticated user.
      * 
@@ -141,6 +144,7 @@ public class UserService {
         }
         user.setInstructor(isInstructor);
         userRepository.save(user);
+        permissionBroadcaster.announce(user);
     }
 
     @Transactional
@@ -157,6 +161,10 @@ public class UserService {
             // from, so it has to move with it — the group is waiting in their chat
             // list the moment they are approved, and gone again if that is undone.
             appGroupChatService.syncMembership(user);
+            // The app hides chat, events and the whole verified surface behind this
+            // flag, so being approved has to light them up now rather than at the
+            // next poll or the next sign-in.
+            permissionBroadcaster.announce(user);
         } else {
             throw new RuntimeException("User not found");
         }
@@ -179,6 +187,7 @@ public class UserService {
         // A deactivated account keeps its verified flag but must stop receiving the
         // public group's traffic.
         appGroupChatService.syncMembership(user);
+        permissionBroadcaster.announce(user);
     }
 
     @Transactional
@@ -206,6 +215,7 @@ public class UserService {
             // Admin powers in the app-level group follow app admin rather than a
             // separate per-group list, so the two must not drift apart.
             appGroupChatService.syncAdmin(user);
+            permissionBroadcaster.announce(user);
         } else {
             throw new RuntimeException("User not found");
         }

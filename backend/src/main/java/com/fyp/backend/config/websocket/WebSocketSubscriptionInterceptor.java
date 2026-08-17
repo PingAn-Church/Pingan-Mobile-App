@@ -24,10 +24,13 @@ import java.util.regex.Pattern;
  * does not belong to and read private messages.
  *
  * Allowed:
+ *  - /user/{ownUserId}/queue/permissions    (own role feed; the only thing an
+ *                                            unverified account may subscribe to)
  *  - /user/queue/status                     (global presence broadcast, by design)
  *  - /user/{ownUserId}/queue/*              (own per-user queues only)
  *  - /topic/conversation-{id}               (participants only)
- * Everything else is dropped.
+ * Everything but the first also requires a verified account. Everything else is
+ * dropped.
  */
 @Component
 public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
@@ -40,8 +43,7 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
     private static final String MODERATION_TOPIC = "/topic/content-moderation";
     private static final java.util.Set<String> ALLOWED_SEND_DESTINATIONS = java.util.Set.of(
             "/app/heartbeat",
-            "/app/updateDeliveryStatus",
-            "/app/user-ready");
+            "/app/updateDeliveryStatus");
 
     private final UserRepository userRepository;
     private final GroupConversationRepository groupConversationRepository;
@@ -86,13 +88,27 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
         if (destination == null || email == null) {
             return false;
         }
-        if (STATUS_BROADCAST.equals(destination)) {
-            return true;
-        }
 
         Long userId = resolveUserId(email, accessor);
         if (userId == null) {
             return false;
+        }
+
+        // The one destination an account may reach before an admin has verified
+        // it: its own permission feed. That is how it learns it has been approved,
+        // so gating it on being approved would make the moment undeliverable.
+        if (("/user/" + userId + "/queue/permissions").equals(destination)) {
+            return true;
+        }
+
+        // Everything else stays verified-only, exactly as when the socket itself
+        // was. Unverified sessions exist purely to receive the line above.
+        if (!isVerified(email, accessor)) {
+            return false;
+        }
+
+        if (STATUS_BROADCAST.equals(destination)) {
+            return true;
         }
         if (MODERATION_TOPIC.equals(destination)) {
             return true;
@@ -111,6 +127,27 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
         }
 
         return false;
+    }
+
+    /**
+     * Whether this session belongs to a verified account, cached alongside the id.
+     *
+     * Caching is safe because the client tears the socket down and rebuilds it
+     * whenever its roles change — a permission update is exactly what triggers a
+     * reconnect — so a session never outlives the answer.
+     */
+    private boolean isVerified(String email, StompHeaderAccessor accessor) {
+        Map<String, Object> attributes = accessor.getSessionAttributes();
+        Object cached = attributes != null ? attributes.get("verified") : null;
+        if (cached instanceof Boolean) {
+            return (Boolean) cached;
+        }
+
+        boolean verified = userRepository.findByEmail(email).map(User::isVerifiedUser).orElse(false);
+        if (attributes != null) {
+            attributes.put("verified", verified);
+        }
+        return verified;
     }
 
     /** Resolve and cache the user id on the WS session to avoid a DB hit per SUBSCRIBE. */

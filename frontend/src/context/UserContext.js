@@ -15,12 +15,6 @@ import uuid from 'react-native-uuid';
 
 export const UserContext = createContext();
 const GUEST_MODE_KEY = "guestMode";
-// How often to silently re-check the signed-in user's permissions (verification,
-// role, active status) so a server-side change — e.g. an admin verifying the
-// account — unlocks the UI without a re-login. Kept deliberately infrequent:
-// permission changes are rare, we skip polling while backgrounded, and we also
-// refresh on foreground, so this is just a slow safety net.
-const PERMISSION_POLL_INTERVAL_MS = 60 * 1000;
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -160,27 +154,35 @@ export const UserProvider = ({ children }) => {
     }
   }, [user]);
 
-  // Poll for permission changes while signed in. Depending on user?.id (not the
-  // whole user object) keeps the interval steady across profile updates — it only
-  // restarts on login/logout — so a verification flip doesn't tear it down. We
-  // skip ticks while backgrounded, and refresh immediately on foreground so a
-  // change made while the app was away shows up right away instead of up to a
-  // full interval later.
+  /**
+   * Applies a role change the server pushed over the socket.
+   *
+   * The whole profile arrives, in the same shape /api/users/profile returns, so
+   * there is nothing to go and fetch — being verified, promoted or deactivated
+   * takes effect on the next render. Swapped in only when something actually
+   * differs, so a redundant announcement costs no re-render.
+   */
+  const applyPermissionUpdate = useCallback((profile) => {
+    if (!profile?.id) return;
+    setUser((prev) => {
+      // Ignore anything addressed to somebody else — a stale socket delivering
+      // into a session that has since signed in as a different account.
+      if (!prev || String(prev.id) !== String(profile.id)) return prev;
+      return JSON.stringify(prev) === JSON.stringify(profile) ? prev : profile;
+    });
+  }, []);
+
+  // The socket is dropped while the app is backgrounded, so anything that changed
+  // while it was away arrives here instead: one request on foreground, rather
+  // than the timer that used to run for every signed-in client every minute.
   useEffect(() => {
     if (!user?.id) return; // nothing to refresh for guests / logged-out users
-
-    const intervalId = setInterval(() => {
-      if (AppState.currentState === "active") refreshUser();
-    }, PERMISSION_POLL_INTERVAL_MS);
 
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") refreshUser();
     });
 
-    return () => {
-      clearInterval(intervalId);
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, [user?.id, refreshUser]);
 
   return (
@@ -193,7 +195,8 @@ export const UserProvider = ({ children }) => {
         setUser,
         setUserReady,
         fetchUserData,
-        refreshUser, // force a permission re-check (used by polling + on demand)
+        refreshUser, // force a permission re-check (foreground catch-up + on demand)
+        applyPermissionUpdate, // server-pushed role change; see WebSocketProvider
         logout, // ✅ exposed
         enterGuestMode,
         userStatus,

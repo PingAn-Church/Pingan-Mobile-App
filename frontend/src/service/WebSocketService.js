@@ -13,6 +13,12 @@ let missedHeartbeats = 0;
 // Always-current handlers; subscriptions read from here at message time so
 // reconnects never deliver into stale closures.
 let currentHandlers = {};
+let currentOnConnected = null;
+// Whether this session may reach the chat surface. Held here rather than read
+// from storage because the stored user is only written at sign-in, so it still
+// says "unverified" for somebody an admin approved a moment ago. The heartbeat
+// rebuild path also reconnects without arguments and has to keep the answer.
+let currentOptions = { verified: false };
 
 // Conversation ids with a live /topic/conversation-{id} subscription on the
 // CURRENT connection. Subscriptions die with the connection, so this resets
@@ -79,11 +85,13 @@ export const subscribeToConversation = (conversationId, onMessageReceived = null
   });
 };
 
-export const connectWebSocket = async (handlers = {}, onConnected = null) => {
+export const connectWebSocket = async (handlers = {}, onConnected = null, options = null) => {
   currentHandlers = handlers;
+  if (onConnected) currentOnConnected = onConnected;
+  if (options) currentOptions = { ...currentOptions, ...options };
 
   if (stompClient?.connected) {
-    if (onConnected) onConnected();
+    if (currentOnConnected) currentOnConnected();
     return;
   }
   // An activation (or stompjs auto-reconnect cycle) is already underway.
@@ -94,10 +102,15 @@ export const connectWebSocket = async (handlers = {}, onConnected = null) => {
     const token = await getAuthToken();
     const user = JSON.parse((await AsyncStorage.getItem("user")) || "null");
     const deviceId = await AsyncStorage.getItem("deviceId");
-    if (!token || !user || !deviceId) {
-      console.warn("🔒 WebSocket connect skipped — missing token, user, or deviceId.");
+    if (!token || !user?.id || !deviceId) {
+      console.warn("🔒 WebSocket connect skipped — session is not eligible.");
       return;
     }
+
+    // An unverified account still gets a socket, but only to hear that it has
+    // been approved. Every chat subscription below is skipped for it, and the
+    // server refuses them anyway (see WebSocketSubscriptionInterceptor).
+    const verified = Boolean(currentOptions.verified);
 
     let wsUrl;
     try {
@@ -115,6 +128,19 @@ export const connectWebSocket = async (handlers = {}, onConnected = null) => {
       onConnect: async () => {
         console.log("✅ WebSocket connected");
         subscribedConversationIds = new Set();
+
+        // First and unconditionally: roles change while the app is open, and the
+        // one that matters most — being verified — arrives on a session that has
+        // nothing else subscribed.
+        stompClient.subscribe(`/user/${user.id}/queue/permissions`, (msg) =>
+          currentHandlers.onPermissionUpdate?.(JSON.parse(msg.body))
+        );
+
+        if (!verified) {
+          startHeartbeatCheck();
+          if (currentOnConnected) currentOnConnected(null);
+          return;
+        }
 
         stompClient.subscribe(`/user/${user.id}/queue/messages`, (msg) =>
           currentHandlers.onMessageReceived?.(JSON.parse(msg.body))
@@ -152,21 +178,14 @@ export const connectWebSocket = async (handlers = {}, onConnected = null) => {
           currentHandlers.onModerationEvent?.(JSON.parse(msg.body))
         );
 
-        // Tell the server we are ready (presence + offline-queue drain). The user
-        // queue above is already subscribed, so drained messages are not lost.
-        if (user?.email) {
-          stompClient.publish({
-            destination: "/app/user-ready",
-            body: JSON.stringify({ email: user.email }),
-          });
-        }
-
         startHeartbeatCheck();
-        if (onConnected) onConnected();
 
-        // Group topics need a REST round-trip; user queues above are already live.
+        // Subscribe group topics before refreshing history. REST history is the
+        // source of truth for anything missed while disconnected; the live topic
+        // covers messages committed after these subscriptions are established.
+        let conversations = null;
         try {
-          const conversations = await getConversations(user.id);
+          conversations = await getConversations(user.id);
           conversations.forEach((conv) => {
             if (conv.conversationType === "group") {
               subscribeToConversation(conv.conversationId);
@@ -175,6 +194,8 @@ export const connectWebSocket = async (handlers = {}, onConnected = null) => {
         } catch (err) {
           console.error("❌ Failed to subscribe group conversations:", err);
         }
+
+        if (currentOnConnected) currentOnConnected(conversations);
       },
       onStompError: (frame) => {
         console.error("❌ STOMP error:", frame?.headers?.message || frame);

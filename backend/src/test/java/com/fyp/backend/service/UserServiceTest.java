@@ -28,6 +28,7 @@ class UserServiceTest {
     @Mock private RedisService redisService;
     @Mock private AdminAlertService adminAlertService;
     @Mock private AppGroupChatService appGroupChatService;
+    @Mock private PermissionBroadcaster permissionBroadcaster;
 
     @InjectMocks private UserService userService;
 
