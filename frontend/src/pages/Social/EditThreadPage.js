@@ -69,7 +69,10 @@ const EditThreadPage = ({ route }) => {
       const updatedThread = await updateThread(thread.id, {
         title,
         content,
-        coverImage: uploadedCover,
+        // Empty string, not null: the server reads an absent cover as "the client
+        // isn't talking about the picture" so that older builds, which never send
+        // the field, stop wiping it. Clearing has to be said out loud.
+        coverImage: uploadedCover || "",
       });
       showAlert(i18n.t("success"), i18n.t("updateThreadSuccess"), [
         { text: i18n.t("ok") },

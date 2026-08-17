@@ -130,7 +130,7 @@ public class ThreadService {
         // Update fields
         thread.setTitle(contentSanitizer.mask(updatedDto.getTitle()));
         thread.setContent(contentSanitizer.mask(updatedDto.getContent()));
-        thread.setCoverImage(normaliseCoverImage(updatedDto.getCoverImage()));
+        applyCoverImage(thread, updatedDto.getCoverImage());
 
         thread = threadRepository.save(thread);
         return mapToDto(thread, user, topicSubscriptionService.isSubscribed(threadId, user.getId()));
@@ -146,6 +146,32 @@ public class ThreadService {
         if (coverImage == null || coverImage.isBlank()) return null;
         String trimmed = coverImage.trim();
         return OSSService.isManagedKeyOrUrl(trimmed) ? trimmed : null;
+    }
+
+    /**
+     * Applies a cover-picture edit, telling "leave it alone" apart from "remove it".
+     *
+     * An absent field means the client is not talking about the picture — which is
+     * every app build released before cover pictures existed, since those send only
+     * a title and a body. Treating that as "remove" made editing a thread from an
+     * older phone silently wipe a cover somebody had set from a newer one.
+     * Removing is therefore an explicit empty string, which is what the edit screen
+     * sends once the picture is cleared.
+     *
+     * A non-empty value that is not one of our own object paths is ignored rather
+     * than applied: it is a malformed request, not an instruction to delete.
+     */
+    private void applyCoverImage(Thread thread, String requested) {
+        if (requested == null) return;
+
+        String trimmed = requested.trim();
+        if (trimmed.isEmpty()) {
+            thread.setCoverImage(null);
+            return;
+        }
+        if (OSSService.isManagedKeyOrUrl(trimmed)) {
+            thread.setCoverImage(trimmed);
+        }
     }
 
     @Transactional
