@@ -4,14 +4,13 @@ import {
   SafeAreaView,
   Text,
   View,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Alert,
   TouchableOpacity,
 } from "react-native";
 import { getUserById } from "../../service/UserService";
-import { getPresignedDownloadUrl } from "../../service/OSSService";
+import CachedImage from "../../components/CachedImage";
 import defaultProfileImage from "../../../assets/user.png";
 import { deleteConversationFromDatabase } from "../../service/ChatService";
 import { blockUser, unblockUser, getBlockStatus } from "../../service/BlockService";
@@ -48,27 +47,9 @@ const DetailedPrivateChatPage = ({ route }) => {
       try {
         const userData = await getUserById(otherParticipantId);
         console.log("Fetched User Data:", userData);
-
-        // let imageUrl = "https://via.placeholder.com/50";
-        // if (userData.profileImage) {
-        //   const presignedUrl = await getPresignedDownloadUrl(userData.profileImage, "profile");
-        //   imageUrl = presignedUrl || imageUrl;
-        // }
-
-        // setParticipantDetails({ ...userData, profileImageUrl: imageUrl });
-        let presignedUrl = null;
-        if (userData?.profileImage) {
-          try {
-            const fileName = userData.profileImage.split("/").pop();
-            presignedUrl = await getPresignedDownloadUrl(fileName, "profile");
-          } catch (e) {
-            console.warn("Failed to load presigned URL for profile image.");
-          }
-        }
-        setParticipantDetails({
-          ...userData,
-          profileImageUrl: presignedUrl || null,
-        });
+        // The avatar is handed to CachedImage as its stored object path, so it is
+        // signed and downloaded once and served from disk on every later visit.
+        setParticipantDetails(userData);
       } catch (error) {
         console.error("Error fetching participant details:", error);
         showAlert(i18n.t("error"), i18n.t("loadParticipantFailed"), [
@@ -188,12 +169,10 @@ const DetailedPrivateChatPage = ({ route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.centeredContent}>
-        <Image
-          source={
-            participantDetails.profileImageUrl
-              ? { uri: participantDetails.profileImageUrl }
-              : defaultProfileImage
-          }
+        <CachedImage
+          uri={participantDetails.profileImage}
+          type="profile"
+          fallbackSource={defaultProfileImage}
           style={styles.profileImage}
         />
         <Text style={styles.participantName}>

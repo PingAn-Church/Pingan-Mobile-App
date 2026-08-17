@@ -26,11 +26,11 @@ import {
   renameAppGroup,
 } from "../../service/ChatService";
 import {
-  getPresignedDownloadUrl,
   getPresignedUploadUrl,
   uploadFileToOSS,
   deleteOwnUpload,
 } from "../../service/OSSService";
+import CachedImage from "../../components/CachedImage";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import defaultProfileImage from "../../../assets/user.png";
@@ -162,33 +162,12 @@ const DetailedGroupChatPage = ({ route }) => {
     }
   };
 
-  const fetchViewingPresignedUrl = async (imageUrl, type) => {
-    try {
-      // if (!imageUrl) return "https://via.placeholder.com/50"; // Fallback for missing images
-      if (!imageUrl) return null;
-      const fileName = imageUrl.split("/").pop();
-      return await getPresignedDownloadUrl(fileName, type, { conversationId });
-    } catch (error) {
-      console.error(`Error getting presigned URL for ${type}:`, error);
-      // return "https://via.placeholder.com/50";
-      return null;
-    }
-  };
-
-  const [chatIconUrl, setChatIconUrl] = useState(null);
-
-  useEffect(() => {
-    const fetchChatIcon = async () => {
-      if (conversation?.groupIcon) {
-        const iconUrl = await fetchViewingPresignedUrl(
-          conversation.groupIcon,
-          "group"
-        );
-        setChatIconUrl(iconUrl);
-      }
-    };
-    fetchChatIcon();
-  }, [conversation]); // This effect runs whenever the conversation data changes
+  // The icon's stored object path, not a signed URL — CachedImage does the signing
+  // once and serves the downloaded copy afterwards. Held in state rather than read
+  // straight off `conversation` so a freshly uploaded icon shows immediately,
+  // without waiting for the subscription to deliver the updated conversation.
+  const [uploadedIcon, setUploadedIcon] = useState(null);
+  const chatIcon = uploadedIcon || conversation?.groupIcon || null;
 
   const handleChangeGroupIcon = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -222,9 +201,9 @@ const DetailedGroupChatPage = ({ route }) => {
         //   )
         // );
 
-        // Step 5: Update local image URL for immediate UI update. Redundant due to subscription, but helps for speed for existing uyser.
-        const viewingUrl = await fetchViewingPresignedUrl(uploadedUrl, "group");
-        setChatIconUrl(viewingUrl);
+        // Step 5: Show the new icon straight away. Redundant once the subscription
+        // delivers the updated conversation, but that round trip is visible.
+        setUploadedIcon(uploadedUrl);
 
         showAlert(i18n.t("success"), i18n.t("updateGroupIconSuccess"), [
           { text: i18n.t("ok") },
@@ -417,9 +396,11 @@ const DetailedGroupChatPage = ({ route }) => {
     <KeyboardAvoidingView style={styles.container} behavior="padding">
       {/* Group Icon and Name */}
       <View style={styles.headerContainer}>
-        {/* <Image source={{ uri: chatIconUrl }} style={styles.chatIcon} /> */}
-        <Image
-          source={chatIconUrl ? { uri: chatIconUrl } : defaultProfileImage}
+        <CachedImage
+          uri={chatIcon}
+          type="group"
+          conversationId={conversationId}
+          fallbackSource={defaultProfileImage}
           style={styles.chatIcon}
         />
         <Text style={styles.groupName}>{groupDisplayName(conversation, language)}</Text>

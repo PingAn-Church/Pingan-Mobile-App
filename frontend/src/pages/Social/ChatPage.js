@@ -65,7 +65,6 @@ import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
   getPresignedUploadUrl,
-  resolvePresignedAssetUrl,
   uploadFileToOSS,
   deleteOwnUpload,
   deleteOwnConversationUpload,
@@ -420,6 +419,8 @@ const ChatImage = React.memo(function ChatImage({
 
 const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
   iconUri,
+  iconType,
+  conversationId,
   title,
   canOpen,
   onPress,
@@ -431,8 +432,11 @@ const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
       onPress={onPress}
       disabled={!canOpen}
     >
-      <Image
-        source={iconUri ? { uri: iconUri } : defaultProfileImage}
+      <CachedImage
+        uri={iconUri}
+        type={iconType}
+        conversationId={iconType === "group" ? conversationId : undefined}
+        fallbackSource={defaultProfileImage}
         style={styles.nativeHeaderAvatar}
       />
       <Text style={styles.nativeHeaderText} numberOfLines={1}>
@@ -471,8 +475,6 @@ export default function ChatPage({ route }) {
 
   const [inputText, setInputText] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
-  const [conversationIconUrls, setConversationIconUrls] = useState({});
-  const [userDirectory, setUserDirectory] = useState({});
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   const [showWebNewChatPanel, setShowWebNewChatPanel] = useState(false);
   const [showWebCreateGroupPanel, setShowWebCreateGroupPanel] = useState(false);
@@ -587,37 +589,19 @@ export default function ChatPage({ route }) {
     }
   };
 
-  useEffect(() => {
-    const buildUsersDirectory = async () => {
-      try {
-        // Build the avatar directory from conversation participants rather than the
-        // global roster — no email exposure, bounded to people you actually chat with.
-        const profilesById = {};
-        (conversations || []).forEach((conv) =>
-          (conv?.participantProfiles || []).forEach((p) => {
-            if (p?.id !== null && p?.id !== undefined) profilesById[String(p.id)] = p;
-          })
-        );
-
-        const resolvedUsers = await Promise.all(
-          Object.values(profilesById).map(async (item) => ({
-            ...item,
-            profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
-          }))
-        );
-
-        const nextDirectory = {};
-        resolvedUsers.forEach((item) => {
-          nextDirectory[String(item.id)] = item;
-        });
-
-        setUserDirectory(nextDirectory);
-      } catch (error) {
-        console.error("Failed to build users directory for chat icons:", error);
-      }
-    };
-
-    buildUsersDirectory();
+  // Built from conversation participants rather than the global roster — no email
+  // exposure, bounded to people you actually chat with. Avatars stay as their stored
+  // object paths: this recomputes on every incoming message, and signing here fired
+  // a burst of requests per message and gave each avatar a new single-use URL that
+  // nothing could cache. CachedImage signs a path once and reuses the download.
+  const userDirectory = useMemo(() => {
+    const profilesById = {};
+    (conversations || []).forEach((conv) =>
+      (conv?.participantProfiles || []).forEach((p) => {
+        if (p?.id !== null && p?.id !== undefined) profilesById[String(p.id)] = p;
+      })
+    );
+    return profilesById;
   }, [conversations]);
 
   useEffect(() => {
@@ -662,49 +646,23 @@ export default function ChatPage({ route }) {
     navigation.replace("Chat", { conversationId: firstConversationId });
   }, [conversationId, conversations, navigation]);
 
-  const fetchViewingPresignedUrl = async (imageUrl, type, mediaConversationId) => {
-    return resolvePresignedAssetUrl(imageUrl, type, {
-      conversationId: mediaConversationId,
+  // Each conversation's icon as its stored object path, keyed by conversation id.
+  // A group carries its own; a private chat borrows the other person's avatar.
+  // Signing is left to CachedImage — see the note on userDirectory above.
+  const conversationIconPaths = useMemo(() => {
+    const next = {};
+    (conversations || []).forEach((conv) => {
+      if (conv?.conversationType === "group") {
+        next[String(conv?.conversationId)] = conv?.groupIcon || "";
+      } else {
+        const otherParticipantId = (conv?.participants || []).find(
+          (participantId) => String(participantId) !== String(currentUser?.id)
+        );
+        next[String(conv?.conversationId)] =
+          userDirectory[String(otherParticipantId)]?.profileImage || "";
+      }
     });
-  };
-
-  useEffect(() => {
-    const loadConversationIcons = async () => {
-      const nextIcons = {};
-
-      await Promise.all(
-        (conversations || []).map(async (conv) => {
-          let iconUrl = null;
-
-          if (conv?.conversationType === "group") {
-            iconUrl = await fetchViewingPresignedUrl(
-              conv?.groupIcon,
-              "group",
-              conv?.conversationId
-            );
-          } else {
-            const otherParticipantId = (conv?.participants || []).find(
-              (participantId) => String(participantId) !== String(currentUser?.id)
-            );
-            const otherParticipant = userDirectory[String(otherParticipantId)];
-            iconUrl =
-              otherParticipant?.profileImageUrl ||
-              (await fetchViewingPresignedUrl(otherParticipant?.profileImage, "profile"));
-          }
-
-          nextIcons[String(conv?.conversationId)] = iconUrl || "";
-        })
-      );
-
-      setConversationIconUrls(nextIcons);
-    };
-
-    if (!conversations?.length) {
-      setConversationIconUrls({});
-      return;
-    }
-
-    loadConversationIcons();
+    return next;
   }, [conversations, currentUser?.id, userDirectory]);
 
   const privateChatParticipant = useMemo(
@@ -1954,13 +1912,15 @@ export default function ChatPage({ route }) {
   }, [imageViewer.message, currentUser?.id, language]);
 
   const activeConversationIcon =
-    conversationIconUrls[String(conversationId)] || "";
+    conversationIconPaths[String(conversationId)] || "";
 
   useEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
         <ChatNativeHeaderTitle
           iconUri={activeConversationIcon}
+          iconType={conversationType === "group" ? "group" : "profile"}
+          conversationId={conversationId}
           title={chatDisplayName}
           canOpen={canOpenChatDetails}
           onPress={handleOpenChatDetails}
@@ -1992,6 +1952,7 @@ export default function ChatPage({ route }) {
     canOpenChatDetails,
     chatDisplayName,
     conversationId,
+    conversationType,
     handleOpenChatDetails,
     language,
     muted,
@@ -2089,16 +2050,10 @@ export default function ChatPage({ route }) {
       setLoadingNewChatUsers(true);
       // Server-side directory search (no email, capped page) instead of the whole roster.
       const res = await searchUsers(term, 0, 50);
-      const resolvedUsers = await Promise.all(
-        (res?.data || []).map(async (item) => ({
-          ...item,
-          profileImageUrl: await fetchViewingPresignedUrl(item?.profileImage, "profile"),
-        }))
-      );
       // Same rule as useUserSearch: chat is verified-only, and an explicit false
       // is what hides a row so an older server's payload still lists everyone.
       setNewChatUsers(
-        resolvedUsers.filter(
+        (res?.data || []).filter(
           (u) =>
             u?.verifiedUser !== false &&
             String(u?.id) !== String(currentUser?.id)
@@ -2890,12 +2845,10 @@ export default function ChatPage({ route }) {
                         ]}
                         activeOpacity={0.82}
                       >
-                        <Image
-                          source={
-                            item?.profileImageUrl
-                              ? { uri: item.profileImageUrl }
-                              : defaultProfileImage
-                          }
+                        <CachedImage
+                          uri={item?.profileImage}
+                          type="profile"
+                          fallbackSource={defaultProfileImage}
                           style={styles.sidebarAvatar}
                         />
                         <View style={styles.sidebarTextWrap}>
@@ -2980,12 +2933,10 @@ export default function ChatPage({ route }) {
                         style={styles.sidebarConversationItem}
                         activeOpacity={0.82}
                       >
-                        <Image
-                          source={
-                            item?.profileImageUrl
-                              ? { uri: item.profileImageUrl }
-                              : defaultProfileImage
-                          }
+                        <CachedImage
+                          uri={item?.profileImage}
+                          type="profile"
+                          fallbackSource={defaultProfileImage}
                           style={styles.sidebarAvatar}
                         />
                         <View style={styles.sidebarTextWrap}>
@@ -3062,12 +3013,13 @@ export default function ChatPage({ route }) {
                           isActive ? styles.sidebarConversationItemActive : null,
                         ]}
                       >
-                        <Image
-                          source={
-                            conversationIconUrls[String(item.conversationId)]
-                              ? { uri: conversationIconUrls[String(item.conversationId)] }
-                              : defaultProfileImage
+                        <CachedImage
+                          uri={conversationIconPaths[String(item.conversationId)]}
+                          type={item.conversationType === "group" ? "group" : "profile"}
+                          conversationId={
+                            item.conversationType === "group" ? item.conversationId : undefined
                           }
+                          fallbackSource={defaultProfileImage}
                           style={[
                             styles.sidebarAvatar,
                             isActive ? styles.sidebarAvatarActive : null,
