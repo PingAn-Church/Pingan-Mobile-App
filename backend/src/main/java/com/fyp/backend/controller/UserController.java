@@ -85,6 +85,7 @@ public class UserController {
      * open from a group message, so it must not hand out contact details.
      */
     @GetMapping("/{userId}/summary")
+    @PreAuthorize("hasRole('VERIFIED')")
     public ResponseEntity<UserSummaryDto> getUserSummary(@PathVariable Long userId) {
         return userRepository.findById(userId)
                 .map(UserSummaryDto::from)
@@ -100,6 +101,7 @@ public class UserController {
      * returns the first page of verified users so pickers can show an initial list.
      */
     @GetMapping("/search")
+    @PreAuthorize("hasRole('VERIFIED')")
     public ResponseEntity<Map<String, Object>> searchUsers(
             @RequestParam(required = false, defaultValue = "") String q,
             @RequestParam(defaultValue = "0") int page,

@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequest;
 /** User blocking. All endpoints act on behalf of the authenticated user. */
 @RestController
 @RequestMapping("/api/blocks")
+@PreAuthorize("hasRole('VERIFIED')")
 public class BlockController {
 
     private final UserBlockService userBlockService;

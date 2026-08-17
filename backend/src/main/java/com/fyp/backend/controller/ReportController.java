@@ -35,7 +35,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * Content reporting (chat messages, forum threads/replies, course reviews).
- * Any logged-in user can report a piece of content (once per item); the review
+ * Any verified user can report a piece of content (once per item); the review
  * queue and resolve actions are admin-only and power the "Manage Reporting"
  * screen.
  */
@@ -52,6 +52,7 @@ public class ReportController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('VERIFIED')")
     public ResponseEntity<?> reportContent(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         Long reporterId = userService.getUserIdFromToken(request.getHeader("Authorization"));
         if (reporterId == null) {

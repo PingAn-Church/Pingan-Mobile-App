@@ -168,7 +168,7 @@ class WebSecurityRulesTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = { "USER", "VERIFIED" })
     void userSearchOmitsEmailAndClampsPageSize() throws Exception {
         when(userRepository.findByActiveTrueAndDeletedAccountFalseAndIsVerifiedUserTrue(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(userWithEmail(2, "secret@example.com")),
@@ -290,7 +290,7 @@ class WebSecurityRulesTest {
                 .andExpect(status().isOk());
     }
 
-    // ---- message reporting: create is authenticated, review is ADMIN-only --
+    // ---- message reporting: create is verified, review is ADMIN-only --------
 
     @Test
     void reportCreateIsBlockedForAnonymous() throws Exception {
@@ -302,7 +302,17 @@ class WebSecurityRulesTest {
 
     @Test
     @WithMockUser(roles = "USER")
-    void reportCreateIsAllowedForAuthenticated() throws Exception {
+    void reportCreateIsBlockedUntilVerified() throws Exception {
+        mockMvc.perform(post("/api/reports")
+                        .header("Authorization", "Bearer t")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"messageId\": 5}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = { "USER", "VERIFIED" })
+    void reportCreateIsAllowedForVerifiedUser() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
         MessageReport report = new MessageReport();
         report.setId(8L);
@@ -324,7 +334,7 @@ class WebSecurityRulesTest {
     }
 
     @Test
-    @WithMockUser(roles = "USER")
+    @WithMockUser(roles = { "USER", "VERIFIED" })
     void reportCreateAcceptsContentTypeBody() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
         when(messageReportService.createReport("THREAD", 9L, 7L)).thenReturn(new MessageReport());
@@ -350,7 +360,7 @@ class WebSecurityRulesTest {
     }
 
     @Test
-    @WithMockUser(roles = "USER")
+    @WithMockUser(roles = { "USER", "VERIFIED" })
     void duplicateReportReturnsConflict() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
         when(messageReportService.createReport(MessageReport.TYPE_MESSAGE, 5L, 7L))
@@ -430,7 +440,7 @@ class WebSecurityRulesTest {
     }
 
     @Test
-    @WithMockUser(roles = "USER")
+    @WithMockUser(roles = { "USER", "VERIFIED" })
     void blockListIsAllowedForAuthenticated() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
         when(userBlockService.getBlockedIds(7L)).thenReturn(List.of(3L));
@@ -448,7 +458,7 @@ class WebSecurityRulesTest {
     }
 
     @Test
-    @WithMockUser(roles = "USER")
+    @WithMockUser(roles = { "USER", "VERIFIED" })
     void blockCreateIsAllowedForAuthenticated() throws Exception {
         when(userService.getUserIdFromToken(anyString())).thenReturn(7L);
         when(userBlockService.getStatus(7L, 3L))
