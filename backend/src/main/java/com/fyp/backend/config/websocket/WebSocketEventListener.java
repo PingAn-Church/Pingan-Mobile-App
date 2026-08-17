@@ -1,7 +1,6 @@
 package com.fyp.backend.config.websocket;
 
 import com.fyp.backend.service.RedisService;
-import com.fyp.backend.mq.ManualMessageConsumer;
 import com.fyp.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
@@ -19,8 +18,6 @@ public class WebSocketEventListener {
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
-
-    @Autowired private ManualMessageConsumer messageConsumer;
 
     @Autowired private UserRepository userRepository;
 

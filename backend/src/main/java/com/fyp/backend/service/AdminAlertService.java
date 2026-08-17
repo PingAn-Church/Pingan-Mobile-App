@@ -78,6 +78,11 @@ public class AdminAlertService {
      */
     public long unseenNewMemberCount(Long adminId) {
         User admin = adminId == null ? null : userRepository.findById(adminId).orElse(null);
+        return unseenNewMemberCountForUser(admin);
+    }
+
+    /** Same calculation when the caller already loaded the user in a batch. */
+    public long unseenNewMemberCountForUser(User admin) {
         if (admin == null || !admin.isAdmin()) return 0;
 
         Long seen = admin.getLastSeenMemberId();

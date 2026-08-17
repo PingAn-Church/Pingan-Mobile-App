@@ -3,7 +3,7 @@ package com.fyp.backend.service;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
-import com.fyp.backend.mq.MessagePublisher;
+import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.*;
 import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
@@ -35,9 +35,7 @@ public class ChatService {
     private final MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final OssCleanupService ossCleanupService;
-    private final RedisService redisService;
-    private final MessagePublisher messagePublisher;
-    private final PushNotificationService pushNotificationService;
+    private final FanoutPublisher fanoutPublisher;
     private final UserBlockService userBlockService;
     private final ContentSanitizer contentSanitizer;
     private final PushMessages pushMessages;
@@ -50,9 +48,7 @@ public class ChatService {
                        UserRepository userRepository,
                        MessageDeliveryStatusRepository messageDeliveryStatusRepository, SimpMessagingTemplate messagingTemplate,
                        OssCleanupService ossCleanupService,
-                       RedisService redisService,
-                       MessagePublisher messagePublisher,
-                       PushNotificationService pushNotificationService,
+                       FanoutPublisher fanoutPublisher,
                        UserBlockService userBlockService,
                        ContentSanitizer contentSanitizer,
                        PushMessages pushMessages,
@@ -64,9 +60,7 @@ public class ChatService {
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
         this.messagingTemplate = messagingTemplate;
         this.ossCleanupService = ossCleanupService;
-        this.redisService = redisService;
-        this.messagePublisher = messagePublisher;
-        this.pushNotificationService = pushNotificationService;
+        this.fanoutPublisher = fanoutPublisher;
         this.userBlockService = userBlockService;
         this.contentSanitizer = contentSanitizer;
         this.pushMessages = pushMessages;
@@ -139,7 +133,12 @@ public class ChatService {
                 .map(User::getId)
                 .filter(id -> !id.equals(message.getSender().getId()))
                 .collect(Collectors.toList());
-        responseDto.setRecipientIds(recipientIds);
+        // Group clients receive one authorized conversation-topic broadcast and do
+        // not need the full roster repeated in every payload. Private chat keeps its
+        // single recipient so the worker can address both user queues.
+        responseDto.setRecipientIds(conversation instanceof PrivateConversation
+                ? recipientIds
+                : List.of());
         return responseDto;
     }
 
@@ -348,68 +347,26 @@ public class ChatService {
         // is not silenced by a mute — so they are split out of the ordinary fan-out
         // rather than being notified twice.
         List<Long> mentionedRecipients = resolveMentionedRecipients(message, conversation, sender);
-        List<Long> plainRecipients = savedMessage.getRecipientIds().stream()
-                .filter(id -> !mentionedRecipients.contains(id))
+        List<Long> allRecipients = conversation.getParticipants().stream()
+                .map(User::getId)
+                .filter(id -> !id.equals(sender.getId()))
+                .toList();
+        Set<Long> mentionedRecipientIds = new HashSet<>(mentionedRecipients);
+        List<Long> plainRecipients = allRecipients.stream()
+                .filter(id -> !mentionedRecipientIds.contains(id))
                 .collect(Collectors.toList());
+        LocalizedText mentionedBody = language -> pushMessages.get(
+                language, "push.chat.mentionedYou", senderName.render(language));
 
-        // ✅ Defer messaging and notifications. Each recipient is isolated so a
-        // Redis/RabbitMQ hiccup for one user cannot silently skip the rest of
-        // the fan-out (the message row is already committed at this point).
+        // Defer messaging and bounded push batches until the message row commits.
+        // Rabbit retries each batch independently, while reconnect history remains
+        // the source of truth if the broker is unavailable at this boundary.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                for (Long recipientId : savedMessage.getRecipientIds()) {
-                    try {
-                        String email = userRepository.findById(recipientId).map(User::getEmail).orElse(null);
-                        if (email == null) continue;
-
-                        boolean online;
-                        try {
-                            online = redisService.isUserOnlineAnywhere(email);
-                        } catch (Exception redisDown) {
-                            // Presence unknown — deliver over the live socket; push covers offline.
-                            online = true;
-                        }
-
-                        if (online) {
-                            messagingTemplate.convertAndSend("/user/" + recipientId + "/queue/messages", savedMessage);
-                        } else {
-                            messagePublisher.queueMessage(email, savedMessage);
-                        }
-                    } catch (Exception e) {
-                        System.err.println("❌ Failed to fan out message " + savedMessage.getMessageId()
-                                + " to user " + recipientId + ": " + e.getMessage());
-                    }
-                }
-
-                // Always notify sender
-                try {
-                    messagingTemplate.convertAndSend("/user/" + savedMessage.getSenderId() + "/queue/messages", savedMessage);
-                } catch (Exception e) {
-                    System.err.println("❌ Failed to echo message to sender: " + e.getMessage());
-                }
-
-                // Push Notification
-                try {
-                    pushNotificationService.sendPushNotification(
-                            plainRecipients,
-                            notificationBody,
-                            notificationTitle,
-                            savedMessage.getConversationId(),
-                            conversationType
-                    );
-                    if (!mentionedRecipients.isEmpty()) {
-                        pushNotificationService.sendMentionPush(
-                                mentionedRecipients,
-                                senderName,
-                                notificationTitle,
-                                savedMessage.getConversationId(),
-                                conversationType
-                        );
-                    }
-                } catch (Exception e) {
-                    System.err.println("❌ Failed to send push notifications: " + e.getMessage());
-                }
+                fanoutPublisher.publishChat(savedMessage, plainRecipients,
+                        mentionedRecipients, notificationTitle, notificationBody,
+                        mentionedBody);
             }
         });
 

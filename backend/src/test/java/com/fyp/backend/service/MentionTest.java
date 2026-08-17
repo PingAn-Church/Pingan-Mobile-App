@@ -31,7 +31,7 @@ import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.User;
-import com.fyp.backend.mq.MessagePublisher;
+import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageDeliveryStatusRepository;
 import com.fyp.backend.repository.MessageRepository;
@@ -55,9 +55,7 @@ class MentionTest {
     @Mock private MessageDeliveryStatusRepository deliveryStatusRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private OssCleanupService ossCleanupService;
-    @Mock private RedisService redisService;
-    @Mock private MessagePublisher messagePublisher;
-    @Mock private PushNotificationService pushNotificationService;
+    @Mock private FanoutPublisher fanoutPublisher;
     @Mock private UserBlockService userBlockService;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
@@ -84,7 +82,6 @@ class MentionTest {
         when(groupConversationRepository.findById(42L)).thenReturn(Optional.of(conversation));
         when(userRepository.findById(anyLong())).thenAnswer(inv -> Optional.of(user(inv.getArgument(0))));
         when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(redisService.isUserOnlineAnywhere(any())).thenReturn(true);
         // Everyone in the group really is in the group unless a test says otherwise.
         when(groupConversationRepository.isParticipant(eq(42L), anyLong())).thenReturn(true);
         return conversation;
@@ -121,12 +118,9 @@ class MentionTest {
 
         send(message(List.of(2L), false));
 
-        // The plain push goes only to the person who was not named...
-        verify(pushNotificationService).sendPushNotification(
-                eq(List.of(3L)), any(), any(), eq(42L), eq("group"));
-        // ...and the mention push, which ignores mute, goes only to the one who was.
-        verify(pushNotificationService).sendMentionPush(
-                eq(List.of(2L)), any(), any(), eq(42L), eq("group"));
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of(3L)), eq(List.of(2L)),
+                any(), any(), any());
     }
 
     @Test
@@ -138,8 +132,9 @@ class MentionTest {
         MessageDto sent = send(message(List.of(2L, 99L), false));
 
         assertEquals(List.of(2L), sent.getMentionedUserIds());
-        verify(pushNotificationService).sendMentionPush(
-                eq(List.of(2L)), any(), any(), eq(42L), eq("group"));
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of(3L)), eq(List.of(2L)),
+                any(), any(), any());
     }
 
     @Test
@@ -158,9 +153,9 @@ class MentionTest {
         MessageDto sent = send(message(List.of(), true));
 
         assertFalse(sent.isMentionsEveryone());
-        verify(pushNotificationService, never()).sendMentionPush(any(), any(), any(), any(), any());
-        verify(pushNotificationService).sendPushNotification(
-                eq(List.of(2L, 3L)), any(), any(), eq(42L), eq("group"));
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of(2L, 3L)), eq(List.of()),
+                any(), any(), any());
     }
 
     @Test
@@ -173,10 +168,9 @@ class MentionTest {
         // Expanded at send time, not stored as a row per member — the app-level
         // group would otherwise write one mention row per person per message.
         assertTrue(sent.getMentionedUserIds().isEmpty());
-        verify(pushNotificationService).sendMentionPush(
-                eq(List.of(2L, 3L)), any(), any(), eq(42L), eq("group"));
-        verify(pushNotificationService).sendPushNotification(
-                eq(List.of()), any(), any(), eq(42L), eq("group"));
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of()), eq(List.of(2L, 3L)),
+                any(), any(), any());
     }
 
     @Test
@@ -203,14 +197,15 @@ class MentionTest {
         when(privateConversationRepository.findById(7L)).thenReturn(Optional.of(conversation));
         when(userRepository.findById(anyLong())).thenAnswer(inv -> Optional.of(user(inv.getArgument(0))));
         when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(redisService.isUserOnlineAnywhere(any())).thenReturn(true);
         when(userBlockService.isMessagingBlocked(anyLong(), anyLong())).thenReturn(false);
 
         MessageDto sent = send(dto);
 
         assertTrue(sent.getMentionedUserIds().isEmpty());
         assertFalse(sent.isMentionsEveryone());
-        verify(pushNotificationService, never()).sendMentionPush(any(), any(), any(), any(), any());
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of(2L)), eq(List.of()),
+                any(), any(), any());
     }
 
     @Test
@@ -231,9 +226,9 @@ class MentionTest {
         send(message(List.of(), false));
 
         ArgumentCaptor<List<Long>> plain = ArgumentCaptor.forClass(List.class);
-        verify(pushNotificationService).sendPushNotification(
-                plain.capture(), any(), any(), eq(42L), eq("group"));
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), plain.capture(), eq(List.of()),
+                any(), any(), any());
         assertEquals(List.of(2L, 3L), plain.getValue());
-        verify(pushNotificationService, never()).sendMentionPush(any(), any(), any(), any(), any());
     }
 }

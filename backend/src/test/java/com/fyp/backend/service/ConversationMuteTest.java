@@ -56,8 +56,8 @@ class ConversationMuteTest {
 
     @Test
     void mutedRecipientsAreSkippedInChatPushes() {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "group"))
-                .thenReturn(List.of(new ConversationMute(2L, 42L, "group")));
+        when(conversationMuteRepository.findMutedUserIds(42L, "group", List.of(2L, 3L)))
+                .thenReturn(List.of(2L));
         when(pushTokenRepository.findByUserId(3L)).thenReturn(List.of());
 
         pushNotificationService.sendPushNotification(

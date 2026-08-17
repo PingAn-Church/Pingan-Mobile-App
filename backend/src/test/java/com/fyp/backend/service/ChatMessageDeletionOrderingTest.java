@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.User;
-import com.fyp.backend.mq.MessagePublisher;
+import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageDeliveryStatusRepository;
 import com.fyp.backend.repository.MessageRepository;
@@ -40,9 +40,7 @@ class ChatMessageDeletionOrderingTest {
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private OSSService ossService;
     @Mock private MediaReferenceService mediaReferenceService;
-    @Mock private RedisService redisService;
-    @Mock private MessagePublisher messagePublisher;
-    @Mock private PushNotificationService pushNotificationService;
+    @Mock private FanoutPublisher fanoutPublisher;
     @Mock private UserBlockService userBlockService;
     @Mock private ContentSanitizer contentSanitizer;
     @Mock private PushMessages pushMessages;
@@ -55,8 +53,8 @@ class ChatMessageDeletionOrderingTest {
         OssCleanupService cleanupService = new OssCleanupService(ossService, mediaReferenceService);
         chatService = new ChatService(messageRepository, groupConversationRepository,
                 privateConversationRepository, userRepository, messageDeliveryStatusRepository,
-                messagingTemplate, cleanupService, redisService, messagePublisher,
-                pushNotificationService, userBlockService, contentSanitizer, pushMessages,
+                messagingTemplate, cleanupService, fanoutPublisher,
+                userBlockService, contentSanitizer, pushMessages,
                 conversationReadStateService);
         TransactionSynchronizationManager.initSynchronization();
     }

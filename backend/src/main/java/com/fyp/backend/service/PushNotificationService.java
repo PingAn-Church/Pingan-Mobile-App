@@ -3,7 +3,6 @@ package com.fyp.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fyp.backend.model.ConversationMute;
 import com.fyp.backend.model.PushToken;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.ConversationMuteRepository;
@@ -18,6 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,9 +54,6 @@ public class PushNotificationService {
      * NotificationContext) and it decides the icon badge below.
      */
     static final String NEW_MEMBER_TYPE = "new-member";
-
-    /** Tags a "somebody replied in a topic you follow" push. */
-    static final String TOPIC_TYPE = "thread";
 
     private final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -210,36 +210,14 @@ public class PushNotificationService {
     }
 
     /**
-     * A reply in a topic somebody follows.
+     * The direct path: learning, quiz, achievement and new-member pushes, sent on
+     * the calling thread to a handful of people.
      *
-     * The thread id travels in its own field and conversationId is deliberately
-     * left null. App versions released before topics existed route notifications
-     * on "is there a conversation id", so putting the thread id there would send
-     * them into a chat — and because threads and conversations draw ids from
-     * different sequences, that id is usually a real conversation's too, so they
-     * would land in somebody else's chat rather than on an error. With no
-     * conversation id those clients fall through to simply opening the app.
+     * Deliberately does NOT filter on verification, unlike {@link #sendQueuedBatch}.
+     * A learner does not have to be admin-verified to take a course, so gating this
+     * would silently stop their quiz results ever reaching them. Anything routed
+     * through the queue instead must be traffic only verified members should see.
      */
-    public void sendTopicPush(List<Long> recipientIds, LocalizedText message, LocalizedText title, Long threadId) {
-        if (recipientIds == null || recipientIds.isEmpty()) return;
-        fanOut(recipientIds, message, title, null, TOPIC_TYPE, threadId, true);
-    }
-
-    /**
-     * The push for someone who was called out by name.
-     *
-     * Mute is ignored here on purpose. Muting a group says "stop telling me about
-     * the chatter", not "stop telling me when someone needs me specifically" —
-     * and a mention nobody sees is the same as no mention at all.
-     */
-    public void sendMentionPush(List<Long> mentionedIds, LocalizedText senderName, LocalizedText title,
-            Long conversationId, String conversationType) {
-        if (mentionedIds == null || mentionedIds.isEmpty()) return;
-        LocalizedText body = language ->
-                pushMessages.get(language, "push.chat.mentionedYou", senderName.render(language));
-        fanOut(mentionedIds, body, title, conversationId, conversationType, null, false);
-    }
-
     private void fanOut(List<Long> recipientIds, LocalizedText message, LocalizedText title,
             Long conversationId, String conversationType, Long threadId, boolean respectMute) {
         List<Long> targets = respectMute
@@ -270,6 +248,55 @@ public class PushNotificationService {
     }
 
     /**
+     * Sends one Rabbit fan-out chunk using bulk token/user reads and Expo's batch
+     * request shape. A transport failure escapes so the listener retry policy can
+     * redeliver this bounded chunk; individual rejected device tickets are logged
+     * and do not replay successful recipients.
+     */
+    public void sendQueuedBatch(List<Long> recipientIds, LocalizedText message,
+            LocalizedText title, Long conversationId, String conversationType,
+            Long threadId, boolean respectMute) {
+        if (recipientIds == null || recipientIds.isEmpty()) return;
+
+        List<Long> targets = respectMute
+                ? filterMutedRecipients(recipientIds, conversationId, conversationType)
+                : recipientIds;
+        if (targets.isEmpty()) return;
+
+        Map<Long, User> users = new HashMap<>();
+        userRepository.findAllById(targets).forEach(user -> users.put(user.getId(), user));
+
+        Map<Long, List<PushToken>> tokensByUser = new HashMap<>();
+        pushTokenRepository.findByUserIdIn(targets).stream()
+                .filter(PushToken::isActive)
+                .forEach(token -> tokensByUser
+                        .computeIfAbsent(token.getUser().getId(), ignored -> new ArrayList<>())
+                        .add(token));
+
+        List<Map<String, Object>> payloads = new ArrayList<>();
+        for (Long userId : targets) {
+            User user = users.get(userId);
+            List<PushToken> tokens = tokensByUser.getOrDefault(userId, List.of());
+            if (!canReceiveQueuedSocialPush(user) || tokens.isEmpty()) continue;
+
+            String language = user.getLanguage();
+            String localizedBody = message == null ? "" : message.render(language);
+            String localizedTitle = title == null ? "" : title.render(language);
+            Integer badge = badgeFor(user, conversationId, conversationType);
+
+            for (PushToken token : tokens) {
+                payloads.add(buildPayload(token.getToken(), localizedBody, localizedTitle,
+                        conversationId, conversationType, threadId, badge, token.getDeviceType()));
+            }
+        }
+
+        for (int from = 0; from < payloads.size(); from += 100) {
+            int to = Math.min(from + 100, payloads.size());
+            sendPushBatch(payloads.subList(from, to));
+        }
+    }
+
+    /**
      * Drops recipients who muted this conversation. Only chat pushes are
      * filtered — learning/quiz pushes reuse conversationId for other ids and
      * must never be muted by a conversation setting.
@@ -295,7 +322,8 @@ public class PushNotificationService {
      */
     private Integer badgeFor(Long userId, Long conversationId, String conversationType) {
         if (isChatConversation(conversationId, conversationType)) {
-            return (int) unreadCountService.totalUnreadFor(userId);
+            return (int) (unreadCountService.totalUnreadFor(userId)
+                    + adminAlertService.unseenNewMemberCount(userId));
         }
         if (NEW_MEMBER_TYPE.equals(conversationType)) {
             return (int) (unreadCountService.totalUnreadFor(userId)
@@ -304,15 +332,36 @@ public class PushNotificationService {
         return null;
     }
 
+    private Integer badgeFor(User user, Long conversationId, String conversationType) {
+        if (user == null) return null;
+        if (isChatConversation(conversationId, conversationType)
+                || NEW_MEMBER_TYPE.equals(conversationType)) {
+            return (int) (unreadCountService.totalUnreadFor(user.getId())
+                    + adminAlertService.unseenNewMemberCountForUser(user));
+        }
+        return null;
+    }
+
+    /**
+     * Chat and forum traffic is verified-only, so a queued batch drops anybody who
+     * has since been un-verified, deactivated or deleted — their membership is on
+     * its way out and they should not keep hearing about it. The direct path above
+     * intentionally applies no such filter; see the note there before moving any
+     * notification between the two.
+     */
+    private boolean canReceiveQueuedSocialPush(User user) {
+        return user != null
+                && user.isActive()
+                && !user.isDeletedAccount()
+                && user.isVerifiedUser();
+    }
+
     private List<Long> filterMutedRecipients(List<Long> recipientIds, Long conversationId, String conversationType) {
         if (!isChatConversation(conversationId, conversationType)) {
             return recipientIds;
         }
-        Set<Long> muted = conversationMuteRepository
-                .findByConversationIdAndConversationType(conversationId, conversationType)
-                .stream()
-                .map(ConversationMute::getUserId)
-                .collect(Collectors.toSet());
+        Set<Long> muted = new HashSet<>(conversationMuteRepository.findMutedUserIds(
+                conversationId, conversationType, recipientIds));
         if (muted.isEmpty()) {
             return recipientIds;
         }
@@ -339,6 +388,24 @@ public class PushNotificationService {
      */
     private void sendPushToDevice(String token, String message, String title, Long conversationId,
             String conversationType, Long threadId, Integer badge, String deviceType) {
+        Map<String, Object> payload = buildPayload(token, message, title, conversationId,
+                conversationType, threadId, badge, deviceType);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON); // UTF-8 by definition
+
+        try {
+            String response = restTemplate.postForObject(
+                    EXPO_PUSH_URL, new HttpEntity<>(payload, headers), String.class);
+            logDeliveryProblems(token, response);
+        } catch (Exception e) {
+            System.err.println("❌ Expo push failed for " + maskToken(token) + ": " + e.getMessage());
+        }
+    }
+
+    private Map<String, Object> buildPayload(String token, String message, String title,
+            Long conversationId, String conversationType, Long threadId,
+            Integer badge, String deviceType) {
         // conversationId is absent for learning and topic pushes; omit the key
         // rather than shipping the literal string "null" the concatenated payload
         // produced.
@@ -349,7 +416,8 @@ public class PushNotificationService {
         if (conversationType != null) {
             data.put("conversationType", conversationType);
         }
-        // Its own key, never conversationId — see sendTopicPush.
+        // Its own key, never conversationId; older builds treat any conversationId
+        // as a chat route.
         if (threadId != null) {
             data.put("threadId", String.valueOf(threadId));
         }
@@ -396,15 +464,33 @@ public class PushNotificationService {
 
         payload.put("data", data);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON); // UTF-8 by definition
+        return payload;
+    }
 
+    private void sendPushBatch(Collection<Map<String, Object>> payloads) {
+        if (payloads == null || payloads.isEmpty()) return;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String response = restTemplate.postForObject(
+                EXPO_PUSH_URL, new HttpEntity<>(payloads, headers), String.class);
+        logBatchDeliveryProblems(response);
+    }
+
+    private void logBatchDeliveryProblems(String response) {
+        if (response == null || response.isBlank()) return;
         try {
-            String response = restTemplate.postForObject(
-                    EXPO_PUSH_URL, new HttpEntity<>(payload, headers), String.class);
-            logDeliveryProblems(token, response);
-        } catch (Exception e) {
-            System.err.println("❌ Expo push failed for " + maskToken(token) + ": " + e.getMessage());
+            JsonNode root = objectMapper.readTree(response);
+            JsonNode data = root.path("data");
+            if (!data.isArray()) return;
+            for (JsonNode ticket : data) {
+                if (!"ok".equals(ticket.path("status").asText())) {
+                    System.err.println("❌ Expo batch ticket error: "
+                            + ticket.path("message").asText() + " ("
+                            + ticket.path("details").path("error").asText() + ")");
+                }
+            }
+        } catch (Exception unparseable) {
+            System.err.println("⚠️ Unreadable Expo batch response");
         }
     }
 

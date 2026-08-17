@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -58,6 +59,7 @@ class PushNotificationEncodingTest {
     @Mock private ConversationMuteRepository conversationMuteRepository;
     @Mock private RestTemplate restTemplate;
     @Mock private UnreadCountService unreadCountService;
+    @Mock private AdminAlertService adminAlertService;
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
 
     @InjectMocks private PushNotificationService pushNotificationService;
@@ -104,7 +106,7 @@ class PushNotificationEncodingTest {
 
     @Test
     void chineseTitleAndBodyReachExpoIntactRatherThanAsQuestionMarks() throws Exception {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "private"))
+        when(conversationMuteRepository.findMutedUserIds(eq(42L), eq("private"), any()))
                 .thenReturn(List.of());
 
         HttpEntity<?> entity = capturePush(() -> pushNotificationService.sendPushNotification(
@@ -127,7 +129,7 @@ class PushNotificationEncodingTest {
 
     @Test
     void emojiMediaPlaceholdersSurvive() throws Exception {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(9L, "group"))
+        when(conversationMuteRepository.findMutedUserIds(eq(9L), eq("group"), any()))
                 .thenReturn(List.of());
 
         HttpEntity<?> entity = capturePush(() -> pushNotificationService.sendPushNotification(
@@ -164,7 +166,7 @@ class PushNotificationEncodingTest {
 
     @Test
     void chatPushCarriesTheRecipientsUnreadTotalForTheAppIcon() throws Exception {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "private"))
+        when(conversationMuteRepository.findMutedUserIds(eq(42L), eq("private"), any()))
                 .thenReturn(List.of());
         when(unreadCountService.totalUnreadFor(RECIPIENT)).thenReturn(7L);
 
@@ -190,7 +192,7 @@ class PushNotificationEncodingTest {
 
     /** Sends one chat message to a device of the given platform. */
     private HttpEntity<?> captureChatPush(String deviceType) {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "private"))
+        when(conversationMuteRepository.findMutedUserIds(eq(42L), eq("private"), any()))
                 .thenReturn(List.of());
         return capturePush(deviceType, () -> pushNotificationService.sendPushNotification(
                 List.of(RECIPIENT), pushMessages.literal("在吗？"),
@@ -220,7 +222,7 @@ class PushNotificationEncodingTest {
 
     @Test
     void separateConversationsGetSeparateCollapseKeysSoTheyDoNotOverwriteEachOther() throws Exception {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(99L, "group"))
+        when(conversationMuteRepository.findMutedUserIds(eq(99L), eq("group"), any()))
                 .thenReturn(List.of());
         HttpEntity<?> entity = capturePush("android", () -> pushNotificationService.sendPushNotification(
                 List.of(RECIPIENT), pushMessages.literal("hi"),

@@ -41,6 +41,7 @@ class PushLocalizationTest {
     @Mock private ConversationMuteRepository conversationMuteRepository;
     @Mock private RestTemplate restTemplate;
     @Mock private UnreadCountService unreadCountService;
+    @Mock private AdminAlertService adminAlertService;
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
 
     @InjectMocks private PushNotificationService pushNotificationService;
@@ -102,7 +103,7 @@ class PushLocalizationTest {
 
     @Test
     void oneSendReachesTwoRecipientsInTheirOwnLanguages() {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "group"))
+        when(conversationMuteRepository.findMutedUserIds(eq(42L), eq("group"), any()))
                 .thenReturn(List.of());
         device(1L, "zh");
         device(2L, "en");
@@ -122,7 +123,7 @@ class PushLocalizationTest {
 
     @Test
     void privateChatTitleFollowsTheReadersNameOrder() {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(any(), eq("private")))
+        when(conversationMuteRepository.findMutedUserIds(any(), eq("private"), any()))
                 .thenReturn(List.of());
         device(1L, "zh");
         device(2L, "en");

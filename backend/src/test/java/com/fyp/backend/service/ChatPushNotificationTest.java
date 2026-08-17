@@ -25,7 +25,7 @@ import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.User;
-import com.fyp.backend.mq.MessagePublisher;
+import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageDeliveryStatusRepository;
 import com.fyp.backend.repository.MessageRepository;
@@ -47,9 +47,7 @@ class ChatPushNotificationTest {
     @Mock private MessageDeliveryStatusRepository deliveryStatusRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private OssCleanupService ossCleanupService;
-    @Mock private RedisService redisService;
-    @Mock private MessagePublisher messagePublisher;
-    @Mock private PushNotificationService pushNotificationService;
+    @Mock private FanoutPublisher fanoutPublisher;
     @Mock private UserBlockService userBlockService;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
@@ -75,10 +73,7 @@ class ChatPushNotificationTest {
 
         when(groupConversationRepository.findById(42L)).thenReturn(Optional.of(conversation));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L)));
-        when(userRepository.findById(2L)).thenReturn(Optional.of(user(2L)));
-        when(userRepository.findById(3L)).thenReturn(Optional.of(user(3L)));
         when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(redisService.isUserOnlineAnywhere(any())).thenReturn(true);
 
         MessageDto dto = new MessageDto();
         dto.setConversationId(42L);
@@ -90,7 +85,7 @@ class ChatPushNotificationTest {
         TransactionSynchronizationManager.initSynchronization();
         try {
             MessageDto sent = chatService.sendMessageAndBroadcast(dto, "group");
-            assertEquals(List.of(2L, 3L), sent.getRecipientIds());
+            assertEquals(List.of(), sent.getRecipientIds());
 
             for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
                 sync.afterCommit();
@@ -101,8 +96,9 @@ class ChatPushNotificationTest {
 
         ArgumentCaptor<LocalizedText> body = ArgumentCaptor.forClass(LocalizedText.class);
         ArgumentCaptor<LocalizedText> title = ArgumentCaptor.forClass(LocalizedText.class);
-        verify(pushNotificationService).sendPushNotification(
-                eq(List.of(2L, 3L)), body.capture(), title.capture(), eq(42L), eq("group"));
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of(2L, 3L)), eq(List.of()),
+                title.capture(), body.capture(), any(LocalizedText.class));
 
         // The sender's own words and the group's name read the same in either language.
         assertEquals("hello there", body.getValue().render("en"));
@@ -110,7 +106,7 @@ class ChatPushNotificationTest {
         assertEquals("Test Group", title.getValue().render("en"));
         assertEquals("Test Group", title.getValue().render("zh"));
 
-        verify(messagingTemplate, times(1))
-                .convertAndSend(eq("/user/1/queue/messages"), any(Object.class));
+        verify(messagingTemplate, times(0))
+                .convertAndSend(any(String.class), any(Object.class));
     }
 }

@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +23,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
 import com.fyp.backend.model.PushToken;
+import com.fyp.backend.model.User;
 import com.fyp.backend.repository.ConversationMuteRepository;
 import com.fyp.backend.repository.PushTokenRepository;
 import com.fyp.backend.repository.UserRepository;
@@ -54,18 +54,31 @@ class TopicPushRoutingTest {
     @InjectMocks private PushNotificationService pushNotificationService;
 
     private void device(Long userId, String language) {
+        User user = new User();
+        user.setId(userId);
+        user.setEmail("user" + userId + "@example.com");
+        user.setLanguage(language);
+        user.setActive(true);
+        user.setVerifiedUser(true);
         PushToken token = new PushToken();
+        token.setUser(user);
         token.setToken("ExponentPushToken[user" + userId + "]");
+        token.setDeviceType("android");
+        token.setDeviceId("device" + userId);
         token.setActive(true);
-        when(pushTokenRepository.findByUserId(userId)).thenReturn(List.of(token));
-        when(userRepository.findLanguageById(userId)).thenReturn(Optional.ofNullable(language));
+        when(userRepository.findAllById(List.of(userId))).thenReturn(List.of(user));
+        when(pushTokenRepository.findByUserIdIn(List.of(userId))).thenReturn(List.of(token));
     }
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> capturedPayload() {
         ArgumentCaptor<HttpEntity<?>> captor = ArgumentCaptor.forClass(HttpEntity.class);
         verify(restTemplate).postForObject(eq(EXPO_PUSH_URL), captor.capture(), eq(String.class));
-        return (Map<String, Object>) captor.getValue().getBody();
+        Object body = captor.getValue().getBody();
+        if (body instanceof java.util.Collection<?> batch) {
+            return (Map<String, Object>) batch.iterator().next();
+        }
+        return (Map<String, Object>) body;
     }
 
     @SuppressWarnings("unchecked")
@@ -77,10 +90,10 @@ class TopicPushRoutingTest {
     void theThreadIdTravelsInItsOwnFieldAndNeverAsAConversationId() {
         device(1L, "en");
 
-        pushNotificationService.sendTopicPush(List.of(1L),
+        pushNotificationService.sendQueuedBatch(List.of(1L),
                 pushMessages.literal("Anna replied: see you there"),
                 pushMessages.literal("Sunday lunch"),
-                57L);
+                null, "thread", 57L, false);
 
         Map<String, Object> data = capturedData();
         assertEquals("thread", data.get("conversationType"));
@@ -93,8 +106,9 @@ class TopicPushRoutingTest {
     void aTopicReplyLeavesTheAppIconBadgeAlone() {
         device(1L, "en");
 
-        pushNotificationService.sendTopicPush(List.of(1L),
-                pushMessages.literal("body"), pushMessages.literal("Sunday lunch"), 57L);
+        pushNotificationService.sendQueuedBatch(List.of(1L),
+                pushMessages.literal("body"), pushMessages.literal("Sunday lunch"),
+                null, "thread", 57L, false);
 
         // An absent badge tells the OS to keep whatever is already there — a forum
         // reply must not wipe somebody's unread message count off the icon.
@@ -106,14 +120,15 @@ class TopicPushRoutingTest {
     void aTopicReplyIsNotTreatedAsAChatForMuteOrCollapsePurposes() {
         device(1L, "en");
 
-        pushNotificationService.sendTopicPush(List.of(1L),
-                pushMessages.literal("body"), pushMessages.literal("Sunday lunch"), 57L);
+        pushNotificationService.sendQueuedBatch(List.of(1L),
+                pushMessages.literal("body"), pushMessages.literal("Sunday lunch"),
+                null, "thread", 57L, false);
 
         // Muting a conversation is unrelated to following a topic, so the mute
         // table is never consulted, and there is no conversation to collapse against.
         verify(conversationMuteRepository, times(0))
-                .findByConversationIdAndConversationType(org.mockito.ArgumentMatchers.any(),
-                        org.mockito.ArgumentMatchers.any());
+                .findMutedUserIds(org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         Map<String, Object> payload = capturedPayload();
         assertTrue(!payload.containsKey("collapseId"));
         assertTrue(!payload.containsKey("tag"));
@@ -121,22 +136,23 @@ class TopicPushRoutingTest {
 
     @Test
     void nobodyToTellMeansNothingIsSent() {
-        pushNotificationService.sendTopicPush(List.of(), pushMessages.literal("b"),
-                pushMessages.literal("t"), 57L);
-        pushNotificationService.sendTopicPush(null, pushMessages.literal("b"),
-                pushMessages.literal("t"), 57L);
+        pushNotificationService.sendQueuedBatch(List.of(), pushMessages.literal("b"),
+                pushMessages.literal("t"), null, "thread", 57L, false);
+        pushNotificationService.sendQueuedBatch(null, pushMessages.literal("b"),
+                pushMessages.literal("t"), null, "thread", 57L, false);
 
         verifyNoInteractions(restTemplate);
     }
 
     @Test
     void chatPushesStillCarryTheirConversationIdAndNoThreadId() {
-        when(conversationMuteRepository.findByConversationIdAndConversationType(42L, "group"))
+        when(conversationMuteRepository.findMutedUserIds(42L, "group", List.of(1L)))
                 .thenReturn(List.of());
         device(1L, "en");
 
-        pushNotificationService.sendPushNotification(List.of(1L),
-                pushMessages.literal("hello"), pushMessages.literal("Prayer Group"), 42L, "group");
+        pushNotificationService.sendQueuedBatch(List.of(1L),
+                pushMessages.literal("hello"), pushMessages.literal("Prayer Group"),
+                42L, "group", null, true);
 
         Map<String, Object> data = capturedData();
         assertEquals("42", data.get("conversationId"));

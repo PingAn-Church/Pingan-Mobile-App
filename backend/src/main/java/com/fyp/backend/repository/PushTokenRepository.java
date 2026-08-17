@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
@@ -41,6 +42,7 @@ public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
     List<PushToken> findByUserIdAndDeviceId(Long userId, String deviceId);
     Optional<PushToken> findByUserIdAndToken(Long userId, String token);
     List<PushToken> findByUserId(Long userId);
+    List<PushToken> findByUserIdIn(Collection<Long> userIds);
     long countByUserId(Long userId);
     void deleteByUserIdAndToken(Long userId, String token);
     void deleteByUserIdAndTokenAndDeviceId(Long userId, String token, String deviceId);

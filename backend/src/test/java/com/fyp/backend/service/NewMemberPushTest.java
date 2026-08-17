@@ -112,6 +112,20 @@ class NewMemberPushTest {
     }
 
     @Test
+    void aLaterChatPushDoesNotWipeTheAdminsWaitingMemberCount() {
+        when(conversationMuteRepository.findMutedUserIds(42L, "group", List.of(1L)))
+                .thenReturn(List.of());
+        when(unreadCountService.totalUnreadFor(1L)).thenReturn(4L);
+        when(adminAlertService.unseenNewMemberCount(1L)).thenReturn(2L);
+        device(1L, "en");
+
+        pushNotificationService.sendPushNotification(List.of(1L),
+                pushMessages.literal("hello"), pushMessages.literal("Church"), 42L, "group");
+
+        assertEquals("6", field(capturedPushes(1).get(0), "badge"));
+    }
+
+    @Test
     void nothingIsSentWhenThereIsNobodyToTell() {
         when(adminAlertService.alertableAdminIds()).thenReturn(List.of());
 
@@ -145,6 +159,6 @@ class NewMemberPushTest {
         // No conversation id: this is not a chat, and the app must not try to open one.
         assertEquals(null, data.get("conversationId"));
         verify(conversationMuteRepository, times(0))
-                .findByConversationIdAndConversationType(any(), any());
+                .findMutedUserIds(any(), any(), any());
     }
 }

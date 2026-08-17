@@ -19,7 +19,6 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 
 import com.fyp.backend.dto.DeliveryStatusUpdateDto;
 import com.fyp.backend.model.User;
-import com.fyp.backend.mq.ManualMessageConsumer;
 import com.fyp.backend.service.ChatService;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,7 +26,6 @@ class WebSocketControllerAuthorizationTest {
 
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private ChatService chatService;
-    @Mock private ManualMessageConsumer messageConsumer;
     @InjectMocks private WebSocketController controller;
 
     @Test
@@ -49,8 +47,8 @@ class WebSocketControllerAuthorizationTest {
         User participant = new User();
         participant.setId(8L);
         when(chatService.updateMessageStatusAuthorized(10L, 42L, 7L, "READ"))
-                .thenReturn("group");
-        when(chatService.getConversationParticipants(42L, "group"))
+                .thenReturn("private");
+        when(chatService.getConversationParticipants(42L, "private"))
                 .thenReturn(List.of(participant));
 
         controller.updateDeliveryStatus(update, accessor(7L, "user@example.com"));
@@ -61,10 +59,21 @@ class WebSocketControllerAuthorizationTest {
     }
 
     @Test
-    void userReadyDrainsOnlyAuthenticatedSessionsQueue() {
-        controller.onUserReady(accessor(7L, "user@example.com"));
+    void groupReceiptHintIsDiscardedWithoutDatabaseFanout() {
+        DeliveryStatusUpdateDto update = update(Map.of("7", "READ"));
+        update.setConversationType("group");
 
-        verify(messageConsumer).drainUserQueue("user@example.com");
+        controller.updateDeliveryStatus(update, accessor(7L, "user@example.com"));
+
+        verify(chatService, never()).updateMessageStatusAuthorized(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyString());
+        verify(messagingTemplate, never()).convertAndSendToUser(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     private DeliveryStatusUpdateDto update(Map<String, String> statuses) {

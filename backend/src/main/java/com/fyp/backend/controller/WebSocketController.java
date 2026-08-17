@@ -2,7 +2,6 @@ package com.fyp.backend.controller;
 
 import com.fyp.backend.dto.DeliveryStatusUpdateDto;
 import com.fyp.backend.model.User;
-import com.fyp.backend.mq.ManualMessageConsumer;
 import com.fyp.backend.service.ChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,17 +21,14 @@ public class WebSocketController {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatService chatService;
-    private final ManualMessageConsumer messageConsumer;
 
     @Autowired
     public WebSocketController(
             SimpMessagingTemplate messagingTemplate,
-            ChatService chatService,
-            ManualMessageConsumer messageConsumer
+            ChatService chatService
     ) {
         this.messagingTemplate = messagingTemplate;
         this.chatService = chatService;
-        this.messageConsumer = messageConsumer;
     }
 
     /** Client-level keepalive; the inbound interceptor refreshes the Redis TTL. */
@@ -46,6 +42,13 @@ public class WebSocketController {
                                      StompHeaderAccessor accessor) {
         if (statusUpdateDto.getMessageId() == null || statusUpdateDto.getConversationId() == null) {
             LOGGER.warn("⚠️ Invalid delivery status update: Missing messageId or conversationId");
+            return;
+        }
+
+        // Groups use a conversation watermark and never persist per-message
+        // receipts. Trusting this hint can only suppress the sender's own no-op,
+        // and avoids a DB lookup for every row rendered by legacy clients.
+        if ("group".equals(statusUpdateDto.getConversationType())) {
             return;
         }
 
@@ -93,30 +96,10 @@ public class WebSocketController {
         }
     }
 
-    @MessageMapping("/user-ready")
-    public void onUserReady(StompHeaderAccessor accessor) {
-        String email = sessionEmail(accessor);
-        if (email == null || email.isBlank()) {
-            LOGGER.warn("❌ Received empty email in /user-ready");
-            return;
-        }
-
-        try {
-            messageConsumer.drainUserQueue(email); // deliver messages queued while offline
-        } catch (Exception e) {
-            LOGGER.error("❌ Failed to drain message queue for {}: {}", email, e.getMessage());
-        }
-    }
-
     private Long sessionUserId(StompHeaderAccessor accessor) {
         Object value = accessor.getSessionAttributes() == null
                 ? null : accessor.getSessionAttributes().get("userId");
         return value instanceof Long ? (Long) value : null;
     }
 
-    private String sessionEmail(StompHeaderAccessor accessor) {
-        Object value = accessor.getSessionAttributes() == null
-                ? null : accessor.getSessionAttributes().get("userEmail");
-        return value instanceof String ? (String) value : null;
-    }
 }
