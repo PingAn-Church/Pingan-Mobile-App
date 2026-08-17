@@ -37,6 +37,22 @@ export const compressImage = async (uri, { maxDimension = 1280, quality = 0.7 } 
   }
 };
 
+// Avatars and group icons are never drawn larger than 140pt (the private-chat detail
+// header), which is 420px on a 3x screen — so the 1280px default above was shipping
+// roughly eight times the resolution any screen asks for, and a church-wide member
+// list pays that thirty times over on one page. 512 clears the largest use with room
+// to spare. Keyed off the destination folder rather than a call-site argument so
+// every avatar upload path gets it without having to remember to pass anything.
+const AVATAR_FOLDERS = ["userProfilePictures/", "groupProfilePictures/"];
+const AVATAR_MAX_DIMENSION = 512;
+
+const compressionOptionsFor = (presignedUrl) => {
+  const path = String(presignedUrl || "").split("?")[0];
+  return AVATAR_FOLDERS.some((folder) => path.includes(folder))
+    ? { maxDimension: AVATAR_MAX_DIMENSION }
+    : undefined;
+};
+
 const normalizeFileName = (fileName) => {
   const raw = String(fileName || "");
   const baseName = raw.split(/[\\/]/).pop() || "";
@@ -195,10 +211,11 @@ export const uploadFileToOSS = async (fileUri, presignedUrl, contentTypeOverride
       inferContentTypeFromFileUri(fileUri);
 
     // Compress images before upload (skips audio/other types). The presigned URL is
-    // signed for image/jpeg, so JPEG output keeps the signature valid.
+    // signed for image/jpeg, so JPEG output keeps the signature valid. Avatars get a
+    // tighter cap than photos — see compressionOptionsFor.
     const sourceUri =
       typeof contentType === "string" && contentType.startsWith("image/")
-        ? await compressImage(fileUri)
+        ? await compressImage(fileUri, compressionOptionsFor(normalizedPresignedUrl))
         : fileUri;
 
     // OSS signs the Content-Type into the presigned PUT, and verifies against the
