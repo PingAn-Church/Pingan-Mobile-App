@@ -82,6 +82,34 @@ public class ChatController {
     }
 
     /**
+     * Turns the in-app assistant on or off for a group.
+     *
+     * Group admins only, and the service moves the assistant on and off the roster
+     * with the flag — a flag on its own would leave an assistant whose mentions are
+     * stripped before they are stored, which fails completely silently.
+     */
+    @PutMapping("/conversation/{conversationId}/assistant")
+    public ResponseEntity<?> setAssistantEnabled(@PathVariable Long conversationId,
+                                                 @RequestBody Map<String, Boolean> body,
+                                                 HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        boolean enabled = body != null && Boolean.TRUE.equals(body.get("enabled"));
+        try {
+            return ResponseEntity.ok(
+                    conversationService.setAssistantEnabled(conversationId, enabled, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * A page of a group's members, for the group details screen. Only conversations
      * you are in, and only the non-PII summary shape.
      */

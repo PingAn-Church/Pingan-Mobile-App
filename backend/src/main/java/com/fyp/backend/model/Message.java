@@ -74,6 +74,27 @@ public class Message {
     @org.hibernate.annotations.ColumnDefault("false")
     private Boolean mentionsEveryone = false;
 
+    /**
+     * The message this one answers — set only on assistant replies.
+     *
+     * This is the idempotency key. RabbitMQ is at-least-once, and the listener's
+     * retry advice re-runs a failed handler in-process, so a worker that posts a
+     * reply and then throws would post another on the next attempt. A partial
+     * unique index on this column (see DatabaseIntegrityMigration) makes "one
+     * reply per triggering message" a database guarantee rather than something
+     * a cache is trusted to remember.
+     *
+     * A plain id rather than an association: the foreign key is installed by the
+     * migration as ON DELETE SET NULL, matching how message_mentions is handled,
+     * so deleting a question does not delete the answer everyone already read.
+     *
+     * NEVER expose this on MessageDto. A client able to set it could claim to
+     * answer any message and, because of the unique index, permanently block the
+     * assistant from ever replying to it.
+     */
+    @Column(name = "responds_to_message_id")
+    private Long respondsToMessageId;
+
 
 
     // ✅ Updated constructor to initialize conversationType

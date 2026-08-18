@@ -74,6 +74,12 @@ public class RabbitMQConfig {
         return QueueBuilder.durable(FanoutPublisher.PUSH_QUEUE).build();
     }
 
+    /** Answering a mention is shared work too: exactly one instance replies. */
+    @Bean
+    public Queue assistantQueue() {
+        return QueueBuilder.durable(FanoutPublisher.ASSISTANT_QUEUE).build();
+    }
+
     @Bean
     public SimpleRabbitListenerContainerFactory broadcastRabbitListenerContainerFactory(
             ConnectionFactory connectionFactory, MessageConverter messageConverter) {
@@ -84,6 +90,34 @@ public class RabbitMQConfig {
     public SimpleRabbitListenerContainerFactory pushRabbitListenerContainerFactory(
             ConnectionFactory connectionFactory, MessageConverter messageConverter) {
         return listenerFactory(connectionFactory, messageConverter, 2, 4);
+    }
+
+    /**
+     * The assistant gets its own container, not the push one.
+     *
+     * Two reasons, both about the fact that an LLM call is slow and billed.
+     * Concurrency stays low so a burst of mentions cannot open a dozen paid calls
+     * at once. And attempts are ONE: the shared factory retries five times in
+     * process, which would turn a single provider timeout into five 30-second
+     * calls — about two and a half minutes of a held consumer and five times the
+     * cost — and, worse, a handler that posts a reply and then fails would post
+     * another on each attempt. AssistantService catches its own errors and answers
+     * with a fallback instead, so nothing should reach this advice anyway.
+     */
+    @Bean
+    public SimpleRabbitListenerContainerFactory assistantRabbitListenerContainerFactory(
+            ConnectionFactory connectionFactory, MessageConverter messageConverter) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        factory.setConcurrentConsumers(1);
+        factory.setMaxConcurrentConsumers(2);
+        factory.setDefaultRequeueRejected(false);
+        factory.setAdviceChain(RetryInterceptorBuilder.stateless()
+                .maxAttempts(1)
+                .recoverer(new RejectAndDontRequeueRecoverer())
+                .build());
+        return factory;
     }
 
     private SimpleRabbitListenerContainerFactory listenerFactory(

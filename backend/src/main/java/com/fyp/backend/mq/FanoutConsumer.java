@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.service.LocalizedText;
 import com.fyp.backend.service.PushNotificationService;
+import com.fyp.backend.service.assistant.AssistantService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,6 +20,7 @@ public class FanoutConsumer {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final PushNotificationService pushNotificationService;
+    private final AssistantService assistantService;
 
     // The broadcast queue is anonymous — one per instance, named at declaration —
     // so it is resolved from the bean rather than by a fixed name.
@@ -37,6 +39,20 @@ public class FanoutConsumer {
                 task.getRecipientIds(), localized(task.getBodyEn(), task.getBodyZh()),
                 localized(task.getTitleEn(), task.getTitleZh()), task.getConversationId(),
                 task.getConversationType(), task.getThreadId(), task.isRespectMute());
+    }
+
+    /**
+     * Its own queue and container: an LLM call is slow and paid for, so it neither
+     * queues behind push batches nor inherits their five in-process retries.
+     *
+     * AssistantService does not throw — it answers with a fallback instead — so a
+     * failure here should not reach the retry advice at all.
+     */
+    @RabbitListener(queues = FanoutPublisher.ASSISTANT_QUEUE,
+            containerFactory = "assistantRabbitListenerContainerFactory")
+    public void consumeAssistantReply(FanoutTask task) {
+        requireKind(task, FanoutTask.ASSISTANT_REPLY);
+        assistantService.answer(task.getConversationId(), task.getTriggerMessageId(), task.getAskerId());
     }
 
     private void broadcast(MessageDto message) {

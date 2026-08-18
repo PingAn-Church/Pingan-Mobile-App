@@ -26,6 +26,10 @@ public class ConversationDto {
     // Members, for conversations whose roster is not shipped (see below).
     private long participantCount = 0;
     private String groupIcon;
+
+    // Whether the in-app assistant answers when mentioned in this group. The client
+    // uses it to decide whether to offer the assistant in the @ picker at all.
+    private boolean assistantEnabled = false;
     private List<Long> participants = new ArrayList<>();  // Ensure initialization
     private List<String> participantNames = new ArrayList<>();
     // Minimal per-participant info (id, name, avatar — no email) so chat clients
@@ -53,6 +57,7 @@ public class ConversationDto {
         this.groupNameZh = groupConversation.getGroupNameZh();
         this.appLevel = groupConversation.isAppLevel();
         this.groupIcon = groupConversation.getGroupIcon();
+        this.assistantEnabled = groupConversation.isAssistantEnabled();
         this.createdAt = groupConversation.getCreatedAt() != null
                 ? groupConversation.getCreatedAt().getTime()
                 : null;

@@ -13,7 +13,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.User;
+import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -50,6 +52,7 @@ public class AssistantAccountService {
     static final String NAME_ZH = "平安小助手";
 
     private final UserRepository userRepository;
+    private final GroupConversationRepository groupConversationRepository;
     private final PasswordEncoder passwordEncoder;
 
     /**
@@ -98,6 +101,34 @@ public class AssistantAccountService {
 
         userRepository.save(assistant);
         requireNotAdmin(assistant);
+    }
+
+    /**
+     * Warns about any group that has the assistant switched on but does not have it
+     * on the roster.
+     *
+     * That combination is the feature's one silent failure: ChatService strips a
+     * mention of a non-participant before the message is stored, so the assistant
+     * simply never answers and nothing anywhere reports why. Runs last, after
+     * AppGroupChatService has reconciled the app-level group's membership.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Order(Ordered.LOWEST_PRECEDENCE)
+    @Transactional(readOnly = true)
+    public void warnAboutGroupsMissingTheAssistant() {
+        Long assistantId = assistantUserId().orElse(null);
+        if (assistantId == null) {
+            return;
+        }
+        for (GroupConversation group : groupConversationRepository.findByAssistantEnabledTrue()) {
+            boolean present = group.getParticipants() != null && group.getParticipants().stream()
+                    .anyMatch(participant -> assistantId.equals(participant.getId()));
+            if (!present) {
+                log.warn("Group {} has the assistant enabled but the assistant is not a "
+                        + "participant, so mentions of it will be silently dropped. "
+                        + "Toggle the assistant off and on again for that group.", group.getId());
+            }
+        }
     }
 
     /** The assistant's user row, or empty before the first startup pass has run. */

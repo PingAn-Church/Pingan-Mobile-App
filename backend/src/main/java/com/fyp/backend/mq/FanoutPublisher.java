@@ -22,6 +22,8 @@ public class FanoutPublisher {
     public static final String BROADCAST_EXCHANGE = "chat.broadcast.exchange";
     /** Work queue: one instance sends each push batch, whichever picks it up first. */
     public static final String PUSH_QUEUE = "notification.push.queue";
+    /** Work queue: exactly one instance answers each mention of the assistant. */
+    public static final String ASSISTANT_QUEUE = "assistant.reply.queue";
     static final int RECIPIENT_BATCH_SIZE = 100;
 
     private static final Logger log = LoggerFactory.getLogger(FanoutPublisher.class);
@@ -40,6 +42,20 @@ public class FanoutPublisher {
                 message.getConversationId(), message.getConversationType(), null, true);
         publishPushBatches(mentionedRecipients, title, mentionedBody,
                 message.getConversationId(), message.getConversationType(), null, false);
+    }
+
+    /**
+     * Asks a worker to answer a mention of the assistant.
+     *
+     * Ids only, deliberately — see FanoutTask.triggerMessageId.
+     */
+    public void publishAssistantReply(Long conversationId, Long triggerMessageId, Long askerId) {
+        publish(FanoutTask.builder()
+                .kind(FanoutTask.ASSISTANT_REPLY)
+                .conversationId(conversationId)
+                .triggerMessageId(triggerMessageId)
+                .askerId(askerId)
+                .build());
     }
 
     public void publishTopic(List<Long> recipients, LocalizedText title,
@@ -78,6 +94,10 @@ public class FanoutPublisher {
             if (FanoutTask.CHAT_BROADCAST.equals(task.getKind())) {
                 // Exchange, not a queue: every instance holding sockets needs a copy.
                 rabbitTemplate.convertAndSend(BROADCAST_EXCHANGE, "", task);
+            } else if (FanoutTask.ASSISTANT_REPLY.equals(task.getKind())) {
+                // Its own queue: an LLM call is slow and paid for, so it must not
+                // sit behind push batches or share their concurrency and retries.
+                rabbitTemplate.convertAndSend(ASSISTANT_QUEUE, task);
             } else {
                 rabbitTemplate.convertAndSend(PUSH_QUEUE, task);
             }
