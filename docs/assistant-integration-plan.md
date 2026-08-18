@@ -14,6 +14,7 @@ This is a **plan only** — no code is written yet.
 | **Where it works** | Group chats only, admin-enabled per group — **including the church-wide app group**. Never private chats (v1). |
 | **Trigger** | Being `@`-mentioned. Never `@all`. |
 | **Translations** | **KJV** (English) and **和合本 CUV, simplified** (Chinese). Both public domain. |
+| **Corpus** | eBible.org USFM → JSON offline, **committed to the repo**, held in memory at runtime. No table, no deploy step. |
 | **Scripture output** | The model emits **IR tokens only** (`[bible:CUV:42:10:27]`); the backend substitutes real verse text. |
 | **Context sent to provider** | ~10 messages, **anchored at the trigger message**, display names stripped. |
 | **Delivery** | Exactly **one reply per triggering message**, enforced by a partial unique index. |
@@ -94,6 +95,35 @@ This is load-bearing, not hygiene — see §5. Put it in the seeder as a comment
 as a startup assertion that fails fast, the way `requireSingleAppGroup` does. If
 someone ever ticks that box in the admin UI, every admin-gated tool result becomes
 group-visible.
+
+### The bot must be a participant, and must stay one
+
+`sanitiseMentions` validates every mention through
+`groupConversationRepository.isParticipant(...)`. **A bot that is not on the roster has
+its mention stripped before the message is even stored** — no error, no log, the trigger
+simply never fires. This is the single most likely way to build the whole feature and
+have it appear to do nothing.
+
+Three places have to agree:
+
+1. **Enabling `assistantEnabled` on a group adds the bot to
+   `group_conversation_participants`**, and disabling it removes them. The toggle and the
+   roster are one operation; a toggle that only sets a boolean produces a silently dead
+   assistant.
+2. **`UserRepository.findChatEligibleMembers` must keep bots.** Today it selects
+   `isVerifiedUser && active && !deletedAccount`, so the seeded bot matches and
+   `AppGroupChatService.reconcile` adds it to the app group on boot — *by accident*.
+   That same method runs `participants.removeIf(u -> !eligibleIds.contains(u.getId()))`
+   on **every** boot, so the day someone adds `AND u.bot = false` to that query — a
+   natural hygiene edit, and this very plan asks for bots to be hidden from listings —
+   the bot is evicted at the next restart and the feature dies silently. Add a comment
+   to the query saying the assistant depends on it.
+3. **`removeParticipantFromGroup` must refuse the bot** while `assistantEnabled` is
+   true, the way `isAppGroup` already refuses leaving the app-level group. Otherwise an
+   admin tidying a member list breaks the assistant with no feedback.
+
+A startup check that logs a warning for any `assistantEnabled` group whose roster lacks
+the bot is cheap and turns this class of failure from silent into obvious.
 
 ---
 
@@ -215,6 +245,13 @@ Redis is the cheap pre-filter in front of it, ordered so the **expensive call ha
    real guarantee; it survives a Redis eviction, flush, or restart.
 6. `SET assistant:done:{triggerMessageId} 1 EX 604800`, drop the claim.
 
+**`respondsToMessageId` must never appear on `MessageDto`.** It is set server-side, on
+the entity, inside the assistant path only. Putting it on the DTO would let any client
+claim to answer any message — and because of the unique index, a malicious client could
+pre-insert a row squatting the key and **permanently block the bot from ever answering
+that message**. Adding it to the DTO alongside the other fields is the obvious first
+instinct and it is wrong.
+
 `respondsToMessageId` also gives a future UI hook for rendering the answer against the
 question, but that is not in scope here — it earns its place as the idempotency key.
 
@@ -272,7 +309,7 @@ The model's reply must contain **no scripture text at all** — only tokens:
 ```
 
 The backend replaces each token with the exact verse text and a reference label drawn
-from `bible_verses`.
+from the loaded corpus.
 
 **Why this beats a citation verifier alone.** A verifier checks *references*: it catches
 "Luke 10:29" when the tool returned 10:27. It does **not** catch a correctly-cited verse
@@ -304,27 +341,107 @@ Storing IR in `Message.content` and substituting on the client *would* give each
 their own language, but it breaks push notification text, conversation previews, and every
 1.0.x client that has never heard of IR. Explicitly rejected.
 
-### Corpus
+### Corpus — eBible.org USFM, converted to JSON at build time
 
-```sql
-bible_verses(translation, book_id, book_name, book_name_zh, chapter, verse, text,
-             PRIMARY KEY (translation, book_id, chapter, verse))
+**Source:** [eBible.org](https://ebible.org), which distributes translations as USFM
+downloads with per-translation licence terms stated on each page. Take the KJV and the
+**simplified** 和合本 (eBible hosts both scripts — verify which edition the download is
+before importing; the whole app is simplified elsewhere).
+
+**Pipeline — offline, run once, output committed:**
+
+```
+eBible USFM (one file per book)
+      │   backend/tools/usfm-to-json/     ← standalone script, OUTSIDE src/
+      ▼                                     so Maven never compiles it into the jar
+resources/bible/kjv.json
+resources/bible/cuv.json                  ← flat arrays: [{b,c,v,t}, ...]
+resources/bible/books.json                ← 1-66 ↔ USFM code ↔ EN/ZH names ↔ aliases
 ```
 
-~31,100 verses per translation; KJV + CUV ≈ 62k rows, 10–15 MB. Load with an idempotent
-startup pass guarded on row count, same shape as the bot seeder. Plus a book-alias
-resource in `resources/bible/` — `John` / `Jn` / `约翰福音` / `约翰` — so *input* references
-resolve however they are written.
+Nothing parses USFM at runtime and the app never depends on eBible being reachable.
+
+**Why the JSON is committed rather than fetched or hand-placed.** Three ways to get the
+corpus onto the server, and the differences matter more than they look:
+
+| approach | verdict |
+|---|---|
+| **Convert once locally, commit the JSON** ✅ | Ships inside the jar as a classpath resource. Reproducible, reviewable in git, works in CI and in tests, and a rollback automatically brings the matching corpus. **No deploy step exists, so there is nothing to make idempotent.** |
+| Download and place on the server by hand | The app now depends on a file outside its artefact. A rebuilt container, a fresh volume or a new environment silently loses scripture, and nothing records *which* edition is installed. |
+| Fetch from eBible at build time | Builds need network access; CI breaks when eBible is down or a URL moves; two builds a year apart can embed different text. Non-reproducible scripture is exactly what this feature cannot afford. |
+
+Cost of committing it: ~10–11 MB of JSON, compressing to roughly 3 MB in the packfile.
+It is added once and never churns. Optionally gzip the resources and inflate on load
+(~15 lines) if jar size matters.
+
+Commit the conversion script alongside it so a future re-import is a documented one-liner
+rather than an archaeology exercise.
+
+**USFM parsing traps** — these are where a converter quietly corrupts the text:
+
+| marker | handling |
+|---|---|
+| `\f … \f*` footnotes, `\x … \x*` cross-refs | **delete contents entirely** — unwrapping drops footnote prose into the verse |
+| `\add … \add*` | **unwrap, keep the words** — in the KJV these are the italicised supplied words and they are part of the verse |
+| `\w … \w*`, `\nd … \nd*`, `\q`, `\q1`, `\p`, `\m`, `\s`, `\b` | strip the marker, keep any text |
+| `\v 1-2` bridged verses | store under the first number, record the span; do **not** silently drop the second |
+
+Delete-vs-unwrap is the one distinction that matters. Getting it backwards produces
+verses that read almost right, which is the worst possible failure for this feature.
+
+### Hold it in memory, not in Postgres
+
+The corpus is immutable reference data that is only ever read. A table buys nothing and
+costs a migration, a 62k-row boot insert, and an interaction with `ddl-auto=update`.
+
+Load both JSON files into memory at startup instead: ~62k verses, roughly **8 MB of
+text and 25–40 MB of heap** once indexed. Loads from the jar in about a second.
+
+*(The alternative — a `bible_verses` table with a `to_tsvector` index — was considered
+and rejected for the reasons above. It is a small change to swap back to if the heap
+cost turns out to matter.)*
+
+### Search: KJV only, and why CUV needs bigrams
+
+**Default Postgres full-text search does not segment Chinese.** There are no word
+boundaries, so `to_tsvector` yields roughly one token per clause and a search for 邻舍
+matches nothing. Proper support needs `zhparser` or `pg_bigm`, neither of which is
+likely installable on the Postgres container.
+
+This is a constraint, not a nuance — an implementer who builds a Chinese text index will
+get an index that silently returns zero results.
+
+In-memory indexing sidesteps it cleanly:
+
+- **KJV** — a plain inverted index over lowercased, punctuation-stripped tokens.
+- **CUV** — a **character-bigram** index (爱邻 / 邻舍 / 舍如 …). About fifteen lines, no
+  segmenter, and it makes Chinese search actually work rather than merely not crash.
+
+Even so, `search_passages` should **run against KJV by default and render the matching
+coordinates in CUV**, because the English index ranks better. The bigram index is the
+fallback for queries with no English form.
+
+### Versification parity — spot-check before trusting it
+
+The "search in English, render in Chinese" trick depends on KJV and CUV sharing verse
+coordinates. Both are the 66-book Protestant canon and they broadly do, but there are
+known divergence points — Psalm superscriptions counted as verse 1 in some traditions,
+and a handful of chapter-boundary differences.
+
+**A mismatch renders the wrong Chinese verse**, which is precisely the failure the whole
+IR design exists to prevent. Verify with a spot-check across the Psalms, Malachi/Joel
+(chapter-boundary differences), and 3 John before relying on it. If parity turns out to
+be imperfect, store an explicit coordinate-mapping table rather than assuming.
 
 ### Tools
 
 | tool | resolves to |
 |---|---|
-| `lookup_passage(reference, translation)` | exact rows — `"Luke 10:25-37"` |
-| `search_passages(query, translation, limit)` | Postgres full-text over `text` |
+| `lookup_passage(reference, translation)` | exact verses — `"Luke 10:25-37"` |
+| `search_passages(query, translation, limit)` | inverted index (KJV) / bigram index (CUV) |
 
-Because verse numbering is shared between translations, a query can be **searched in
-English and rendered in 和合本** by looking up the same coordinates.
+`books.json` is what lets input references resolve however they are written —
+`John` / `Jn` / `约翰福音` / `约翰`.
 
 ### Licensing — settle before importing anything
 
@@ -667,10 +784,16 @@ new `AssistantAccountService` with the idempotent seed **and the never-admin sta
 assertion** · `MessageDto.senderBot` + `senderDisplayNameZh`.
 
 ### 2 — `dev: import the KJV and 和合本 corpora with passage lookup and search`
-`BibleVerse` entity + repository · `BibleService` (`lookupPassage`, `searchPassages`) ·
-`resources/bible/` data and the book-alias map · idempotent loader · full-text index ·
-**the `[bible:…]` IR resolver and its verse/token caps**. Independently testable with no
-LLM involved.
+`backend/tools/usfm-to-json/` converter (outside `src/`) · generated
+`resources/bible/{kjv,cuv,books}.json` committed · `BibleService` loading both into
+memory at startup · KJV inverted index + CUV bigram index · `lookupPassage` /
+`searchPassages` · **the `[bible:…]` IR resolver and its verse/token caps**.
+
+No entity, no repository, no migration — the corpus is immutable reference data (§4).
+Independently testable with no LLM and no database involved.
+
+**Do the versification spot-check here**, before anything depends on cross-translation
+coordinates.
 
 ### 3 — `dev: add the OpenAI-compatible assistant client behind env config`
 `AssistantProperties` · `AssistantClient` on `RestClient` · tool-call loop with the round
@@ -686,7 +809,10 @@ never-throw contract (§6)** · the shared `[bible:…]` / `[event:…]` substit
 actually need tests.
 
 ### 5 — `dev: answer @mentions of the assistant in opted-in group chats`
-`GroupConversation.assistantEnabled` + admin toggle · the `ChatService` trigger hook ·
+`GroupConversation.assistantEnabled` + admin toggle **that also adds/removes the bot from
+the group roster** · `findChatEligibleMembers` keeps bots (with the comment explaining
+why) · `removeParticipantFromGroup` refuses the bot while enabled · startup warning for
+any enabled group missing the bot (§1) · the `ChatService` trigger hook ·
 `ASSISTANT_REPLY` task (ids only), publisher, consumer, **dedicated
 `assistantRabbitListenerContainerFactory`** · `Message.respondsToMessageId` + the partial
 unique index + `ON DELETE SET NULL` FK in `DatabaseIntegrityMigration` · Redis
@@ -705,11 +831,27 @@ Nothing is user-visible until 5 and 6.
 
 **Backend (`mvn test`, no provider needed):**
 
-*Permissions*
+*Permissions and membership*
 - Tool layer as the bot user: unpublished courses absent, reported threads absent,
   `checkedInUserIds` never serialised, announcement `imageUrl` never emitted.
 - `sanitiseMentions` with the bot: self-mention dropped, `@all` refused.
 - Startup assertion fires if the bot row is admin.
+- **Enabling `assistantEnabled` puts the bot on the roster; disabling takes it off.**
+- **`AppGroupChatService.reconcile` run twice does not evict the bot** — the regression
+  test for the silent-death path in §1.
+- **`removeParticipantFromGroup` refuses the bot** while the assistant is enabled.
+- A mention of a bot that is *not* a participant is stripped — proving the failure mode,
+  so the startup warning is what catches it in production.
+
+*Corpus*
+- Converter output round-trips: a sampled verse from each of the 66 books matches the
+  USFM source.
+- `\f`/`\x` content never appears inside a verse; `\add` words are kept.
+- Bridged verses (`\v 1-2`) are present, not silently dropped.
+- Versification spot-check: Psalms with superscriptions, Malachi/Joel chapter boundaries,
+  3 John — KJV and CUV coordinates agree, or the mapping table covers the difference.
+- CUV bigram search for 邻舍 returns Luke 10:27 (the check that would fail silently under
+  Postgres FTS).
 
 *Scripture*
 - `[bible:CUV:42:10:27]` substitutes the exact CUV wording of Luke 10:27.
@@ -772,6 +914,11 @@ Nothing is user-visible until 5 and 6.
 | risk | mitigation |
 |---|---|
 | Fabricated or paraphrased verse | Model emits IR tokens only; backend substitutes real text; verifier as second net (§4) |
+| **Assistant silently never fires** | Bot must be on the group roster; `findChatEligibleMembers` keeps bots; remove-participant refuses it; startup warning (§1) |
+| Wrong Chinese verse from coordinate drift | Versification spot-check in commit 2; mapping table if parity is imperfect (§4) |
+| Chinese search returning nothing | In-memory bigram index, not Postgres FTS, which cannot segment CJK (§4) |
+| Corrupted verse text from USFM conversion | Delete-vs-unwrap marker rules; per-book round-trip test (§4) |
+| Client squatting the idempotency key | `respondsToMessageId` is server-side only, never on `MessageDto` (§3) |
 | Duplicate reply from a retry or lost ACK | Partial unique index on `responds_to_message_id`; Redis claim/done as fast path (§3) |
 | Answering with a conversation that has moved on | Context anchored at the trigger message; task carries ids, worker re-reads (§3) |
 | Hostile or nonsensical tool arguments | Clamp through `Pagination`; whitelist enums; tools never throw (§6) |
@@ -790,7 +937,9 @@ Nothing is user-visible until 5 and 6.
 1. **Rate limits** — are 5/user/hour and 200/conversation/day the right starting numbers?
    They are config values, easily changed, but the first setting shapes expectations.
 2. **Who signs off the system prompt** in §10, and by when?
-3. **KJV Crown copyright in Singapore** — confirm before importing the corpus.
+3. **Licence terms** — record what eBible.org states for each of the two downloads, and
+   confirm the KJV's UK Crown-copyright position does not bite in Singapore, before the
+   corpus is committed.
 4. **Which group hosts the trial** before the app-level group is switched on?
 5. **Scripture language in a mixed group** — §4 renders in the *asker's* language for
    everyone. Acceptable, or worth revisiting once there is real usage?
