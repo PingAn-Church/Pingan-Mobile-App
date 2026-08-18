@@ -27,6 +27,8 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import defaultProfileImage from "../../../assets/user.png";
+// The assistant has no stored avatar; it wears the app's own icon.
+import appIcon from "../../../assets/icon.png";
 import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
@@ -836,6 +838,46 @@ export default function ChatPage({ route }) {
     [conversationType]
   );
 
+  /**
+   * The assistant, as a mention candidate — offered from the conversation rather
+   * than found by searching. It is deliberately absent from the member directory
+   * so it cannot surface in "start a new chat" or the admin member lists, and the
+   * app-level group ships no roster to look it up in either.
+   */
+  const assistantMention = useMemo(() => {
+    if (!conversation?.assistantEnabled || !conversation?.assistantId) return null;
+    const names = [conversation.assistantName, conversation.assistantNameZh].filter(Boolean);
+    if (!names.length) return null;
+    const preferred =
+      String(language || "").startsWith("zh") && conversation.assistantNameZh
+        ? conversation.assistantNameZh
+        : conversation.assistantName;
+    return { id: conversation.assistantId, fullName: preferred || names[0], names };
+  }, [
+    conversation?.assistantEnabled,
+    conversation?.assistantId,
+    conversation?.assistantName,
+    conversation?.assistantNameZh,
+    language,
+  ]);
+
+  /**
+   * Matches the typed token against BOTH names, so "@sha" and "@平安" each find it,
+   * and inserts whichever one was being typed rather than overwriting it with the
+   * reader's language.
+   */
+  const assistantCandidateFor = useCallback(
+    (query) => {
+      if (!assistantMention) return null;
+      if (!query) return assistantMention;
+      const matched = assistantMention.names.find((name) =>
+        name.toLowerCase().startsWith(query)
+      );
+      return matched ? { ...assistantMention, fullName: matched } : null;
+    },
+    [assistantMention]
+  );
+
   useEffect(() => {
     if (mentionQuery === null) {
       setMentionCandidates([]);
@@ -844,14 +886,20 @@ export default function ChatPage({ route }) {
 
     let active = true;
     const query = mentionQuery.trim().toLowerCase();
+    const assistant = assistantCandidateFor(query);
+    const leading = assistant ? [assistant] : [];
 
     (async () => {
-      const roster = participants.filter((p) => String(p.id) !== String(currentUser?.id));
+      const roster = participants.filter(
+        (p) =>
+          String(p.id) !== String(currentUser?.id) &&
+          String(p.id) !== String(assistantMention?.id)
+      );
       if (roster.length) {
         const matches = query
           ? roster.filter((p) => (p.fullName || "").toLowerCase().includes(query))
           : roster;
-        if (active) setMentionCandidates(matches.slice(0, 8));
+        if (active) setMentionCandidates([...leading, ...matches].slice(0, 8));
         return;
       }
 
@@ -862,19 +910,22 @@ export default function ChatPage({ route }) {
         const response = await searchUsers(mentionQuery, 0, 8);
         if (!active) return;
         setMentionCandidates(
-          (response?.data || [])
-            .filter((u) => String(u.id) !== String(currentUser?.id))
-            .map((u) => ({ id: u.id, fullName: formatName(u.firstName, u.lastName) }))
+          [
+            ...leading,
+            ...(response?.data || [])
+              .filter((u) => String(u.id) !== String(currentUser?.id))
+              .map((u) => ({ id: u.id, fullName: formatName(u.firstName, u.lastName) })),
+          ].slice(0, 8)
         );
       } catch (error) {
-        if (active) setMentionCandidates([]);
+        if (active) setMentionCandidates(leading);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [mentionQuery, participants, currentUser?.id]);
+  }, [mentionQuery, participants, currentUser?.id, assistantCandidateFor, assistantMention?.id]);
 
   const applyMention = useCallback(
     (candidate) => {
@@ -922,6 +973,14 @@ export default function ChatPage({ route }) {
       if (message?.mentionsEveryone) labels.push("all");
       (message?.mentionedUserIds || []).forEach((id) => {
         const key = String(id);
+        // The assistant has a name in each language and either could have been
+        // typed. splitOnMentions builds one alternation out of these labels, so
+        // offering both is what makes "@平安小助手" highlight for an English reader
+        // and "@ShalomBot" for a Chinese one.
+        if (assistantMention && key === String(assistantMention.id)) {
+          assistantMention.names.forEach((name) => labels.push(name));
+          return;
+        }
         const isCurrentUser = key === String(currentUser?.id);
         const known = isCurrentUser
           ? currentUser
@@ -932,7 +991,7 @@ export default function ChatPage({ route }) {
       });
       return labels;
     },
-    [participants, userDirectory, currentUser]
+    [participants, userDirectory, currentUser, assistantMention]
   );
 
   const clearPendingMentions = useCallback(() => {
@@ -2402,8 +2461,14 @@ export default function ChatPage({ route }) {
           // The directory is the fallback for messages stored before that field existed.
           const senderAvatarPath =
             item.senderProfileImage || userDirectory[String(item.senderId)]?.profileImage || null;
-          const senderName =
-            formatName(item.senderFirstName, item.senderLastName) || i18n.t("unknownUser");
+          // The assistant is named in both languages and carries no stored avatar,
+          // so it is drawn from the app icon and named for whoever is reading.
+          const isAssistant = !!item.senderBot;
+          const senderName = isAssistant
+            ? (String(language || "").startsWith("zh") && item.senderDisplayNameZh) ||
+              item.senderFirstName ||
+              i18n.t("unknownUser")
+            : formatName(item.senderFirstName, item.senderLastName) || i18n.t("unknownUser");
           const isFailed = item.failed;
           const isPending = item.pending;
           // Reported messages are shadow-hidden: everyone except the sender sees
@@ -2566,34 +2631,56 @@ export default function ChatPage({ route }) {
           return (
             <View style={styles.groupMessageRow}>
               {startsRun ? (
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
-                  accessibilityRole="button"
-                  accessibilityLabel={senderName}
-                >
-                  <CachedImage
-                    uri={senderAvatarPath}
-                    type="profile"
-                    fallbackSource={defaultProfileImage}
-                    style={styles.groupMessageAvatar}
-                  />
-                </TouchableOpacity>
+                isAssistant ? (
+                  // No profile to open, and no stored avatar to fetch: the
+                  // assistant wears the app icon straight from the bundle.
+                  <Image source={appIcon} style={styles.groupMessageAvatar} />
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
+                    accessibilityRole="button"
+                    accessibilityLabel={senderName}
+                  >
+                    <CachedImage
+                      uri={senderAvatarPath}
+                      type="profile"
+                      fallbackSource={defaultProfileImage}
+                      style={styles.groupMessageAvatar}
+                    />
+                  </TouchableOpacity>
+                )
               ) : (
                 // Holds the gutter open so every bubble in a run stays on the
                 // same left edge as the one carrying the avatar.
                 <View style={styles.groupMessageAvatarSpacer} />
               )}
               <View style={styles.groupMessageColumn}>
-                {startsRun && (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
-                  >
-                    <Text style={styles.groupSenderName} numberOfLines={1}>
-                      {senderName}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                {startsRun &&
+                  (isAssistant ? (
+                    <View style={styles.assistantNameRow}>
+                      <Text style={styles.groupSenderName} numberOfLines={1}>
+                        {senderName}
+                      </Text>
+                      <View style={styles.assistantBadge}>
+                        <Text style={styles.assistantBadgeText}>{i18n.t("aiBadge")}</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
+                    >
+                      <Text style={styles.groupSenderName} numberOfLines={1}>
+                        {senderName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 {bubble}
+                {isAssistant && (
+                  // Chrome, not message text. In the body it would ride along in
+                  // the push notification and stand in for the answer as the
+                  // conversation-list preview, and cost tokens on every reply.
+                  <Text style={styles.assistantDisclaimer}>{i18n.t("assistantDisclaimer")}</Text>
+                )}
               </View>
             </View>
           );
@@ -3646,6 +3733,30 @@ const styles = StyleSheet.create({
   groupMessageColumn: {
     flex: 1,
     alignItems: "flex-start",
+  },
+  assistantNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  assistantBadge: {
+    backgroundColor: "#E7E3FF",
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  assistantBadgeText: {
+    fontSize: webFontSize(10),
+    fontWeight: "700",
+    color: "#5B4BD6",
+    letterSpacing: 0.4,
+  },
+  assistantDisclaimer: {
+    fontSize: webFontSize(11),
+    color: "#8E8E93",
+    marginTop: 2,
+    marginLeft: 4,
+    maxWidth: "82%",
   },
   groupSenderName: {
     fontSize: webFontSize(12),

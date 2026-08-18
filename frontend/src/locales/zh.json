@@ -451,6 +451,8 @@
   "unblockUser": "解除屏蔽",
   "sendMessage": "发送消息",
   "mentionEveryone": "本群所有人",
+  "aiBadge": "AI",
+  "assistantDisclaimer": "AI 生成 · 经文：和合本 / KJV（公有领域）· 可能有误",
   "followTopic": "接收该话题的通知",
   "unfollowTopic": "关闭该话题的通知",
   "topicFollowFailed": "无法更新该话题的通知设置",

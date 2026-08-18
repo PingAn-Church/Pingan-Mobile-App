@@ -451,6 +451,8 @@
   "unblockUser": "Unblock User",
   "sendMessage": "Send Message",
   "mentionEveryone": "Everyone in this group",
+  "aiBadge": "AI",
+  "assistantDisclaimer": "AI-generated · Scripture: KJV / 和合本 (public domain) · may be mistaken",
   "followTopic": "Get notified about this topic",
   "unfollowTopic": "Stop notifications for this topic",
   "topicFollowFailed": "Could not update notifications for this topic",

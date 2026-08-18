@@ -67,6 +67,22 @@ public class ConversationService {
     }
 
     /**
+     * Stamps the assistant's identity onto a conversation the client is about to
+     * receive, so the @ picker can offer it without a directory lookup.
+     */
+    private ConversationDto withAssistantIdentity(ConversationDto dto) {
+        if (dto == null || !dto.isAssistantEnabled()) {
+            return dto;
+        }
+        assistantAccountService.findAssistant().ifPresent(assistant -> {
+            dto.setAssistantId(assistant.getId());
+            dto.setAssistantName(assistant.getFirstName());
+            dto.setAssistantNameZh(assistant.getDisplayNameZh());
+        });
+        return dto;
+    }
+
+    /**
      * Turns the in-app assistant on or off for one group.
      *
      * The flag and the roster move together on purpose. A mention of someone who is
@@ -103,7 +119,7 @@ public class ConversationService {
         group.setAssistantEnabled(enabled);
         group.setUpdatedAt(now());
         groupConversationRepository.save(group);
-        return new ConversationDto(group);
+        return withAssistantIdentity(new ConversationDto(group));
     }
 
     /**
@@ -186,6 +202,7 @@ public class ConversationService {
             if (c.isAppLevel()) {
                 c.setParticipantCount(groupConversationRepository.countParticipants(c.getConversationId()));
             }
+            withAssistantIdentity(c);
         }
 
         return conversations;
@@ -194,7 +211,7 @@ public class ConversationService {
     public ConversationDto getConversationById(Long conversationId) {
         Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
         if (groupConversationOpt.isPresent()) {
-            ConversationDto dto = new ConversationDto(groupConversationOpt.get());
+            ConversationDto dto = withAssistantIdentity(new ConversationDto(groupConversationOpt.get()));
             if (dto.isAppLevel()) {
                 dto.setParticipantCount(groupConversationRepository.countParticipants(conversationId));
             }
