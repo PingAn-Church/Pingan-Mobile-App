@@ -4,8 +4,9 @@ Add a built-in AI assistant that members summon by `@`-mentioning it inside a gr
 chat. It answers Bible-study questions by quoting **real** scripture, and answers
 "what's on this week / what courses are there" from the app's own data.
 
-A **plan**, with one exception: the Bible corpus is already converted and in the tree
-(`backend/tools/ebible-to-json/`, `resources/bible/`). Everything else is unwritten.
+**Status: implemented** on `feature/shalombot-assistant`, all six commits below. The
+backend suite is green at 439 tests. What remains is operational, not code — see
+*Before switching it on* at the end.
 
 ## Decisions locked in
 
@@ -1009,3 +1010,22 @@ Nothing is user-visible until 5 and 6.
 4. **Which group hosts the trial** before the app-level group is switched on?
 5. **Scripture language in a mixed group** — §4 renders in the *asker's* language for
    everyone. Acceptable, or worth revisiting once there is real usage?
+
+---
+
+## Before switching it on
+
+The code is in place and inert. Nothing answers anybody until each of these is done.
+
+| step | why it matters |
+|---|---|
+| 1. Deploy, then check the boot log for `Creating the in-app assistant account` and `Bible corpora loaded` | Confirms the seed ran and the corpus parsed on the real database |
+| 2. Confirm `LLM_BASE_URL` ends in the provider's version path (e.g. `/v1`) | `/chat/completions` is appended to it; a bare host produces a 404 that reads like a provider outage |
+| 3. Get the §10 system prompt reviewed and signed off | It encodes doctrinal posture; it should not ship on an engineer's say-so |
+| 4. Turn it on for **one** trial group — `PUT /chat/conversation/{id}/assistant` with `{"enabled":true}` | The toggle also puts the assistant on that group's roster; a flag alone leaves it silently mute |
+| 5. Ask it a Bible question, an events question, and something it cannot know | Checks quoting, app-data grounding, and that it says "I don't know" rather than inventing |
+| 6. Watch that only the asker is pushed | The empty plain-recipient batch is what keeps the church-wide group usable |
+| 7. Only then consider the app-level group | Its roster already contains the assistant, so step 4 is the only change needed |
+
+To turn it off again, set `enabled:false` on the group, or clear `ASSISTANT_ENABLED` /
+the credentials to disable it everywhere at once.
