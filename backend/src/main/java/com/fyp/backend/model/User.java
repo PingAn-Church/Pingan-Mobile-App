@@ -101,4 +101,29 @@ public class User {
     // genuinely later registrations ever raise the badge.
     @Column
     private Long lastSeenMemberId;
+
+    /**
+     * Machine account — the in-app assistant, not a person.
+     *
+     * It is a real user row so that messages, fan-out, avatars, history and
+     * reporting all work unchanged; this flag is what keeps it out of the places
+     * a person belongs: login, the member directory, the new-member badge and
+     * account deletion. It is deliberately NOT excluded from
+     * {@code findChatEligibleMembers} — the assistant has to stay on the
+     * app-level group's roster or its mentions are stripped before they are ever
+     * stored. See AssistantAccountService.
+     */
+    @ColumnDefault("false")
+    @Column(nullable = false)
+    private boolean bot = false;
+
+    /**
+     * Chinese display name, shown to readers whose app language is Chinese.
+     *
+     * Null for people — a member has one name and everyone sees it. Only the
+     * assistant is named in both languages, the same way the app-level group is
+     * (see GroupConversation.groupNameZh).
+     */
+    @Column
+    private String displayNameZh;
 }

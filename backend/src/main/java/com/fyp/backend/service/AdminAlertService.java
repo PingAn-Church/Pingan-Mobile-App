@@ -87,7 +87,7 @@ public class AdminAlertService {
 
         Long seen = admin.getLastSeenMemberId();
         if (seen == null) return 0;
-        return userRepository.countByIdGreaterThanAndDeletedAccountFalse(seen);
+        return userRepository.countByIdGreaterThanAndDeletedAccountFalseAndBotFalse(seen);
     }
 
     /**
