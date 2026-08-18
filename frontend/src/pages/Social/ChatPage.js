@@ -3565,20 +3565,23 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     maxWidth: "82%",
   },
+  // The tightened corner is the bubble's tail, so it sits at the TOP on the
+  // sender's side — pointing up at their avatar, which is drawn at the head of
+  // the group rather than the foot of it.
   sentMessage: {
     alignSelf: "flex-end",
     backgroundColor: "#0A84FF",
     borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopRightRadius: 6,
     borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 6,
+    borderBottomRightRadius: 20,
   },
   receivedMessage: {
     alignSelf: "flex-start",
     backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 20,
+    borderTopLeftRadius: 6,
     borderTopRightRadius: 20,
-    borderBottomLeftRadius: 6,
+    borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
   imageMessageBubbleSent: {
@@ -3858,20 +3861,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderWidth: 0,
   },
+  // Tail at the top, matching sentMessage / receivedMessage above.
   voiceMessageBubbleSent: {
     alignSelf: "flex-end",
     backgroundColor: "#0A84FF",
     borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopRightRadius: 6,
     borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 6,
+    borderBottomRightRadius: 20,
   },
   voiceMessageBubbleReceived: {
     alignSelf: "flex-start",
     backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 20,
+    borderTopLeftRadius: 6,
     borderTopRightRadius: 20,
-    borderBottomLeftRadius: 6,
+    borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
   voiceWrapper: {
