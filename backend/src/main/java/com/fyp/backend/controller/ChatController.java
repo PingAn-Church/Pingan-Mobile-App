@@ -136,7 +136,6 @@ public class ChatController {
     public ResponseEntity<ConversationDto> getConversationById(@PathVariable Long conversationId, HttpServletRequest request) {
         Long loggedInUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
         if (loggedInUserId == null || !conversationService.isUserPartOfConversation(conversationId, loggedInUserId)) {
-            System.out.println("FORBIDDEN!!");
             return ResponseEntity.status(403).body(null); // Forbidden
         }
         ConversationDto conversationDto = conversationService.getConversationById(conversationId);

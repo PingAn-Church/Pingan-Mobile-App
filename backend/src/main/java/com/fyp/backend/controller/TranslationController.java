@@ -40,7 +40,6 @@ public class TranslationController {
         // Extract userId from JWT Token using your established UserService pattern
         Long loggedInUserId = userService.getUserIdFromToken(request.getHeader("Authorization"));
 
-        System.out.println(" [TranslationController] Request from User ID: " + loggedInUserId);
 
         if (loggedInUserId == null) {
             return ResponseEntity.status(403).body("Unauthorized access");
@@ -66,7 +65,8 @@ public class TranslationController {
             return ResponseEntity.ok(Map.of("translatedText", translatedResult));
 
         } catch (Exception e) {
-            System.err.println(" [TranslationController] Error: " + e.getMessage());
+            org.slf4j.LoggerFactory.getLogger(TranslationController.class)
+                    .warn("Translation request failed: {}", e.getMessage());
             return ResponseEntity.status(500).body("An error occurred during translation.");
         }
     }
