@@ -18,3 +18,5 @@ source-apps/
 *.tmp.out
 
 frontend/android/.kotlin/
+
+.claude/
