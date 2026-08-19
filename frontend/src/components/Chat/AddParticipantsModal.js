@@ -84,6 +84,7 @@ const AddParticipantsModal = ({
   conversationId,
   existingParticipants,
   setParticipantDetails,
+  assistant,
 }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const { language } = useContext(LanguageContext);
@@ -94,6 +95,35 @@ const AddParticipantsModal = ({
   const availableUsers = results.filter(
     (u) => !existingParticipants.some((p) => String(p.id) === String(u.id))
   );
+
+  /**
+   * The assistant, pinned to the top of the list.
+   *
+   * Adding it to the group is what switches it on, so it has to be offerable here
+   * — but it is deliberately absent from the user directory, so the search will
+   * never return it. Its identity rides on the conversation instead.
+   *
+   * Matched against both names so "sha" and "平安" each find it, and rendered in
+   * whichever name the reader's language calls for.
+   */
+  const assistantEntry = (() => {
+    if (!assistant?.id) return null;
+    if (existingParticipants.some((p) => String(p.id) === String(assistant.id))) return null;
+
+    const names = [assistant.name, assistant.nameZh].filter(Boolean);
+    if (!names.length) return null;
+
+    const term = query.trim().toLowerCase();
+    if (term && !names.some((name) => name.toLowerCase().includes(term))) return null;
+
+    const preferred =
+      String(language || "").startsWith("zh") && assistant.nameZh
+        ? assistant.nameZh
+        : assistant.name;
+    return { id: assistant.id, firstName: preferred || names[0], lastName: "", isAssistant: true };
+  })();
+
+  const listData = assistantEntry ? [assistantEntry, ...availableUsers] : availableUsers;
 
   //       }
   //       setParticipantDetails([...existingParticipants, ...selectedUsers]);
@@ -299,7 +329,7 @@ const AddParticipantsModal = ({
 
         {/* User List */}
         <FlatList
-          data={availableUsers}
+          data={listData}
           keyExtractor={(item) => item.id.toString()}
           renderItem={({ item }) => {
             const isSelected = selectedUsers.some((u) => u.id === item.id);
@@ -314,9 +344,19 @@ const AddParticipantsModal = ({
                   )
                 }
               >
-                <Text style={styles.userText}>
-                  {formatName(item.firstName, item.lastName)}
-                </Text>
+                <View style={styles.userRow}>
+                  <Text style={styles.userText}>
+                    {formatName(item.firstName, item.lastName)}
+                  </Text>
+                  {item.isAssistant && (
+                    <View style={styles.assistantBadge}>
+                      <Text style={styles.assistantBadgeText}>{i18n.t("aiBadge")}</Text>
+                    </View>
+                  )}
+                </View>
+                {item.isAssistant && (
+                  <Text style={styles.assistantHint}>{i18n.t("assistantAddHint")}</Text>
+                )}
               </TouchableOpacity>
             );
           }}
@@ -394,6 +434,28 @@ const styles = StyleSheet.create({
   },
   userText: {
     fontSize: 16,
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  assistantBadge: {
+    backgroundColor: "#E7E3FF",
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  assistantBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#5B4BD6",
+    letterSpacing: 0.4,
+  },
+  assistantHint: {
+    fontSize: 12,
+    color: "#8E8E93",
+    marginTop: 2,
   },
   emptyText: {
     textAlign: "center",

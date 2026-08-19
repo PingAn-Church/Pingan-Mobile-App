@@ -9,6 +9,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  Switch,
   TouchableOpacity,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -17,6 +18,7 @@ import { UserContext } from "../../context/UserContext";
 import AddParticipantsModal from "../../components/Chat/AddParticipantsModal"; // ✅ Import the modal
 import {
   removeParticipantFromGroup,
+  setGroupAssistantEnabled,
   addAdminToGroup,
   removeAdminFromGroup,
   leaveGroup,
@@ -160,6 +162,47 @@ const DetailedGroupChatPage = ({ route }) => {
       showAlert(i18n.t("error"), i18n.t("appGroupRenameFailed"), [{ text: i18n.t("ok") }]);
     } finally {
       setRenaming(false);
+    }
+  };
+
+  // --- assistant switch (app-level group only) ------------------------------
+  // Every other group turns the assistant on by adding it to the members and off
+  // by removing it. This group's roster follows account verification and cannot be
+  // hand-edited, so a switch is the only control it can have.
+  const [assistantOn, setAssistantOn] = useState(false);
+  const [togglingAssistant, setTogglingAssistant] = useState(false);
+
+  useEffect(() => {
+    setAssistantOn(!!conversation?.assistantEnabled);
+  }, [conversation?.assistantEnabled]);
+
+  const handleToggleAssistant = async (next) => {
+    if (togglingAssistant) return;
+    // Move the switch immediately, then put it back if the server disagrees —
+    // waiting on a round trip makes the control feel broken.
+    setAssistantOn(next);
+    setTogglingAssistant(true);
+    try {
+      const updated = await setGroupAssistantEnabled(conversationId, next);
+      setConversations((previous) =>
+        previous.map((c) =>
+          c.conversationId === updated.conversationId
+            ? {
+                ...c,
+                assistantEnabled: updated.assistantEnabled,
+                assistantId: updated.assistantId,
+                assistantName: updated.assistantName,
+                assistantNameZh: updated.assistantNameZh,
+              }
+            : c
+        )
+      );
+    } catch (error) {
+      console.error("Failed to switch the assistant:", error);
+      setAssistantOn(!next);
+      showAlert(i18n.t("error"), i18n.t("assistantSwitchFailed"), [{ text: i18n.t("ok") }]);
+    } finally {
+      setTogglingAssistant(false);
     }
   };
 
@@ -451,6 +494,22 @@ const DetailedGroupChatPage = ({ route }) => {
         </View>
       )}
 
+      {canRenameAppGroup && (
+        <View style={styles.renameCard}>
+          <View style={styles.assistantSwitchRow}>
+            <View style={styles.assistantSwitchText}>
+              <Text style={styles.renameHeading}>{i18n.t("assistantSwitchTitle")}</Text>
+              <Text style={styles.assistantSwitchHint}>{i18n.t("assistantSwitchHint")}</Text>
+            </View>
+            <Switch
+              value={assistantOn}
+              onValueChange={handleToggleAssistant}
+              disabled={togglingAssistant}
+            />
+          </View>
+        </View>
+      )}
+
       {/* Everyone verified is in the app-level group and stays in it — leaving,
           deleting and hand-picking members are all meaningless there, and the
           backend refuses them anyway. Mute is the way to quieten it. */}
@@ -576,6 +635,19 @@ const DetailedGroupChatPage = ({ route }) => {
         onClose={() => setShowAddParticipantModal(false)}
         conversationId={conversationId}
         existingParticipants={participants}
+        // Adding the assistant is how it is switched on, so it has to be offered
+        // here. It is kept out of the user directory on purpose — otherwise it
+        // would surface in "start a new chat" and the admin member lists too — so
+        // the conversation carries its identity instead of the search finding it.
+        assistant={
+          conversation?.assistantId
+            ? {
+                id: conversation.assistantId,
+                name: conversation.assistantName,
+                nameZh: conversation.assistantNameZh,
+              }
+            : null
+        }
       />
     </KeyboardAvoidingView>
   );
@@ -596,6 +668,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6b7280",
     marginBottom: 10,
+  },
+  assistantSwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  assistantSwitchText: {
+    flex: 1,
+  },
+  assistantSwitchHint: {
+    fontSize: 13,
+    color: "#6b7280",
+    marginTop: 2,
   },
   renameCard: {
     borderWidth: 1,

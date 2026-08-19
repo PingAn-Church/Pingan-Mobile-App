@@ -68,10 +68,17 @@ public class ConversationService {
 
     /**
      * Stamps the assistant's identity onto a conversation the client is about to
-     * receive, so the @ picker can offer it without a directory lookup.
+     * receive.
+     *
+     * Sent whether or not the assistant is currently on: the @ picker needs it to
+     * offer the assistant, and the add-participants picker needs it to offer
+     * turning the assistant ON, which is what adding it to the group now means.
+     * The assistant is kept out of the user directory so it cannot appear in
+     * "start a new chat" or the admin member lists, so this is the only way a
+     * client learns it exists.
      */
     private ConversationDto withAssistantIdentity(ConversationDto dto) {
-        if (dto == null || !dto.isAssistantEnabled()) {
+        if (dto == null) {
             return dto;
         }
         assistantAccountService.findAssistant().ifPresent(assistant -> {
@@ -83,16 +90,16 @@ public class ConversationService {
     }
 
     /**
-     * Turns the in-app assistant on or off for one group.
+     * Turns the in-app assistant on or off in the app-level group.
      *
-     * The flag and the roster move together on purpose. A mention of someone who is
-     * not a participant is stripped by ChatService before the message is stored, so
-     * setting the flag alone would produce an assistant that never answers and
-     * reports nothing — the single most likely way to ship this feature broken.
+     * Every other group switches the assistant on and off by adding and removing it
+     * like any other member, which is the whole point: one act, so the flag and the
+     * roster cannot disagree.
      *
-     * The app-level group is the exception: its roster is derived from who is
-     * verified and reconciled on every boot, and the assistant qualifies, so it is
-     * already a participant there and must not be hand-edited in.
+     * The church-wide group cannot work that way. Its roster is derived from who is
+     * verified and reconciled on every boot, and rejectAppGroupRosterEdit refuses
+     * hand edits — the assistant is always a participant there. So its flag is the
+     * only switch available, and this is it.
      */
     @Transactional
     public ConversationDto setAssistantEnabled(Long conversationId, boolean enabled, Long currentUserId) {
@@ -102,19 +109,14 @@ public class ConversationService {
                 .noneMatch(admin -> admin.getId().equals(currentUserId))) {
             throw new AccessDeniedException("Only group admins can change the assistant.");
         }
-
-        User assistant = assistantAccountService.findAssistant()
-                .orElseThrow(() -> new IllegalStateException("The assistant account is not available."));
-
         if (!group.isAppLevel()) {
-            boolean present = group.getParticipants().stream()
-                    .anyMatch(participant -> participant.getId().equals(assistant.getId()));
-            if (enabled && !present) {
-                group.getParticipants().add(assistant);
-            } else if (!enabled && present) {
-                group.getParticipants().removeIf(participant -> participant.getId().equals(assistant.getId()));
-            }
+            throw new IllegalArgumentException(
+                    "Add or remove the assistant from this group's members instead.");
         }
+        // No roster change: the assistant is chat-eligible, so the boot-time
+        // reconcile keeps it on this group's participant list either way.
+        assistantAccountService.findAssistant()
+                .orElseThrow(() -> new IllegalStateException("The assistant account is not available."));
 
         group.setAssistantEnabled(enabled);
         group.setUpdatedAt(now());
@@ -420,6 +422,13 @@ public class ConversationService {
 
         // ✅ Add new participant
         groupConversation.getParticipants().add(userToAdd);
+        // Adding the assistant IS switching it on. Keeping a separate flag that an
+        // admin had to set through a second call is what allowed the one state this
+        // feature cannot survive: enabled but not on the roster, where ChatService
+        // strips every mention before it is stored and nothing reports why.
+        if (userToAdd.isBot()) {
+            groupConversation.setAssistantEnabled(true);
+        }
         groupConversation.setUpdatedAt(now());
         groupConversationRepository.save(groupConversation);
 
@@ -476,21 +485,17 @@ public class ConversationService {
             throw new IllegalArgumentException("User is not a participant in this group.");
         }
 
-        // The assistant is on the roster because it has to be: a mention of a
-        // non-participant is stripped before the message is stored, so removing it
-        // while it is switched on would leave an assistant that never answers and
-        // reports no error. Turning it off is the way to take it out.
-        if (userToRemove.isBot() && groupConversation.isAssistantEnabled()) {
-            throw new IllegalArgumentException(
-                    "Turn the assistant off for this group before removing it.");
-        }
-
         if (userId.equals(currentUserId)) {
             throw new IllegalArgumentException("You cannot remove yourself from the group.");
         }
 
         // ✅ Remove the participant
         groupConversation.getParticipants().remove(userToRemove);
+        // Taking the assistant out of the group IS switching it off — the mirror of
+        // adding it. The two can no longer disagree because there is only one act.
+        if (userToRemove.isBot()) {
+            groupConversation.setAssistantEnabled(false);
+        }
         groupConversation.setUpdatedAt(now());
         groupConversationRepository.save(groupConversation);
 

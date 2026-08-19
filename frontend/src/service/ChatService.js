@@ -325,6 +325,26 @@ export const renameAppGroup = async ({ name, nameZh }) => {
   return response.data;
 };
 
+/**
+ * Switches the in-app assistant on or off for the app-level group.
+ *
+ * Only that group needs this. Everywhere else the assistant is turned on by adding
+ * it to the members and off by removing it — but the church-wide group's roster is
+ * derived from who is verified and cannot be hand-edited, so a switch is the only
+ * control it can have.
+ */
+export const setGroupAssistantEnabled = async (conversationId, enabled) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No token found.");
+
+  const response = await axios.put(
+    apiUrl(`/chat/conversation/${conversationId}/assistant`),
+    { enabled },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
 export const updateGroupIcon = async (conversationId, groupIcon) => {
   const token = await getAuthToken();
 

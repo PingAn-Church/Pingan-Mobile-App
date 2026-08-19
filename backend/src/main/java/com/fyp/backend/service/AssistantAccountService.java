@@ -104,18 +104,24 @@ public class AssistantAccountService {
     }
 
     /**
-     * Warns about any group that has the assistant switched on but does not have it
-     * on the roster.
+     * Reconciles the assistant flag against the rosters.
      *
-     * That combination is the feature's one silent failure: ChatService strips a
-     * mention of a non-participant before the message is stored, so the assistant
-     * simply never answers and nothing anywhere reports why. Runs last, after
-     * AppGroupChatService has reconciled the app-level group's membership.
+     * Membership is the switch: adding the assistant to a group turns it on, and
+     * removing it turns it off. A group left flagged on without the assistant on
+     * its roster is therefore not a state anyone can reach through the app — but if
+     * data drifts into it (a restore, a hand-edited row), the assistant would look
+     * enabled while ChatService silently strips every mention of a non-participant,
+     * which reports nothing at all. Correcting it here makes the invariant hold
+     * rather than merely observing that it does not.
+     *
+     * Runs last, after AppGroupChatService has reconciled the app-level roster —
+     * the assistant is chat-eligible, so it is always a participant there and this
+     * never fires for the church-wide group.
      */
     @EventListener(ApplicationReadyEvent.class)
     @Order(Ordered.LOWEST_PRECEDENCE)
-    @Transactional(readOnly = true)
-    public void warnAboutGroupsMissingTheAssistant() {
+    @Transactional
+    public void reconcileAssistantMembership() {
         Long assistantId = assistantUserId().orElse(null);
         if (assistantId == null) {
             return;
@@ -124,9 +130,11 @@ public class AssistantAccountService {
             boolean present = group.getParticipants() != null && group.getParticipants().stream()
                     .anyMatch(participant -> assistantId.equals(participant.getId()));
             if (!present) {
-                log.warn("Group {} has the assistant enabled but the assistant is not a "
-                        + "participant, so mentions of it will be silently dropped. "
-                        + "Toggle the assistant off and on again for that group.", group.getId());
+                log.warn("Group {} was flagged as having the assistant enabled but does not "
+                        + "have it as a participant; switching it off. Add the assistant to "
+                        + "the group's members to turn it back on.", group.getId());
+                group.setAssistantEnabled(false);
+                groupConversationRepository.save(group);
             }
         }
     }
