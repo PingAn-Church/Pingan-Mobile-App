@@ -285,7 +285,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e5e7eb",
   },
   input: {
-    height: 44,
+    // minHeight, not height: a fixed box clips the text at large system fonts.
+    minHeight: 44,
     marginHorizontal: 20,
     marginTop: 12,
     marginBottom: 8,

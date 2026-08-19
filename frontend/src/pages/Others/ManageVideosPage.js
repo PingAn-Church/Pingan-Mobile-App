@@ -280,7 +280,8 @@ const styles = StyleSheet.create({
     borderRadius: 50,
   },
   input: {
-    height: 40,
+    // minHeight, not height: a fixed box clips the text at large system fonts.
+    minHeight: 40,
     borderColor: "gray",
     borderWidth: 1,
     marginBottom: 5,
