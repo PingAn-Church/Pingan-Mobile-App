@@ -61,9 +61,11 @@ import {
 import {
   KeyboardAvoidingView,
   KeyboardController,
-  KeyboardStickyView,
   useReanimatedKeyboardAnimation,
 } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+// Keeps the composer above the Android system navigation bar (edge-to-edge).
+import StickyInputFooter from "../../components/StickyInputFooter";
 import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
@@ -459,9 +461,17 @@ const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
 
 const AndroidKeyboardListSpacer = React.memo(function AndroidKeyboardListSpacer() {
   const { height } = useReanimatedKeyboardAnimation();
-  const spacerStyle = useAnimatedStyle(() => ({
-    height: Math.max(0, -height.value),
-  }));
+  // The keyboard height spans from the screen edge, but the composer already
+  // stands bottom-inset above it (StickyInputFooter's nav-bar strip), so the
+  // list only needs lifting by the difference — the full height would open an
+  // inset-sized gap between the newest message and the composer.
+  const bottomInset = useSafeAreaInsets().bottom;
+  const spacerStyle = useAnimatedStyle(
+    () => ({
+      height: Math.max(0, -height.value - bottomInset),
+    }),
+    [bottomInset]
+  );
 
   return <Reanimated.View pointerEvents="none" style={spacerStyle} />;
 });
@@ -2891,11 +2901,7 @@ export default function ChatPage({ route }) {
         onClose={closeImageViewer}
       />
 
-      {Platform.OS === "android" ? (
-        <KeyboardStickyView>{composerContent}</KeyboardStickyView>
-      ) : (
-        composerContent
-      )}
+      <StickyInputFooter background="#F2F2F7">{composerContent}</StickyInputFooter>
     </KeyboardAvoidingView>
   );
 
