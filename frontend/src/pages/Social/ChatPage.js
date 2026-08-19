@@ -60,6 +60,7 @@ import {
 // Keyboard controller gives Android a true keyboard-sticky composer under edge-to-edge.
 import {
   KeyboardAvoidingView,
+  KeyboardController,
   KeyboardStickyView,
   useReanimatedKeyboardAnimation,
 } from "react-native-keyboard-controller";
@@ -706,6 +707,28 @@ export default function ChatPage({ route }) {
       .then(setBlockStatus)
       .catch(() => setBlockStatus(null)); // fail open — server still enforces
   }, [conversationType, privateChatParticipantId]);
+
+  /**
+   * Settle the keyboard as this screen takes focus.
+   *
+   * The composer lift, the list spacer and the iOS padding all read the same
+   * `height`/`progress` shared values, and those belong to the app-wide
+   * KeyboardProvider rather than to a screen — nothing resets them on mount. Every
+   * route into this page comes from a screen with a focused text field (the chat
+   * list's search box, the new-group name field, a profile), so without this the
+   * chat paints its keyboard-open layout on the first frame; and if the IME's hide
+   * event is missed while those consumers are flipping Android's soft-input mode
+   * during the transition, it stays that way with no keyboard on screen.
+   *
+   * Dismissing here forces a real hide, which is what makes the native side emit
+   * the event those shared values are waiting for.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS === "web") return;
+      KeyboardController.dismiss().catch(() => {});
+    }, [])
+  );
 
   useFocusEffect(
     useCallback(() => {
