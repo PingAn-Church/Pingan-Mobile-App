@@ -1,4 +1,5 @@
 import i18n from "../../i18n";
+import { serverDateMillis } from "./serverDate";
 
 /**
  * The name to show for a group conversation.
@@ -35,12 +36,16 @@ export const compareConversations = (a, b) => {
   const lastA = a.lastMessage || a.chatHistory?.[a.chatHistory.length - 1];
   const lastB = b.lastMessage || b.chatHistory?.[b.chatHistory.length - 1];
 
+  // parseServerDate, not bare new Date(): the timestamp arrives space-separated
+  // and zone-less, which Safari refuses to parse (NaN comparator = unsorted web
+  // list) and which a bare parse reads in device-local time while rendering
+  // reads it as UTC.
   const timeA = Math.max(
-    lastA ? new Date(lastA.timestamp).getTime() : 0,
+    lastA ? serverDateMillis(lastA.timestamp) : 0,
     a.updatedAt || 0
   );
   const timeB = Math.max(
-    lastB ? new Date(lastB.timestamp).getTime() : 0,
+    lastB ? serverDateMillis(lastB.timestamp) : 0,
     b.updatedAt || 0
   );
 

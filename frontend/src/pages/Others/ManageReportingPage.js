@@ -18,6 +18,7 @@ import { showAlert } from "../../utils/showAlert";
 import { UserContext } from "../../context/UserContext";
 import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
+import { parseServerDate } from "../../utils/serverDate";
 
 const REPORT_PAGE_SIZE = 20;
 const STATUS_PENDING = "PENDING";
@@ -82,12 +83,12 @@ const parseVoiceContent = (content) => {
   };
 };
 
-// Backend timestamps arrive as epoch millis or an ISO-ish string.
+// Backend timestamps arrive as epoch millis or an ISO-ish string; the shared
+// parser handles every shape (and applies server-UTC to zone-less ones).
 const formatDateTime = (value) => {
   if (!value) return "";
-  const date = new Date(typeof value === "number" ? value : String(value).replace(" ", "T"));
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString();
+  const date = parseServerDate(value);
+  return date ? date.toLocaleString() : String(value);
 };
 
 const typeIcon = (messageType) => {
