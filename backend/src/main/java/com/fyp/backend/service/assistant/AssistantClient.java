@@ -3,6 +3,7 @@ package com.fyp.backend.service.assistant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -41,6 +42,24 @@ public class AssistantClient {
      * the process so only the first call can ever pay for the negotiation.
      */
     private volatile String negotiatedTokenParameter = MAX_TOKENS;
+
+    /** Sent only when a provider asks for it. Null means the field is omitted. */
+    static final String REASONING_EFFORT = "reasoning_effort";
+
+    /** gpt-5.x will not run function tools unless reasoning is switched off. */
+    static final String NO_REASONING = "none";
+
+    private volatile String negotiatedReasoningEffort = null;
+
+    /**
+     * Set once a provider has rejected reasoning_effort outright, so we never try
+     * to reintroduce it. Without this the two branches below could take turns
+     * adding and removing the field on every call.
+     */
+    private volatile boolean reasoningEffortRefused = false;
+
+    /** Enough to settle both known quirks in one request; never a blind retry loop. */
+    static final int MAX_SHAPE_ADAPTATIONS = 3;
 
     private final AssistantProperties properties;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -144,41 +163,42 @@ public class AssistantClient {
     }
 
     /**
-     * Sends one request, negotiating the output-budget parameter if the provider
-     * disagrees about its name.
+     * Sends one request, adapting the request's shape to whatever this provider
+     * turns out to accept.
      *
-     * OpenAI's newer models refuse {@code max_tokens} and require
-     * {@code max_completion_tokens}; most other OpenAI-compatible providers, and
-     * OpenAI's older models, accept only {@code max_tokens}. There is no name that
-     * works everywhere, so the first rejection teaches this client which one this
-     * provider wants and every later call uses it. Pin
-     * {@code assistant.max-tokens-parameter} to skip even that first retry.
+     * "OpenAI-compatible" is a family resemblance, not a specification, and the
+     * differences only show up as a 400. Rather than encode a matrix of provider
+     * quirks, this reads the complaint, changes the one thing it named, and
+     * remembers — so a provider costs at most a few rejected requests once per
+     * restart, and none at all if the settings are pinned in config.
+     *
+     * Bounded, and every adaptation is one-way, so this cannot oscillate.
      */
     private JsonNode send(List<Map<String, Object>> conversation, AssistantTools tools) {
-        String parameter = tokenParameter();
-        try {
-            return post(conversation, tools, parameter);
-        } catch (HttpClientErrorException.BadRequest rejection) {
-            String alternative = alternativeTokenParameter(parameter, rejection.getResponseBodyAsString());
-            if (alternative == null) {
-                throw rejection;
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return post(conversation, tools);
+            } catch (HttpClientErrorException.BadRequest rejection) {
+                if (attempt >= MAX_SHAPE_ADAPTATIONS
+                        || !adaptRequestShape(rejection.getResponseBodyAsString())) {
+                    throw rejection;
+                }
             }
-            log.info("Provider rejected '{}' for the output budget; using '{}' from now on. "
-                    + "Set assistant.max-tokens-parameter to skip this negotiation.",
-                    parameter, alternative);
-            negotiatedTokenParameter = alternative;
-            return post(conversation, tools, alternative);
         }
     }
 
-    private JsonNode post(List<Map<String, Object>> conversation, AssistantTools tools,
-                          String tokenParameter) {
+    private JsonNode post(List<Map<String, Object>> conversation, AssistantTools tools) {
+        String tokenParameter = tokenParameter();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", properties.getModel());
         body.put("messages", conversation);
         // Deliberately no temperature/top_p: the newer reasoning models reject any
         // value but the default, and nothing here needs to move it.
         body.put(tokenParameter, properties.getMaxOutputTokens());
+        String effort = reasoningEffort();
+        if (effort != null) {
+            body.put("reasoning_effort", effort);
+        }
         if (tools != null) {
             List<Map<String, Object>> specifications = tools.specifications();
             if (!specifications.isEmpty()) {
@@ -213,27 +233,67 @@ public class AssistantClient {
     private String tokenParameter() {
         String configured = properties.getMaxTokensParameter();
         if (MAX_TOKENS.equalsIgnoreCase(configured) || MAX_COMPLETION_TOKENS.equalsIgnoreCase(configured)) {
-            return configured.toLowerCase(java.util.Locale.ROOT);
+            return configured.toLowerCase(Locale.ROOT);
         }
         return negotiatedTokenParameter;
     }
 
+    /** Null means "send nothing", which is what every provider but a reasoning model wants. */
+    private String reasoningEffort() {
+        String configured = properties.getReasoningEffort();
+        if (configured == null || configured.isBlank() || "auto".equalsIgnoreCase(configured)) {
+            return negotiatedReasoningEffort;
+        }
+        return "off".equalsIgnoreCase(configured) ? null : configured.trim();
+    }
+
     /**
-     * The other spelling, when a 400 says the one we used is the problem.
+     * Changes one thing the provider objected to, and reports whether anything moved.
      *
-     * Only reacts to a rejection that actually names our parameter and reads like a
-     * parameter complaint — a 400 about anything else is rethrown rather than
-     * guessed at. Note the two names do not overlap as substrings, so the check
-     * cannot confuse them.
+     * Returning false means the 400 was about something we cannot fix by reshaping
+     * the request — a bad model id, an over-long context — and the caller rethrows
+     * rather than retrying blind.
      */
-    private static String alternativeTokenParameter(String used, String responseBody) {
+    private boolean adaptRequestShape(String responseBody) {
         String body = responseBody == null ? "" : responseBody;
-        String lower = body.toLowerCase(java.util.Locale.ROOT);
+        String lower = body.toLowerCase(Locale.ROOT);
         boolean parameterComplaint = lower.contains("unsupported") || lower.contains("unrecognized")
                 || lower.contains("not supported") || lower.contains("unknown parameter");
-        if (!parameterComplaint || !body.contains(used)) {
-            return null;
+        if (!parameterComplaint) {
+            return false;
         }
-        return MAX_TOKENS.equals(used) ? MAX_COMPLETION_TOKENS : MAX_TOKENS;
+
+        // The output budget has two spellings and no universal one: OpenAI's newer
+        // models refuse max_tokens, most other providers only know it. The names do
+        // not overlap as substrings, so naming one cannot match the other.
+        String used = tokenParameter();
+        if (body.contains(used)) {
+            String alternative = MAX_TOKENS.equals(used) ? MAX_COMPLETION_TOKENS : MAX_TOKENS;
+            log.info("Provider rejected '{}' for the output budget; using '{}' from now on. "
+                    + "Pin assistant.max-tokens-parameter to skip this.", used, alternative);
+            negotiatedTokenParameter = alternative;
+            return true;
+        }
+
+        // gpt-5.x refuses function tools while it is reasoning on this endpoint,
+        // and asks for reasoning_effort 'none' — a parameter we were not sending at
+        // all, because its own default is what conflicts. Sending 'none' explicitly
+        // is what buys us tool calls; the alternative is the /v1/responses API,
+        // which no other compatible provider implements.
+        if (body.contains(REASONING_EFFORT) && !reasoningEffortRefused) {
+            if (negotiatedReasoningEffort == null) {
+                log.info("Provider will not run function tools while reasoning; sending "
+                        + "reasoning_effort 'none' from now on. Pin assistant.reasoning-effort "
+                        + "to skip this.");
+                negotiatedReasoningEffort = NO_REASONING;
+                return true;
+            }
+            log.info("Provider does not accept reasoning_effort; dropping it from now on.");
+            negotiatedReasoningEffort = null;
+            reasoningEffortRefused = true;
+            return true;
+        }
+
+        return false;
     }
 }

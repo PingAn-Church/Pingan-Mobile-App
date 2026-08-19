@@ -63,6 +63,18 @@ public class AssistantProperties {
      */
     private String maxTokensParameter = "auto";
 
+    /**
+     * {@code reasoning_effort} to send, or {@code auto} / {@code off}.
+     *
+     * Normally omitted — most models have no such parameter. But gpt-5.x refuses to
+     * run function tools while it is reasoning on /v1/chat/completions and asks for
+     * {@code none}, so on {@code auto} the client adds it the first time a provider
+     * says so. {@code off} never sends it; any other value is sent verbatim, which
+     * is how you would ask for {@code low} or {@code high} on a model that has no
+     * quarrel with tools.
+     */
+    private String reasoningEffort = "auto";
+
     /** Tool round trips per reply. A confused model would otherwise loop on budget. */
     private int maxToolRounds = 4;
 
