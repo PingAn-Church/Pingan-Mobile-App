@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.UnexpectedRollbackException;
 
 import com.fyp.backend.config.app.AssistantProperties;
+import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.User;
@@ -149,8 +150,15 @@ public class AssistantService {
                 return;
             }
 
-            String reply = renderer.render(generate(trigger, conversationId, language), language);
+            String generated = generate(trigger, conversationId, language);
+            String reply = renderer.render(generated, language);
             if (reply == null || reply.isBlank()) {
+                // The raw length separates the two ways this happens: nothing came
+                // back from the model at all, or it came back as tokens that all
+                // failed to resolve and were stripped.
+                log.info("Nothing usable for message {} (model returned {} chars); "
+                        + "sending the fallback.", triggerMessageId,
+                        generated == null ? 0 : generated.length());
                 reply = unsureMessage(language);
             }
             post(conversationId, triggerMessageId, askerId, assistant, reply);
@@ -208,12 +216,26 @@ public class AssistantService {
         }
     }
 
+    /**
+     * Posts the reply and says so.
+     *
+     * Both outcomes are logged at INFO on purpose. Without this, a reply that was
+     * saved and a reply that was skipped as a duplicate produced exactly the same
+     * output — nothing — so "the assistant said nothing in the group" could not be
+     * told apart from "the assistant answered and the message did not arrive", which
+     * are problems in completely different parts of the system.
+     */
     private void post(Long conversationId, Long triggerMessageId, Long askerId,
                       User assistant, String content) {
-        if (chatService.sendAssistantReply(conversationId, triggerMessageId, askerId,
-                assistant, content) == null) {
-            log.debug("Message {} had already been answered; duplicate discarded.", triggerMessageId);
+        MessageDto posted = chatService.sendAssistantReply(conversationId, triggerMessageId,
+                askerId, assistant, content);
+        if (posted == null) {
+            log.info("Message {} already had a reply; nothing posted.", triggerMessageId);
+            return;
         }
+        log.info("Assistant answered message {} in conversation {} as message {} ({} chars).",
+                triggerMessageId, conversationId, posted.getMessageId(),
+                content == null ? 0 : content.length());
     }
 
     private String generate(Message trigger, Long conversationId, String language) {
