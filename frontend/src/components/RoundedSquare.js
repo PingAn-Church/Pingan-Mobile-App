@@ -8,11 +8,16 @@ import {
   Linking,
   Alert,
 } from "react-native";
-import { MaterialIcons as Icon } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+
+// Material for everything historically; Ionicons so a tile can borrow a glyph the
+// tab bar already uses, which is drawn from that set.
+const ICON_SETS = { material: MaterialIcons, ion: Ionicons };
 
 const RoundedSquare = ({
   iconName,
+  iconFamily = "material",
   iconSize = 40,
   backgroundColor = "#ddd",
   iconColor = "#000",
@@ -62,7 +67,11 @@ const RoundedSquare = ({
           },
         ]}
       >
-        <Icon name={iconName} size={scaledIconSize} color={iconColor} />
+        {React.createElement(ICON_SETS[iconFamily] || MaterialIcons, {
+          name: iconName,
+          size: scaledIconSize,
+          color: iconColor,
+        })}
       </View>
       {description ? (
         <Text

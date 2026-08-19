@@ -169,7 +169,9 @@ export default function HomePage() {
               { icon: "play-arrow", color: "#F44336", label: "youtube", url: "https://www.youtube.com/@Pinganchurch" },
               // Magenta is the one hue not already on this row, so the counselling
               // booking reads as its own thing rather than a second video or map tile.
-              { icon: "psychology", color: "#E91E63", label: "consultation", url: "https://booking.pingan.org.sg/" },
+              // Ionicons for the glyph, so it is the same speech bubble the Chats tab
+              // uses rather than a lookalike from a different set.
+              { icon: "chatbubble", iconFamily: "ion", color: "#E91E63", label: "consultation", url: "https://booking.pingan.org.sg/" },
               { icon: "place", color: "#2196F3", label: "location", url: "https://maps.app.goo.gl/87euaduDeRSA5JMN6" },
               { icon: "phone", color: "#FFC107", label: "phoneNumber", url: "tel:+6580390059" },
               { icon: "email", color: "#673AB7", label: "email", url: "mailto:pinganchurchsingapore@gmail.com" },
@@ -177,6 +179,7 @@ export default function HomePage() {
               <RoundedSquare
                 key={idx}
                 iconName={item.icon}
+                iconFamily={item.iconFamily}
                 iconSize={iconSize}
                 backgroundColor={item.color}
                 iconColor="#fff"
