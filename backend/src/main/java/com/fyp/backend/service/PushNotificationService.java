@@ -29,6 +29,9 @@ import java.util.stream.Collectors;
 @Service
 public class PushNotificationService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(PushNotificationService.class);
+
     @Autowired
     private PushTokenRepository pushTokenRepository;
 
@@ -142,21 +145,6 @@ public class PushNotificationService {
     public void unregisterPushToken(Long userId, String token) {
         pushTokenRepository.deleteByUserIdAndToken(userId, token);
     }
-
-    // Send push notifications to all devices associated with the user
-//    public void sendPushNotification(Long userId, String message) {
-//        List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
-//
-//        // Use a push notification service to send notifications to the tokens (e.g., Firebase, Expo)
-//        for (PushToken pushToken : tokens) {
-//            if (pushToken.isActive()) {
-//                // Call your push notification service to send the message
-//                // Example: sendToDevice(pushToken.getToken(), message);
-//            }
-//        }
-//    }
-
-//    // Send push notifications to all devices associated with the user
 
     /**
      * Sends a learning-related push (enrolment, quiz result, course completion,
@@ -336,8 +324,8 @@ public class PushNotificationService {
                     "Expo push batch failed entirely (" + failedPayloads + " payloads)");
         }
         if (failedPayloads > 0) {
-            System.err.println("⚠️ Partial Expo push failure: " + sentPayloads
-                    + " sent, " + failedPayloads + " dropped after local retries");
+            log.warn("Partial Expo push failure: {} sent, {} dropped after local retries",
+                    sentPayloads, failedPayloads);
         }
     }
 
@@ -354,8 +342,7 @@ public class PushNotificationService {
                 return true;
             } catch (Exception e) {
                 if (attempt == 3) {
-                    System.err.println("❌ Expo sub-batch failed after " + attempt
-                            + " attempts: " + e.getMessage());
+                    log.error("Expo sub-batch failed after {} attempts: {}", attempt, e.getMessage());
                     return false;
                 }
                 try {
@@ -369,11 +356,6 @@ public class PushNotificationService {
         return false;
     }
 
-    /**
-     * Drops recipients who muted this conversation. Only chat pushes are
-     * filtered — learning/quiz pushes reuse conversationId for other ids and
-     * must never be muted by a conversation setting.
-     */
     /**
      * True only for real chat pushes. Learning events reuse conversationId to carry
      * unrelated ids (course, quiz), so the type has to be checked alongside it —
@@ -472,7 +454,7 @@ public class PushNotificationService {
                     EXPO_PUSH_URL, new HttpEntity<>(payload, headers), String.class);
             logDeliveryProblems(token, response);
         } catch (Exception e) {
-            System.err.println("❌ Expo push failed for " + maskToken(token) + ": " + e.getMessage());
+            log.error("Expo push failed for {}: {}", maskToken(token), e.getMessage());
         }
     }
 
@@ -579,14 +561,14 @@ public class PushNotificationService {
                     continue;
                 }
                 String errorCode = ticket.path("details").path("error").asText();
-                System.err.println("❌ Expo batch ticket error for " + maskToken(token) + ": "
-                        + ticket.path("message").asText() + " (" + errorCode + ")");
+                log.warn("Expo batch ticket error for {}: {} ({})", maskToken(token),
+                        ticket.path("message").asText(), errorCode);
                 if (DEVICE_NOT_REGISTERED.equals(errorCode) && token != null) {
                     deactivateDeadToken(token);
                 }
             }
         } catch (Exception unparseable) {
-            System.err.println("⚠️ Unreadable Expo batch response");
+            log.warn("Unreadable Expo batch response");
         }
     }
 
@@ -601,16 +583,15 @@ public class PushNotificationService {
             JsonNode root = objectMapper.readTree(response);
             JsonNode errors = root.path("errors");
             if (errors.isArray() && !errors.isEmpty()) {
-                System.err.println("❌ Expo rejected push for " + maskToken(token) + ": " + errors);
+                log.warn("Expo rejected push for {}: {}", maskToken(token), errors);
                 return;
             }
             JsonNode ticket = root.path("data");
             if (ticket.isObject()) {
                 if (!"ok".equals(ticket.path("status").asText())) {
                     String errorCode = ticket.path("details").path("error").asText();
-                    System.err.println("❌ Expo ticket error for " + maskToken(token) + ": "
-                            + ticket.path("message").asText()
-                            + " (" + errorCode + ")");
+                    log.warn("Expo ticket error for {}: {} ({})", maskToken(token),
+                            ticket.path("message").asText(), errorCode);
                     if (DEVICE_NOT_REGISTERED.equals(errorCode)) {
                         deactivateDeadToken(token);
                     }
@@ -622,7 +603,7 @@ public class PushNotificationService {
                 }
             }
         } catch (Exception unparseable) {
-            System.err.println("⚠️ Unreadable Expo response for " + maskToken(token) + ": " + response);
+            log.warn("Unreadable Expo response for {}: {}", maskToken(token), response);
         }
     }
 
@@ -631,12 +612,10 @@ public class PushNotificationService {
         try {
             int retired = pushTokenRepository.deactivateByToken(token);
             if (retired > 0) {
-                System.err.println("ℹ️ Retired dead push token " + maskToken(token)
-                        + " (DeviceNotRegistered)");
+                log.info("Retired dead push token {} (DeviceNotRegistered)", maskToken(token));
             }
         } catch (Exception e) {
-            System.err.println("⚠️ Could not deactivate dead push token "
-                    + maskToken(token) + ": " + e.getMessage());
+            log.warn("Could not deactivate dead push token {}: {}", maskToken(token), e.getMessage());
         }
     }
 

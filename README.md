@@ -43,7 +43,12 @@ BACKEND_BASE_URL=http://10.0.2.2:8080
 
 `backend/env.properties` is used when running the backend directly with Maven. `backend/.env` stores local Alibaba OSS credentials. `infra/.env` is used by Docker Compose and production-like tooling.
 
-Do not commit real secrets, Google service files, EAS submit keys, OSS keys, database passwords, or mail passwords.
+Do not commit real secrets, EAS submit keys, OSS keys, database passwords, or
+mail passwords. One deliberate exception: `frontend/android/app/google-services.json`
+is tracked on purpose — it is client-side Firebase configuration (API key +
+sender id, not admin credentials) and the Android build needs it. The Firebase
+*admin* SDK files and submit keys stay under `frontend/secrets/` (gitignored),
+and the root-level `frontend/google-services.json` remains ignored.
 
 ## Local Backend
 

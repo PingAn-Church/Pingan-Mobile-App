@@ -351,11 +351,9 @@ public class ConversationService {
         throw new IllegalArgumentException("Conversation not found");
     }
 
-//    @Transactional
 
     @Transactional
     public ConversationDto createGroupConversation(ConversationDto conversationDto, Long creatorId) {
-        System.out.println("🚀 [GroupCreate] Request received for group: " + conversationDto.getGroupName());
 
         User creator = requireChatEligible(creatorId, "User not found");
 
@@ -377,14 +375,11 @@ public class ConversationService {
         groupConversation.setUpdatedAt(now());
 
         groupConversation = groupConversationRepository.save(groupConversation);
-        System.out.println("✅ [GroupCreate] Group saved with ID = " + groupConversation.getId());
 
         groupConversation.setAdmins(new ArrayList<>());
         groupConversation.getAdmins().add(creator);
         groupConversationRepository.save(groupConversation);
 
-        System.out.println("👥 [GroupCreate] Final participants in group: " +
-                groupConversation.getParticipants().stream().map(User::getId).toList());
 
         ConversationDto response = new ConversationDto(groupConversation);
 
@@ -404,9 +399,6 @@ public class ConversationService {
             }
         });
 
-        System.out.println("🧪 [GroupCreate] About to return. Persisted group ID = " + groupConversation.getId());
-        System.out.println("🧪 [GroupCreate] Participants in saved entity: " +
-                groupConversation.getParticipants().stream().map(User::getId).toList());
 
         return response;
     }
@@ -523,8 +515,6 @@ public class ConversationService {
             }
         });
 
-//        // ✅ Notify existing participants
-
         return updatedConversation;
     }
 
@@ -589,14 +579,10 @@ public class ConversationService {
             }
         });
 
-//        // Notify remaining participants
-
         return updatedConversation;
     }
 
-//    @Transactional
 
-//    @Transactional
 
     @Transactional
     public ConversationDto leaveGroup(Long conversationId, Long currentUserId) {
@@ -784,15 +770,6 @@ public class ConversationService {
             }
         });
 
-        // 📡 Step 6: Notify all participants via WebSocket
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/group-admin-updates",
-//                    updatedConversation
-//            );
-//        }
-
         return updatedConversation;
     }
 
@@ -828,12 +805,6 @@ public class ConversationService {
                 }
             }
         });
-
-//        for (Long participantId : updated.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(), "/queue/group-icon-updates", updated
-//            );
-//        }
 
         return updated;
     }
@@ -884,7 +855,6 @@ public class ConversationService {
         ossCleanupService.deleteAfterCommit(objectUrls);
     }
 
-//    @Transactional
 
     @Transactional
     public void deleteConversation(Long conversationId, Long requestingUserId) {
@@ -940,17 +910,6 @@ public class ConversationService {
             }
         });
 
-        // ✅ Notify all participants via /queue/conversations
-//        for (Long userId : participantIds) {
-//            messagingTemplate.convertAndSendToUser(
-//                    userId.toString(),
-//                    "/queue/conversations",
-//                    Map.of(
-//                            "conversationId", conversationId,
-//                            "deleted", true
-//                    )
-//            );
-//        }
     }
 
 }

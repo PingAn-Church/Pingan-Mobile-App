@@ -27,6 +27,12 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
     @Autowired
     private UserRepository userRepository;
 
+    // KNOWN LIMITATION (accepted, 2026-08): the access token rides in the handshake
+    // query string because RN WebSocket/SockJS clients cannot set an Authorization
+    // header. Query strings can end up in reverse-proxy access logs, so keep those
+    // logs private. The clean fix — a short-lived single-use connect ticket fetched
+    // over HTTPS — needs a coordinated client+server change and was deliberately
+    // deferred; tokens expire after 15 minutes, which bounds the exposure.
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler, Map<String, Object> attributes) {
         URI uri = request.getURI();

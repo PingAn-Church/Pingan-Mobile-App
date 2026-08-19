@@ -107,23 +107,7 @@ public class AuthService {
         }
     }
 
-    /**
-     * Authenticate a user and generate a JWT.
-     *
-     * @param loginDto The login credentials.
-     * @return The generated JWT token.
-     */
-//    public String authenticateUser(LoginDto loginDto) {
-//        User user = userRepository.findByEmail(loginDto.getEmail())
-//                .orElseThrow(() -> new IllegalArgumentException("Invalid email or password."));
-//
-//        if (!passwordEncoder.matches(loginDto.getPassword(), user.getPassword())) {
-//            throw new IllegalArgumentException("Invalid email or password.");
-//        }
-//
-//        return jwtUtil.generateToken(user.getEmail());
-//    }
-
+    /** Authenticate a user's credentials, returning the account on success. */
     public User authenticateUser(LoginDto loginDto) {
         User user = userRepository.findByEmail(loginDto.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid email or password."));

@@ -77,13 +77,6 @@ public class JwtUtil {
     /**
      * Extract Email from Token
      */
-//    public String extractEmail(String token) {
-//        return Jwts.parser()
-//                .setSigningKey(SECRET_KEY)
-//                .parseClaimsJws(token)
-//                .getBody()
-//                .getSubject();
-//    }
     public String extractEmail(String token) {
         try {
             return Jwts.parser()
@@ -92,7 +85,7 @@ public class JwtUtil {
                     .getBody()
                     .getSubject();
         } catch (Exception e) {
-            System.err.println("🔴 Error extracting email from token: " + e.getMessage());
+            log.warn("Could not extract email from token: {}", e.getMessage());
             return null; // Return null if token parsing fails
         }
     }
@@ -107,7 +100,7 @@ public class JwtUtil {
                     .getExpiration()
                     .before(new Date());
         } catch (Exception e) {
-            System.err.println("🔴 Error checking token expiration: " + e.getMessage());
+            log.warn("Could not check token expiration: {}", e.getMessage());
             return true; // If there's an issue, assume expired
         }
     }
