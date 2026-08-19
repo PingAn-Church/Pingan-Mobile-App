@@ -67,6 +67,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
   View,
 } from "react-native";
 import { addParticipantToGroup } from "../../service/ChatService";
@@ -346,6 +347,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
     padding: 20,
+    // React Native's SafeAreaView only insets on iOS — on Android it renders as a
+    // plain View, so Cancel and Done sat underneath the status bar. Measure it
+    // instead. (react-native-safe-area-context is installed but unused, and its
+    // hook would need a SafeAreaProvider added at the app root, which would move
+    // layout on every screen for the sake of one modal.)
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 20 : 20,
   },
   header: {
     flexDirection: "row",
