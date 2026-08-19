@@ -57,7 +57,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setApplicationDestinationPrefixes("/app");
 
         registry.enableSimpleBroker("/topic", "/user")
-                .setHeartbeatValue(new long[]{10000, 20000}) // ✅ 10s client -> server, 20s server -> client
+                .setHeartbeatValue(new long[]{10000, 20000}) // [0]=server sends every 10s, [1]=server expects client heartbeats within 20s
                 .setTaskScheduler(messageBrokerTaskScheduler); // ✅ Use built-in TaskScheduler
 
         registry.setUserDestinationPrefix("/user"); // For private messaging

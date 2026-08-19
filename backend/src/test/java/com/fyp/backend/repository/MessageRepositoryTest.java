@@ -358,6 +358,69 @@ class MessageRepositoryTest {
     }
 
     /**
+     * The grouped chat-list unread query must agree with the per-conversation
+     * count it replaced, across every watermark state: never opened, mid-way, and
+     * fully caught up (the last is absent from the grouped result = 0).
+     */
+    @Test
+    void groupedUnreadCountsMatchThePerConversationQuery() {
+        User third = persistUser("third-unread@example.com");
+        PrivateConversation neverOpened = privateConversation(me, third);
+        GroupConversation midway = group("Midway", me, other);
+
+        message(other, "caught up one");
+        Message lastSeen = message(other, "caught up two");
+        markReadUpTo(lastSeen, me); // conversation: fully caught up
+
+        message(neverOpened, "private", third, "n1");
+        message(neverOpened, "private", third, "n2");
+
+        Message groupSeen = message(midway, "group", other, "g1");
+        message(midway, "group", other, "g2");
+        message(midway, "group", me, "my own"); // never unread for me
+        markReadUpTo(groupSeen, me);
+        em.flush();
+
+        List<Long> ids = List.of(conversation.getId(), neverOpened.getId(), midway.getId());
+        java.util.Map<Long, Long> grouped = new java.util.HashMap<>();
+        for (Object[] row : messageRepository.countUnreadByConversationIds(ids, me.getId())) {
+            grouped.put((Long) row[0], (Long) row[1]);
+        }
+
+        for (Long id : ids) {
+            assertEquals(messageRepository.countUnread(id, me.getId()),
+                    grouped.getOrDefault(id, 0L),
+                    "grouped count diverged for conversation " + id);
+        }
+        // And the caught-up conversation really is absent (0), not returned as 0 rows of noise.
+        assertFalse(grouped.containsKey(conversation.getId()));
+    }
+
+    @Test
+    void newestPerConversationReturnsExactlyTheMaxIdMessageAndSkipsEmptyOnes() {
+        User third = persistUser("third-newest@example.com");
+        PrivateConversation empty = privateConversation(me, third);
+        GroupConversation busy = group("Busy", me, other);
+
+        message(other, "old private");
+        Message newestPrivate = message(other, "new private");
+        message(busy, "group", other, "old group");
+        Message newestGroup = message(busy, "group", me, "new group");
+        em.flush();
+
+        List<Long> ids = List.of(conversation.getId(), busy.getId(), empty.getId());
+        List<Message> newest = messageRepository.findNewestPerConversation(ids);
+
+        assertEquals(2, newest.size()); // nothing for the empty conversation
+        java.util.Map<Long, Long> newestIdByConversation = new java.util.HashMap<>();
+        for (Message m : newest) {
+            newestIdByConversation.put(m.getConversation().getId(), m.getId());
+        }
+        assertEquals(newestPrivate.getId(), newestIdByConversation.get(conversation.getId()));
+        assertEquals(newestGroup.getId(), newestIdByConversation.get(busy.getId()));
+    }
+
+    /**
      * The duplicate check the assistant relies on. It has to be asked BEFORE the
      * insert: catching the unique index's violation inside a transaction leaves it
      * marked rollback-only, and the commit then fails regardless.

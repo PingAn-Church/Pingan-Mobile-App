@@ -3,6 +3,7 @@ package com.fyp.backend.service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ import com.fyp.backend.repository.CourseSectionRepository;
 import com.fyp.backend.repository.CourseVideoRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
 import com.fyp.backend.repository.ResourceProgressRepository;
+import com.fyp.backend.repository.UserModuleProgressRepository;
 import com.fyp.backend.repository.UserVideoProgressRepository;
 
 @Service
@@ -39,6 +41,7 @@ public class EnrollmentService {
     @Autowired private CourseResourceRepository courseResourceRepository;
     @Autowired private CourseWishlistRepository wishlistRepository;
     @Autowired private UserVideoProgressRepository videoProgressRepository;
+    @Autowired private UserModuleProgressRepository moduleProgressRepository;
     @Autowired private ResourceProgressRepository resourceProgressRepository;
     @Autowired private ProgressService progressService;
     @Autowired private CourseService courseService;
@@ -83,13 +86,36 @@ public class EnrollmentService {
         enrollments.sort(Comparator.comparing(CourseEnrollment::getLastActivityAt,
                 Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
 
+        // Everything per-course is batched up front — this endpoint used to issue
+        // five queries per enrollment, so the courses hub got slower with every
+        // course a learner picked up.
+        List<Long> courseIds = enrollments.stream()
+                .map(CourseEnrollment::getCourseId)
+                .collect(java.util.stream.Collectors.toList());
+
+        Map<Long, Course> coursesById = new HashMap<>();
+        Map<Long, Long> sectionTotals = new HashMap<>();
+        Map<Long, Long> completedSections = new HashMap<>();
+        Map<Long, Long> completedVideos = new HashMap<>();
+        java.util.Set<Long> wishlisted = new java.util.HashSet<>();
+        if (!courseIds.isEmpty()) {
+            courseRepository.findAllById(courseIds).forEach(c -> coursesById.put(c.getId(), c));
+            sectionRepository.countByCourseIds(courseIds)
+                    .forEach(row -> sectionTotals.put((Long) row[0], (Long) row[1]));
+            moduleProgressRepository.countCompletedByUserIdAndCourseIds(userId, courseIds)
+                    .forEach(row -> completedSections.put((Long) row[0], (Long) row[1]));
+            videoProgressRepository.countCompletedByUserIdAndCourseIds(userId, courseIds)
+                    .forEach(row -> completedVideos.put((Long) row[0], (Long) row[1]));
+            wishlisted.addAll(wishlistRepository.findCourseIdsByUserIdAndCourseIdIn(userId, courseIds));
+        }
+
         List<Map<String, Object>> list = new ArrayList<>();
         int completedCount = 0;
         double progressSum = 0;
         int watchMinutes = 0;
 
         for (CourseEnrollment e : enrollments) {
-            Course course = courseRepository.findById(e.getCourseId()).orElse(null);
+            Course course = coursesById.get(e.getCourseId());
             if (course == null) continue;
 
             Map<String, Object> m = courseService.courseSummaryMap(course);
@@ -99,11 +125,10 @@ public class EnrollmentService {
             m.put("is_completed", e.isCompleted());
             m.put("total_watch_time_minutes", e.getTotalWatchTimeMinutes());
             m.put("last_activity_at", e.getLastActivityAt());
-            long totalSections = progressService.sectionCount(e.getCourseId());
-            m.put("total_sections", totalSections);
-            m.put("completed_sections", progressService.completedSectionCount(userId, e.getCourseId()));
-            m.put("completed_videos", progressService.completedVideoCount(userId, e.getCourseId()));
-            m.put("is_in_wishlist", wishlistRepository.existsByUserIdAndCourseId(userId, e.getCourseId()));
+            m.put("total_sections", sectionTotals.getOrDefault(e.getCourseId(), 0L));
+            m.put("completed_sections", completedSections.getOrDefault(e.getCourseId(), 0L));
+            m.put("completed_videos", completedVideos.getOrDefault(e.getCourseId(), 0L));
+            m.put("is_in_wishlist", wishlisted.contains(e.getCourseId()));
             list.add(m);
 
             if (e.isCompleted()) completedCount++;
@@ -117,7 +142,7 @@ public class EnrollmentService {
         statistics.put("average_progress", enrollments.isEmpty() ? 0
                 : Math.round((progressSum / enrollments.size()) * 100.0) / 100.0);
         statistics.put("total_watch_time_minutes", watchMinutes);
-        statistics.put("wishlist_count", wishlistRepository.findByUserId(userId).size());
+        statistics.put("wishlist_count", wishlistRepository.countByUserId(userId));
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("enrollments", list);

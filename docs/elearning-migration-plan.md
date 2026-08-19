@@ -1,7 +1,11 @@
 # E-Learning Migration Plan — "Shalom" → Pingan Mobile App
 
 Port the e-learning feature set from `source-apps/learning/` (Shalom) into this repo (Pingan).
-This is a **port plan only** — no code is written yet.
+
+> **Status (2026-08): largely implemented.** The learning module lives under
+> `backend/src/main/java/com/fyp/backend/controller/learning/` (+ services/models)
+> and `frontend/src/learning/`. This document is kept as the design record; the
+> "no code is written yet" framing below is historical.
 
 ## Decisions locked in
 

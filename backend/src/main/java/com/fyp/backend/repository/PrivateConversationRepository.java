@@ -26,4 +26,13 @@ public interface PrivateConversationRepository extends JpaRepository<PrivateConv
     @EntityGraph(attributePaths = {"userOne", "userTwo"})
     @Query("SELECT p FROM PrivateConversation p WHERE p.id = :conversationId")
     Optional<PrivateConversation> findWithParticipantsById(@Param("conversationId") Long conversationId);
+
+    /**
+     * Every conversation between this pair, oldest first — a List rather than an
+     * Optional because a database predating the pair-uniqueness migration can hold
+     * duplicates, and the oldest is the one the merge migration keeps.
+     */
+    @Query("SELECT p FROM PrivateConversation p WHERE (p.userOne.id = :a AND p.userTwo.id = :b) "
+            + "OR (p.userOne.id = :b AND p.userTwo.id = :a) ORDER BY p.id ASC")
+    List<PrivateConversation> findByPair(@Param("a") Long a, @Param("b") Long b);
 }

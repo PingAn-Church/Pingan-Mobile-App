@@ -27,6 +27,12 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
     @Autowired
     private UserRepository userRepository;
 
+    // KNOWN LIMITATION (accepted, 2026-08): the access token rides in the handshake
+    // query string because RN WebSocket/SockJS clients cannot set an Authorization
+    // header. Query strings can end up in reverse-proxy access logs, so keep those
+    // logs private. The clean fix — a short-lived single-use connect ticket fetched
+    // over HTTPS — needs a coordinated client+server change and was deliberately
+    // deferred; tokens expire after 15 minutes, which bounds the exposure.
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response, WebSocketHandler wsHandler, Map<String, Object> attributes) {
         URI uri = request.getURI();
@@ -58,7 +64,11 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
                     attributes.put("userEmail", email);
                     attributes.put("userId", user.getId());
                     attributes.put("deviceId", deviceId);
-                    redisService.setUserOnline(email, deviceId);
+                    // Presence is deliberately NOT set here. WebSocketEventListener
+                    // marks the device online on the CONNECT event, where it can
+                    // first ask "was this user online at all?" and broadcast only
+                    // the offline->online transition — setting it during the
+                    // handshake made that question always answer "yes".
                     return true;
                 }
             }

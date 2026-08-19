@@ -29,8 +29,11 @@ export const compareConversations = (a, b) => {
   const pinnedB = isPinnedConversation(b);
   if (pinnedA !== pinnedB) return pinnedA ? -1 : 1;
 
-  const lastA = a.chatHistory?.[a.chatHistory.length - 1];
-  const lastB = b.chatHistory?.[b.chatHistory.length - 1];
+  // The server ships each conversation's newest message as `lastMessage`, so
+  // ordering no longer depends on history having been loaded. Loaded history is
+  // only the fallback for payloads that predate the field.
+  const lastA = a.lastMessage || a.chatHistory?.[a.chatHistory.length - 1];
+  const lastB = b.lastMessage || b.chatHistory?.[b.chatHistory.length - 1];
 
   const timeA = Math.max(
     lastA ? new Date(lastA.timestamp).getTime() : 0,

@@ -57,6 +57,34 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     long countUnread(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
     /**
+     * {@link #countUnread} for a whole chat list in one query instead of one per
+     * conversation. Rows come back as [conversationId, count]; a conversation with
+     * nothing unread is simply absent, so callers default to 0. Same watermark
+     * subquery and FK-column read as the single-conversation form.
+     */
+    @Query("SELECT m.conversation.id, COUNT(m) FROM Message m "
+            + "WHERE m.conversation.id IN :conversationIds AND m.sender.id <> :userId "
+            + "AND m.id > COALESCE((SELECT r.lastReadMessageId FROM ConversationReadState r "
+            + "WHERE r.conversationId = m.conversation.id AND r.userId = :userId), 0) "
+            + "GROUP BY m.conversation.id")
+    List<Object[]> countUnreadByConversationIds(
+            @Param("conversationIds") java.util.Collection<Long> conversationIds,
+            @Param("userId") Long userId);
+
+    /**
+     * The newest message of each conversation, one query for the whole chat list —
+     * this is what the list rows preview, so the client no longer has to fetch a
+     * page of history per conversation just to draw its own list. Sender is
+     * join-fetched: every preview names its sender. Empty conversations simply
+     * return no row.
+     */
+    @Query("SELECT m FROM Message m JOIN FETCH m.sender WHERE m.id IN "
+            + "(SELECT MAX(m2.id) FROM Message m2 WHERE m2.conversation.id IN :conversationIds "
+            + "GROUP BY m2.conversation.id)")
+    List<Message> findNewestPerConversation(
+            @Param("conversationIds") java.util.Collection<Long> conversationIds);
+
+    /**
      * Conversations holding an unread message that calls this user out by name.
      *
      * One query for the whole chat list rather than one per row — the list is

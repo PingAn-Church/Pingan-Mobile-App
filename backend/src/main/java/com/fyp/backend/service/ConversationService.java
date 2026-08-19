@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import com.fyp.backend.dto.ConversationDto;
 import com.fyp.backend.dto.GroupConversationDto;
+import com.fyp.backend.dto.LastMessageDto;
 import com.fyp.backend.dto.PrivateConversationDto;
 import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.*;
@@ -188,17 +189,68 @@ public class ConversationService {
                 .map(ConversationMute::getConversationId)
                 .collect(Collectors.toSet());
 
-        // Attach a server-computed unread count so the client no longer needs to load
-        // every message just to render unread badges.
         // One query covers the whole list; being mentioned is rare enough that this
         // usually comes back empty.
         Set<Long> mentionedIn = new java.util.HashSet<>(
                 messageRepository.findConversationIdsWithUnreadMention(userId));
 
+        List<Long> conversationIds = conversations.stream()
+                .map(ConversationDto::getConversationId)
+                .collect(Collectors.toList());
+
+        // Server-computed unread badges, one grouped query for the whole list —
+        // this used to be a COUNT per conversation, which grew with every chat a
+        // person belonged to. Conversations absent from the result have 0 unread.
+        Map<Long, Long> unreadByConversation = new java.util.HashMap<>();
+        if (!conversationIds.isEmpty()) {
+            for (Object[] row : messageRepository.countUnreadByConversationIds(conversationIds, userId)) {
+                unreadByConversation.put((Long) row[0], (Long) row[1]);
+            }
+        }
+
+        // Newest message per conversation, batched the same way. This is what lets
+        // the client draw list previews without prefetching a page of history for
+        // every conversation on every start.
+        Map<Long, Message> newestByConversation = new java.util.HashMap<>();
+        if (!conversationIds.isEmpty()) {
+            for (Message newest : messageRepository.findNewestPerConversation(conversationIds)) {
+                // getId() on the conversation proxy reads the FK without initialising it.
+                newestByConversation.put(newest.getConversation().getId(), newest);
+            }
+        }
+
+        // Receipts, but only for the newest messages of PRIVATE conversations —
+        // groups carry none by design (read state there is a watermark).
+        Set<Long> privateConversationIds = conversations.stream()
+                .filter(c -> "private".equals(c.getConversationType()))
+                .map(ConversationDto::getConversationId)
+                .collect(Collectors.toSet());
+        List<Long> privateNewestMessageIds = newestByConversation.entrySet().stream()
+                .filter(e -> privateConversationIds.contains(e.getKey()))
+                .map(e -> e.getValue().getId())
+                .collect(Collectors.toList());
+        Map<Long, Map<String, String>> deliveryByMessage = new java.util.HashMap<>();
+        if (!privateNewestMessageIds.isEmpty()) {
+            for (MessageDeliveryStatus status : messageDeliveryStatusRepository
+                    .findByMessageIdIn(privateNewestMessageIds)) {
+                deliveryByMessage
+                        .computeIfAbsent(status.getMessage().getId(), ignored -> new java.util.HashMap<>())
+                        .put(String.valueOf(status.getUser().getId()), status.getStatus());
+            }
+        }
+
+        // Reported-content masking in the previews follows the viewer, like history.
+        User viewer = userRepository.findById(userId).orElse(null);
+
         for (ConversationDto c : conversations) {
-            c.setUnreadCount(messageRepository.countUnread(c.getConversationId(), userId));
+            c.setUnreadCount(unreadByConversation.getOrDefault(c.getConversationId(), 0L));
             c.setMuted(mutedConversationIds.contains(c.getConversationId()));
             c.setMentioned(mentionedIn.contains(c.getConversationId()));
+            Message newest = newestByConversation.get(c.getConversationId());
+            if (newest != null) {
+                c.setLastMessage(new LastMessageDto(newest, viewer,
+                        deliveryByMessage.getOrDefault(newest.getId(), Map.of())));
+            }
             // The app-level group ships no roster, so its size has to be counted
             // rather than read off a list that isn't there.
             if (c.isAppLevel()) {
@@ -299,11 +351,9 @@ public class ConversationService {
         throw new IllegalArgumentException("Conversation not found");
     }
 
-//    @Transactional
 
     @Transactional
     public ConversationDto createGroupConversation(ConversationDto conversationDto, Long creatorId) {
-        System.out.println("🚀 [GroupCreate] Request received for group: " + conversationDto.getGroupName());
 
         User creator = requireChatEligible(creatorId, "User not found");
 
@@ -325,14 +375,11 @@ public class ConversationService {
         groupConversation.setUpdatedAt(now());
 
         groupConversation = groupConversationRepository.save(groupConversation);
-        System.out.println("✅ [GroupCreate] Group saved with ID = " + groupConversation.getId());
 
         groupConversation.setAdmins(new ArrayList<>());
         groupConversation.getAdmins().add(creator);
         groupConversationRepository.save(groupConversation);
 
-        System.out.println("👥 [GroupCreate] Final participants in group: " +
-                groupConversation.getParticipants().stream().map(User::getId).toList());
 
         ConversationDto response = new ConversationDto(groupConversation);
 
@@ -352,9 +399,6 @@ public class ConversationService {
             }
         });
 
-        System.out.println("🧪 [GroupCreate] About to return. Persisted group ID = " + groupConversation.getId());
-        System.out.println("🧪 [GroupCreate] Participants in saved entity: " +
-                groupConversation.getParticipants().stream().map(User::getId).toList());
 
         return response;
     }
@@ -371,6 +415,19 @@ public class ConversationService {
 
         Long otherParticipantId = conversationDto.getParticipants().get(0);
         User otherUser = requireChatEligible(otherParticipantId, "Other participant not found");
+
+        // One conversation per pair: if these two already have one, hand it back
+        // instead of splitting their history across a duplicate. Both parties
+        // already hold the conversation, so no WS announcement is re-sent. A race
+        // between two simultaneous creates is caught by the unique pair index the
+        // startup migration installs; per the pattern documented in
+        // MessageRepository#existsByRespondsToMessageId, the violation is not
+        // caught in-transaction — the client retries and then receives this branch.
+        List<PrivateConversation> existing =
+                privateConversationRepository.findByPair(creatorId, otherParticipantId);
+        if (!existing.isEmpty()) {
+            return new ConversationDto(existing.get(0));
+        }
 
         // Create a private conversation
         PrivateConversation privateConversation = new PrivateConversation();
@@ -458,8 +515,6 @@ public class ConversationService {
             }
         });
 
-//        // ✅ Notify existing participants
-
         return updatedConversation;
     }
 
@@ -524,14 +579,10 @@ public class ConversationService {
             }
         });
 
-//        // Notify remaining participants
-
         return updatedConversation;
     }
 
-//    @Transactional
 
-//    @Transactional
 
     @Transactional
     public ConversationDto leaveGroup(Long conversationId, Long currentUserId) {
@@ -622,14 +673,20 @@ public class ConversationService {
 
         rejectAppGroupRosterEdit(groupConversation);
 
-        User userToAdd = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        User currentUser = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Current user not found"));
+        // Same eligibility bar as every other path that grants someone standing in
+        // a conversation — an unverified or deactivated account cannot be promoted.
+        User userToAdd = requireChatEligible(userId, "User not found");
+        User currentUser = requireChatEligible(currentUserId, "Current user not found");
 
         // Ensure only admins can add new admins
         if (!groupConversation.getAdmins().contains(currentUser)) {
             throw new IllegalArgumentException("Only admins can add new admins.");
+        }
+
+        // Admin implies member: promoting an outsider would give them authority over
+        // a group they cannot even read, and the roster fan-out would never reach them.
+        if (!groupConversation.getParticipants().contains(userToAdd)) {
+            throw new IllegalArgumentException("User must be a participant of the group before becoming an admin.");
         }
 
         // Prevent adding the same user as an admin
@@ -657,14 +714,6 @@ public class ConversationService {
                 }
             }
         });
-
-        // Notify all participants about the new admin (WebSocket)
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/group-admin-updates", updatedConversation
-//            );
-//        }
 
         return updatedConversation;
     }
@@ -721,15 +770,6 @@ public class ConversationService {
             }
         });
 
-        // 📡 Step 6: Notify all participants via WebSocket
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/group-admin-updates",
-//                    updatedConversation
-//            );
-//        }
-
         return updatedConversation;
     }
 
@@ -765,12 +805,6 @@ public class ConversationService {
                 }
             }
         });
-
-//        for (Long participantId : updated.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(), "/queue/group-icon-updates", updated
-//            );
-//        }
 
         return updated;
     }
@@ -821,7 +855,6 @@ public class ConversationService {
         ossCleanupService.deleteAfterCommit(objectUrls);
     }
 
-//    @Transactional
 
     @Transactional
     public void deleteConversation(Long conversationId, Long requestingUserId) {
@@ -877,17 +910,6 @@ public class ConversationService {
             }
         });
 
-        // ✅ Notify all participants via /queue/conversations
-//        for (Long userId : participantIds) {
-//            messagingTemplate.convertAndSendToUser(
-//                    userId.toString(),
-//                    "/queue/conversations",
-//                    Map.of(
-//                            "conversationId", conversationId,
-//                            "deleted", true
-//                    )
-//            );
-//        }
     }
 
 }

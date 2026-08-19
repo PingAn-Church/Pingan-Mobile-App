@@ -197,14 +197,18 @@ export function ForgotPasswordPage() {
 
     setSubmitting(true);
     try {
+      // Sends the verification code; the next screen collects it with the new
+      // password. Same navigation either way — an unknown email gets the same
+      // journey so the form can't be used to test which addresses exist.
       await requestPasswordReset(email);
-      showAlert(i18n.t("success"), i18n.t("sendNewPasswordToEmail"), [
-        {
-          text: i18n.t("ok"),
-          onPress: () => setEmail(""),
-        },
-      ]);
+      navigation.navigate("ResetPassword", { email });
     } catch (error) {
+      if (error?.response?.status === 429) {
+        // Cooldown active — a code is already out for this email, so the code
+        // screen is still the right place to be.
+        navigation.navigate("ResetPassword", { email });
+        return;
+      }
       // Distinguish "couldn't reach the server" from a server-side failure.
       const messageKey = error?.response ? "somethingWentWrong" : "networkError";
       showAlert(i18n.t("error"), i18n.t(messageKey), [{ text: i18n.t("ok") }]);

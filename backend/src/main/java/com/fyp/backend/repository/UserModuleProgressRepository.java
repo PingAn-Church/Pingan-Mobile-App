@@ -16,6 +16,15 @@ public interface UserModuleProgressRepository extends JpaRepository<UserModulePr
 
     long countByUserIdAndCourseIdAndIsCompletedTrue(Long userId, Long courseId);
 
+    /** Completed-section counts for many courses at once (enrollment listing). */
+    @org.springframework.data.jpa.repository.Query(
+            "select p.courseId, count(p) from UserModuleProgress p "
+            + "where p.userId = :userId and p.courseId in :courseIds and p.isCompleted = true "
+            + "group by p.courseId")
+    List<Object[]> countCompletedByUserIdAndCourseIds(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("courseIds") List<Long> courseIds);
+
     long countByUserId(Long userId);
 
     void deleteByCourseId(Long courseId);

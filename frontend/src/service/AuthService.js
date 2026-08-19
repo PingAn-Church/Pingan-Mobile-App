@@ -54,9 +54,11 @@ export const verifyCode = async (email, code) => {
     );
     if (response.status === 200) {
       const { accessToken, refreshToken, user } = response.data;
-      await AsyncStorage.setItem("accessToken", accessToken);
-      await AsyncStorage.setItem("refreshToken", refreshToken);
-      await AsyncStorage.setItem("user", JSON.stringify(user));
+      await AsyncStorage.multiSet([
+        ["accessToken", accessToken],
+        ["refreshToken", refreshToken],
+        ["user", JSON.stringify(user)],
+      ]);
       return { success: true, user };
     }
     return { success: false };
@@ -83,10 +85,12 @@ export const loginUser = async (loginDetails) => {
     if (response.status === 200) {
       const { accessToken, refreshToken, user } = response.data;
 
-      // Save tokens and user info to AsyncStorage
-      await AsyncStorage.setItem("accessToken", accessToken);
-      await AsyncStorage.setItem("refreshToken", refreshToken);
-      await AsyncStorage.setItem("user", JSON.stringify(user));
+      // Save tokens and user info in one atomic write.
+      await AsyncStorage.multiSet([
+        ["accessToken", accessToken],
+        ["refreshToken", refreshToken],
+        ["user", JSON.stringify(user)],
+      ]);
 
       return { success: true, user };  // Return success and user info
     }
@@ -139,13 +143,21 @@ export const logoutUser = async () => {
   }
 };
 
+// Step 1 of the code-confirmed reset: asks the backend to email a verification
+// code. Succeeds identically whether or not the email has an account.
 export const requestPasswordReset = async (email) => {
   try {
     await axios.post(apiUrl(`/auth/reset-password`), { email });
   } catch (error) {
-    console.error("Error resetting password:", error);
+    console.error("Error requesting password reset:", error);
     throw error;
   }
+};
+
+// Step 2: submits the emailed code together with the new password. Throws on
+// wrong/expired code (400), lockout or cooldown (429).
+export const confirmPasswordReset = async (email, code, newPassword) => {
+  await axios.post(apiUrl(`/auth/confirm-password-reset`), { email, code, newPassword });
 };
 
 export const changePassword = async (currentPassword, newPassword) => {

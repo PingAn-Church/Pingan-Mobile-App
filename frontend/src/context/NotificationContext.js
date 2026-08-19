@@ -7,6 +7,7 @@ useRef,
 } from "react";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { registerForPushNotificationsAsync } from "../utils/registerForPushNotificationsAsync";
 import { registerPushTokenForLogin, unregisterPushToken, deactivatePushToken } from "../service/PushNotificationService";
 import { useNavigation } from "@react-navigation/native";
@@ -110,10 +111,15 @@ export const NotificationProvider = ({ children }) => {
         const pushToken = await registerForPushNotificationsAsync();  // Get Expo push token
         setExpoPushToken(pushToken);  // Set token in state
         const deviceType = Platform.OS === "android" ? "android" : "ios"; // Dynamically determine device type
-        if (deviceId) {
-            await registerPushTokenForLogin(pushToken, deviceType, deviceId);  // Register token with backend for login
+        // Storage is the source of truth for deviceId (created at app init, and the
+        // login call itself read it from there). The context state snapshot can lag
+        // behind — relying on it used to silently skip backend registration, leaving
+        // the session without pushes.
+        const storedDeviceId = (await AsyncStorage.getItem("deviceId")) || deviceId;
+        if (!storedDeviceId) {
+            throw new Error("Device ID is not available for push registration");
         }
-        // await registerPushTokenForLogin(pushToken, deviceType);  // Register token with backend for login
+        await registerPushTokenForLogin(pushToken, deviceType, storedDeviceId);  // Register token with backend for login
         } catch (error) {
         // Nothing renders `error`, so without this a device that never obtained a
         // token just silently receives no pushes for the whole session.
