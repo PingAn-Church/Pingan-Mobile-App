@@ -90,28 +90,34 @@ export const ChatProvider = ({ children }) => {
         ? prefetchedConversations
         : await getConversations(user.id);
 
-      // Subscribe before loading history. Messages committed after this point
-      // arrive live, while the REST page covers everything committed before it.
+      // Messages committed after this point arrive live on the topic; anything
+      // older is covered by the history page a conversation loads when opened.
       fetched.forEach((conv) => {
         if (conv.conversationType === "group") {
           subscribeToConversation(conv.conversationId);
         }
       });
 
-      const enriched = await Promise.all(
-        fetched.map(async (conv) => {
-          // Load only the newest page; older messages stream in on scroll-back.
-          const page = await getChatHistory(conv.conversationId, conv.conversationType, null, 30);
+      if (socialSessionKeyRef.current !== requestedSessionKey) return;
+      // History is loaded lazily per conversation (see ensureHistoryLoaded) —
+      // the list itself renders from the server-computed lastMessage/unreadCount,
+      // so app start costs ONE request instead of one per conversation, and a
+      // backend restart no longer triggers a reconnect stampede of history calls.
+      // A refresh keeps whatever history is already loaded in this session.
+      setConversations((prev) => {
+        const prevById = new Map(prev.map((c) => [String(c.conversationId), c]));
+        return fetched.map((conv) => {
+          const existing = prevById.get(String(conv.conversationId));
+          if (!existing?.historyLoaded) return conv;
           return {
             ...conv,
-            chatHistory: page?.messages || [],
-            oldestCursor: page?.nextCursor ?? null,
-            hasMoreHistory: Boolean(page?.hasMore),
+            historyLoaded: true,
+            chatHistory: existing.chatHistory,
+            oldestCursor: existing.oldestCursor,
+            hasMoreHistory: existing.hasMoreHistory,
           };
-        })
-      );
-      if (socialSessionKeyRef.current !== requestedSessionKey) return;
-      setConversations(enriched);
+        });
+      });
     } catch (err) {
       console.error("❌ Failed to fetch conversations:", err);
     } finally {
@@ -127,6 +133,50 @@ export const ChatProvider = ({ children }) => {
 
   // Tracks in-flight scroll-back loads so concurrent onEndReached calls coalesce.
   const loadingOlderRef = useRef(new Set());
+
+  // Tracks in-flight first-page loads so a re-rendering ChatPage doesn't refetch.
+  const loadingHistoryRef = useRef(new Set());
+
+  /**
+   * Loads a conversation's newest history page the first time it is opened.
+   *
+   * `historyLoaded` — not the presence of chatHistory — is the signal: live
+   * WebSocket messages already accumulate in chatHistory before any page was
+   * fetched, and they must survive the merge (dedupe keeps one copy).
+   * After seeding a private conversation, delivery receipts go out for the page
+   * ("delivered on open"); live messages keep receipting via handleWebSocketMessage.
+   */
+  const ensureHistoryLoaded = async (conversationId, conversationType) => {
+    const key = String(conversationId);
+    if (loadingHistoryRef.current.has(key)) return;
+    loadingHistoryRef.current.add(key);
+    try {
+      const page = await getChatHistory(conversationId, conversationType, null, 30);
+      const messages = page?.messages || [];
+      let seeded = null;
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (String(c.conversationId) !== key) return c;
+          if (c.historyLoaded) return c; // someone else won the race
+          seeded = {
+            ...c,
+            historyLoaded: true,
+            chatHistory: dedupeMessagesById([...messages, ...(c.chatHistory || [])]),
+            oldestCursor: page?.nextCursor ?? null,
+            hasMoreHistory: Boolean(page?.hasMore),
+          };
+          return seeded;
+        })
+      );
+      if (seeded && seeded.conversationType === "private") {
+        markMessagesAsDelivered(seeded);
+      }
+    } catch (err) {
+      console.error("❌ Failed to load conversation history:", err);
+    } finally {
+      loadingHistoryRef.current.delete(key);
+    }
+  };
 
   // Prepend the next older page of a conversation's history (cursor pagination).
   const loadOlderMessages = async (conversationId, conversationType, before) => {
@@ -220,9 +270,23 @@ export const ChatProvider = ({ children }) => {
           });
         }
 
+        // Keep the list row's preview current. The incoming payload has the same
+        // field shape as the server's lastMessage, so it can stand in directly:
+        // replace on a newer (or same, i.e. edited) message; on a delete of the
+        // current preview, fall back to the loaded tail.
+        let lastMessage = conv.lastMessage;
+        if (message.deleted) {
+          if (lastMessage?.messageId === message.messageId) {
+            lastMessage = chatHistory.length ? chatHistory[chatHistory.length - 1] : null;
+          }
+        } else if (!lastMessage || Number(message.messageId) >= Number(lastMessage.messageId)) {
+          lastMessage = message;
+        }
+
         return {
           ...conv,
           chatHistory,
+          lastMessage,
           unreadCount: (conv.unreadCount || 0) + (isNewIncoming ? 1 : 0),
           mentioned: Boolean(conv.mentioned || mentionsCurrentUser),
         };
@@ -352,10 +416,13 @@ export const ChatProvider = ({ children }) => {
 
     if (!enriched.chatHistory) {
       try {
+        // A brand-new conversation is usually opened right away, so one page here
+        // spares the open a fetch; it also feeds markMessagesAsDelivered below.
         const page = await getChatHistory(enriched.conversationId, enriched.conversationType, null, 30);
         enriched.chatHistory = page?.messages || [];
         enriched.oldestCursor = page?.nextCursor ?? null;
         enriched.hasMoreHistory = Boolean(page?.hasMore);
+        enriched.historyLoaded = true;
       } catch (err) {
         console.error("❌ Failed to enrich chat history:", err);
         enriched.chatHistory = [];
@@ -512,6 +579,7 @@ export const ChatProvider = ({ children }) => {
         setConversations,
         setConversationMuted,
         fetchInitialData,
+        ensureHistoryLoaded,
         loadOlderMessages,
         handleWebSocketMessage,
         handleUserStatusUpdate,

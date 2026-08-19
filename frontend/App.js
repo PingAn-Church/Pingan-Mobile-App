@@ -14,6 +14,7 @@ import ChatPage from "./src/pages/Social/ChatPage"; // Assuming ChatPage is in a
 import RegisterPage from "./src/pages/Auth/RegisterPage"; // Assuming RegisterPage is in another file
 import VerificationCodePage from "./src/pages/Auth/VerificationCodePage";
 import LoginPage, { ForgotPasswordPage } from "./src/pages/Auth/LoginPage";
+import ResetPasswordPage from "./src/pages/Auth/ResetPasswordPage";
 import ProfilePage, {
   ManageApplicationsPage,
   ChangePasswordPage,
@@ -348,6 +349,7 @@ const PUBLIC_ROUTES = new Set([
   "Register",
   "VerificationCode",
   "ForgotPassword",
+  "ResetPassword",
 ]);
 
 const GUEST_ROUTES = new Set([
@@ -371,6 +373,7 @@ const ROOT_BACK_FALLBACKS = {
   Register: "Welcome",
   VerificationCode: "Register",
   ForgotPassword: "Login",
+  ResetPassword: "ForgotPassword",
   ThreadHomePage: CHAT_LIST_ROUTE,
   ThreadDetail: "ThreadHomePage",
   CreateThread: "ThreadHomePage",
@@ -662,6 +665,10 @@ export default function App() {
                   <Stack.Screen
                     name="ForgotPassword"
                     component={ForgotPasswordPage}
+                  />
+                  <Stack.Screen
+                    name="ResetPassword"
+                    component={ResetPasswordPage}
                   />
                   <Stack.Screen
                     name="ChangePassword"

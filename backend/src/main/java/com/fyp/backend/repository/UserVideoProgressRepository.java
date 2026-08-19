@@ -16,6 +16,19 @@ public interface UserVideoProgressRepository extends JpaRepository<UserVideoProg
 
     long countByUserIdAndVideoIdInAndIsCompletedTrue(Long userId, List<Long> videoIds);
 
+    /**
+     * Completed-video counts per course for many courses at once. Progress rows
+     * only store videoId, so the course comes from joining CourseVideo.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "select v.courseId, count(p) from UserVideoProgress p, CourseVideo v "
+            + "where p.videoId = v.id and p.userId = :userId "
+            + "and v.courseId in :courseIds and p.isCompleted = true "
+            + "group by v.courseId")
+    List<Object[]> countCompletedByUserIdAndCourseIds(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("courseIds") List<Long> courseIds);
+
     long countByUserId(Long userId);
 
     void deleteByVideoIdIn(List<Long> videoIds);

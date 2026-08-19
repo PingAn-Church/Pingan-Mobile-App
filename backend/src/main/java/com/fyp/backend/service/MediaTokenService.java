@@ -8,6 +8,8 @@ import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,8 @@ import io.github.cdimascio.dotenv.Dotenv;
  */
 @Service
 public class MediaTokenService {
+
+    private static final Logger log = LoggerFactory.getLogger(MediaTokenService.class);
 
     /** Matches the 60-minute expiry the OSS presigned download URLs used. */
     public static final long TTL_SECONDS = 60 * 60;
@@ -49,7 +53,9 @@ public class MediaTokenService {
             configured = jwtSecretProperty;
         }
         if (configured == null || configured.isBlank()) {
-            configured = "KxuYGk9vMEwse2p0NFhvNzlRc3ZTcE1PeXNBMjRTdFE=";
+            configured = com.fyp.backend.util.JwtUtil.DEV_DEFAULT_SECRET;
+            log.error("Neither MEDIA_TOKEN_SECRET nor JWT_SECRET is set - media URLs are "
+                    + "signed with the built-in dev secret. NEVER run production this way.");
         }
         this.secret = configured.getBytes(StandardCharsets.UTF_8);
     }

@@ -18,7 +18,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +28,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class PushNotificationService {
+
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(PushNotificationService.class);
 
     @Autowired
     private PushTokenRepository pushTokenRepository;
@@ -48,6 +50,10 @@ public class PushNotificationService {
     @Autowired
     private AdminAlertService adminAlertService;
 
+    // Only used for the best-effort push-receipt queue; never on the hot path.
+    @Autowired
+    private RedisService redisService;
+
     /**
      * Tags the admin "someone just registered" push. Shares the conversationType
      * field with chat and learning pushes; the app routes on it (see
@@ -59,7 +65,18 @@ public class PushNotificationService {
 
     // Reused across sends — RestTemplate is thread-safe once built, and a new one
     // per device meant a fresh converter/connection setup for every notification.
-    private RestTemplate restTemplate = new RestTemplate();
+    // Timeouts are mandatory: a hung Expo call would otherwise pin the calling
+    // request thread, or a Rabbit consumer thread through its whole retry budget.
+    // Non-final on purpose — tests inject a mock into this field.
+    private RestTemplate restTemplate = buildRestTemplate();
+
+    private static RestTemplate buildRestTemplate() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        return new RestTemplate(factory);
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -72,30 +89,42 @@ public class PushNotificationService {
         // Check if the token already exists for this user and deviceId
         Optional<PushToken> existingPushToken = pushTokenRepository.findByUserIdAndTokenAndDeviceId(userId, token, deviceId);
 
-        System.out.println("EXISTS??" + existingPushToken.isPresent());
-
+        PushToken result;
         if (existingPushToken.isPresent()) {
             PushToken pushToken = existingPushToken.get();
             // If the token is inactive, reactivate it
             if (!pushToken.isActive()) {
                 pushToken.setActive(true);
                 pushToken.setDeviceType(deviceType);  // Update device type if needed
-                pushToken.setDeviceId(deviceId);  // Update deviceId if needed
-                return pushTokenRepository.save(pushToken);
+                result = pushTokenRepository.save(pushToken);
+            } else {
+                // If active, simply return the existing token
+                result = pushToken;
             }
-            // If active, simply return the existing token
-            return pushToken;
+        } else {
+            // If the token doesn't exist, create a new PushToken and set it active
+            PushToken pushToken = new PushToken();
+            pushToken.setUser(user);
+            pushToken.setToken(token);
+            pushToken.setDeviceType(deviceType);
+            pushToken.setDeviceId(deviceId);  // Store the deviceId
+            pushToken.setActive(true);  // Active after login
+
+            result = pushTokenRepository.save(pushToken);
         }
 
-        // If the token doesn't exist, create a new PushToken and set it active
-        PushToken pushToken = new PushToken();
-        pushToken.setUser(user);
-        pushToken.setToken(token);
-        pushToken.setDeviceType(deviceType);
-        pushToken.setDeviceId(deviceId);  // Store the deviceId
-        pushToken.setActive(true);  // Active after login
+        // Expo tokens rotate. Whatever other tokens this device registered before
+        // are dead the moment a new one arrives — left active they double-send
+        // until the daily cleanup notices the session is gone (which it never does
+        // while the user stays logged in).
+        for (PushToken other : pushTokenRepository.findByUserIdAndDeviceId(userId, deviceId)) {
+            if (other.isActive() && !other.getToken().equals(token)) {
+                other.setActive(false);
+                pushTokenRepository.save(other);
+            }
+        }
 
-        return pushTokenRepository.save(pushToken);
+        return result;
     }
 
     // Deactivate a push token (e.g., for logging out or user preferences)
@@ -116,21 +145,6 @@ public class PushNotificationService {
     public void unregisterPushToken(Long userId, String token) {
         pushTokenRepository.deleteByUserIdAndToken(userId, token);
     }
-
-    // Send push notifications to all devices associated with the user
-//    public void sendPushNotification(Long userId, String message) {
-//        List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
-//
-//        // Use a push notification service to send notifications to the tokens (e.g., Firebase, Expo)
-//        for (PushToken pushToken : tokens) {
-//            if (pushToken.isActive()) {
-//                // Call your push notification service to send the message
-//                // Example: sendToDevice(pushToken.getToken(), message);
-//            }
-//        }
-//    }
-
-//    // Send push notifications to all devices associated with the user
 
     /**
      * Sends a learning-related push (enrolment, quiz result, course completion,
@@ -290,17 +304,58 @@ public class PushNotificationService {
             }
         }
 
+        // Sub-batches retry locally, and the whole task is only rethrown for Rabbit
+        // redelivery when NOTHING was delivered — a redelivered task that had partly
+        // succeeded would re-send the successful sub-batches as duplicate
+        // notifications. Total failure is the one case where a replay cannot duplicate.
+        int sentPayloads = 0;
+        int failedPayloads = 0;
         for (int from = 0; from < payloads.size(); from += 100) {
             int to = Math.min(from + 100, payloads.size());
-            sendPushBatch(payloads.subList(from, to));
+            List<Map<String, Object>> chunk = payloads.subList(from, to);
+            if (sendChunkWithRetry(chunk)) {
+                sentPayloads += chunk.size();
+            } else {
+                failedPayloads += chunk.size();
+            }
+        }
+        if (failedPayloads > 0 && sentPayloads == 0) {
+            throw new IllegalStateException(
+                    "Expo push batch failed entirely (" + failedPayloads + " payloads)");
+        }
+        if (failedPayloads > 0) {
+            log.warn("Partial Expo push failure: {} sent, {} dropped after local retries",
+                    sentPayloads, failedPayloads);
         }
     }
 
     /**
-     * Drops recipients who muted this conversation. Only chat pushes are
-     * filtered — learning/quiz pushes reuse conversationId for other ids and
-     * must never be muted by a conversation setting.
+     * Sends one Expo sub-batch with a short local retry (this runs on a Rabbit
+     * listener thread, so the backoff stays in the hundreds of milliseconds).
+     * Returns false once attempts are exhausted rather than throwing, so one bad
+     * sub-batch cannot force the whole task into redelivery.
      */
+    private boolean sendChunkWithRetry(List<Map<String, Object>> chunk) {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                sendPushBatch(chunk);
+                return true;
+            } catch (Exception e) {
+                if (attempt == 3) {
+                    log.error("Expo sub-batch failed after {} attempts: {}", attempt, e.getMessage());
+                    return false;
+                }
+                try {
+                    Thread.sleep(250L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * True only for real chat pushes. Learning events reuse conversationId to carry
      * unrelated ids (course, quiz), so the type has to be checked alongside it —
@@ -399,7 +454,7 @@ public class PushNotificationService {
                     EXPO_PUSH_URL, new HttpEntity<>(payload, headers), String.class);
             logDeliveryProblems(token, response);
         } catch (Exception e) {
-            System.err.println("❌ Expo push failed for " + maskToken(token) + ": " + e.getMessage());
+            log.error("Expo push failed for {}: {}", maskToken(token), e.getMessage());
         }
     }
 
@@ -467,30 +522,53 @@ public class PushNotificationService {
         return payload;
     }
 
-    private void sendPushBatch(Collection<Map<String, Object>> payloads) {
+    /** Expo's ticket/receipt error code for "this token belongs to an uninstalled app". */
+    static final String DEVICE_NOT_REGISTERED = "DeviceNotRegistered";
+
+    private void sendPushBatch(List<Map<String, Object>> payloads) {
         if (payloads == null || payloads.isEmpty()) return;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         String response = restTemplate.postForObject(
                 EXPO_PUSH_URL, new HttpEntity<>(payloads, headers), String.class);
-        logBatchDeliveryProblems(response);
+        logBatchDeliveryProblems(response, payloads);
     }
 
-    private void logBatchDeliveryProblems(String response) {
+    /**
+     * Expo returns tickets in request order, so ticket i belongs to payloads[i] —
+     * that positional link is the only way back from a batch ticket to its token.
+     * DeviceNotRegistered retires the token immediately (Expo's policy: keeping
+     * sending to dead tokens risks the whole sender being throttled). Successful
+     * tickets are queued so PushReceiptJob can later catch the failures that only
+     * show up in receipts, not tickets.
+     */
+    private void logBatchDeliveryProblems(String response, List<Map<String, Object>> payloads) {
         if (response == null || response.isBlank()) return;
         try {
             JsonNode root = objectMapper.readTree(response);
             JsonNode data = root.path("data");
             if (!data.isArray()) return;
-            for (JsonNode ticket : data) {
-                if (!"ok".equals(ticket.path("status").asText())) {
-                    System.err.println("❌ Expo batch ticket error: "
-                            + ticket.path("message").asText() + " ("
-                            + ticket.path("details").path("error").asText() + ")");
+            for (int i = 0; i < data.size(); i++) {
+                JsonNode ticket = data.get(i);
+                String token = i < payloads.size()
+                        ? String.valueOf(payloads.get(i).get("to"))
+                        : null;
+                if ("ok".equals(ticket.path("status").asText())) {
+                    String ticketId = ticket.path("id").asText("");
+                    if (!ticketId.isEmpty() && token != null) {
+                        enqueueReceiptQuietly(ticketId, token);
+                    }
+                    continue;
+                }
+                String errorCode = ticket.path("details").path("error").asText();
+                log.warn("Expo batch ticket error for {}: {} ({})", maskToken(token),
+                        ticket.path("message").asText(), errorCode);
+                if (DEVICE_NOT_REGISTERED.equals(errorCode) && token != null) {
+                    deactivateDeadToken(token);
                 }
             }
         } catch (Exception unparseable) {
-            System.err.println("⚠️ Unreadable Expo batch response");
+            log.warn("Unreadable Expo batch response");
         }
     }
 
@@ -505,17 +583,47 @@ public class PushNotificationService {
             JsonNode root = objectMapper.readTree(response);
             JsonNode errors = root.path("errors");
             if (errors.isArray() && !errors.isEmpty()) {
-                System.err.println("❌ Expo rejected push for " + maskToken(token) + ": " + errors);
+                log.warn("Expo rejected push for {}: {}", maskToken(token), errors);
                 return;
             }
             JsonNode ticket = root.path("data");
-            if (ticket.isObject() && !"ok".equals(ticket.path("status").asText())) {
-                System.err.println("❌ Expo ticket error for " + maskToken(token) + ": "
-                        + ticket.path("message").asText()
-                        + " (" + ticket.path("details").path("error").asText() + ")");
+            if (ticket.isObject()) {
+                if (!"ok".equals(ticket.path("status").asText())) {
+                    String errorCode = ticket.path("details").path("error").asText();
+                    log.warn("Expo ticket error for {}: {} ({})", maskToken(token),
+                            ticket.path("message").asText(), errorCode);
+                    if (DEVICE_NOT_REGISTERED.equals(errorCode)) {
+                        deactivateDeadToken(token);
+                    }
+                } else {
+                    String ticketId = ticket.path("id").asText("");
+                    if (!ticketId.isEmpty()) {
+                        enqueueReceiptQuietly(ticketId, token);
+                    }
+                }
             }
         } catch (Exception unparseable) {
-            System.err.println("⚠️ Unreadable Expo response for " + maskToken(token) + ": " + response);
+            log.warn("Unreadable Expo response for {}: {}", maskToken(token), response);
+        }
+    }
+
+    /** Cleanup must never break a send — a failed deactivation just logs. */
+    private void deactivateDeadToken(String token) {
+        try {
+            int retired = pushTokenRepository.deactivateByToken(token);
+            if (retired > 0) {
+                log.info("Retired dead push token {} (DeviceNotRegistered)", maskToken(token));
+            }
+        } catch (Exception e) {
+            log.warn("Could not deactivate dead push token {}: {}", maskToken(token), e.getMessage());
+        }
+    }
+
+    /** Receipt bookkeeping is best-effort — Redis being down must not break a send. */
+    private void enqueueReceiptQuietly(String ticketId, String token) {
+        try {
+            redisService.enqueuePushReceipt(ticketId, token);
+        } catch (Exception ignored) {
         }
     }
 

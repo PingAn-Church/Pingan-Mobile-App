@@ -16,6 +16,14 @@ public interface CourseWishlistRepository extends JpaRepository<CourseWishlist, 
 
     boolean existsByUserIdAndCourseId(Long userId, Long courseId);
 
+    /** The subset of these courses the user has wishlisted, in one query. */
+    @org.springframework.data.jpa.repository.Query(
+            "select w.courseId from CourseWishlist w "
+            + "where w.userId = :userId and w.courseId in :courseIds")
+    List<Long> findCourseIdsByUserIdAndCourseIdIn(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("courseIds") List<Long> courseIds);
+
     long countByUserId(Long userId);
 
     void deleteByUserIdAndCourseId(Long userId, Long courseId);

@@ -26,8 +26,9 @@ import com.fyp.backend.repository.UserVideoProgressRepository;
 
 /**
  * Single source of truth for course/module progress so the calculation stays
- * consistent across video/resource updates, quiz submission (P5) and enrollment
- * listings. Currently counts videos + resources; quizzes are folded in at P5.
+ * consistent across video/resource updates, quiz submission and enrollment
+ * listings. Counts videos, resources and quizzes (a quiz counts once passed, or
+ * once attempted when it has manually graded questions — see passedQuizCount).
  */
 @Service
 public class ProgressService {

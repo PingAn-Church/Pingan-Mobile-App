@@ -11,6 +11,9 @@ import java.util.Map;
 @Service
 public class TranslationService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(TranslationService.class);
+
     private final RestTemplate restTemplate;
     private final String libreUrl;
     private final boolean enabled;
@@ -20,7 +23,12 @@ public class TranslationService {
 
     @Autowired
     public TranslationService() {
-        this.restTemplate = new RestTemplate();
+        // Timeouts keep a hung LibreTranslate container from pinning request threads.
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restTemplate = new RestTemplate(factory);
         String configuredLibreUrl = System.getenv("LIBRE_URL");
         this.libreUrl = (configuredLibreUrl == null || configuredLibreUrl.isBlank())
                 ? DEFAULT_LIBRE_URL
@@ -58,10 +66,8 @@ public class TranslationService {
         }
 
         String normalizedTargetLang = normalizeTargetLanguage(targetLang);
-        System.out.println(" [TranslationService] Request received. Target Language: " + normalizedTargetLang);
 
         if (text == null || text.trim().isEmpty()) {
-            System.out.println(" [TranslationService] Received empty text. Skipping translation.");
             return text;
         }
 
@@ -72,23 +78,21 @@ public class TranslationService {
         requestBody.put("format", "text");
 
         try {
-            System.out.println(" [TranslationService] Calling LibreTranslate API at: " + libreUrl);
             Map<String, Object> response = restTemplate.postForObject(libreUrl, requestBody, Map.class);
 
             if (response != null && response.containsKey("translatedText")) {
                 String translatedResult = (String) response.get("translatedText");
-                System.out.println(" [TranslationService] Translation successful.");
                 if (translatedResult == null || translatedResult.isBlank()) {
                     return text;
                 }
                 return translatedResult;
             } else {
-                System.out.println(" [TranslationService] Unexpected response format from API.");
+                log.warn("Unexpected response format from LibreTranslate");
                 throw new RuntimeException("Invalid response from translation engine");
             }
 
         } catch (Exception e) {
-            System.out.println("Error during translation API call: " + e.getMessage());
+            log.warn("Translation API call failed: {}", e.getMessage());
             throw new RuntimeException("Translation service unavailable", e);
         }
     }

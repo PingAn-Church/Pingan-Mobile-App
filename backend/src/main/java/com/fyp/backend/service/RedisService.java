@@ -6,22 +6,27 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.TotpUtil;
 
 @Service
 public class RedisService {
 
-    private static final String USER_STATUS_KEY = "user_status:";
-    private static final String REFRESH_TOKEN_KEY = "refresh_token:";
-    private static final long ONLINE_TTL_MINUTES = 1; // Expiry time in minutes
-    private static final long REFRESH_EXPIRY_DAYS = 30;
+    // Presence: a ZSET per user (member = deviceId, score = last-seen millis) plus
+    // one global index ZSET of online emails. Sorted sets because SET members can't
+    // carry TTLs — expiry is the score falling out of the liveness window, pruned
+    // on every read. Replaces per-device string keys that every presence question
+    // had to find with KEYS, an O(keyspace) blocking scan on each connect/disconnect.
+    private static final String PRESENCE_USER_KEY = "presence:user:";
+    private static final String PRESENCE_ONLINE_INDEX_KEY = "presence:online";
+    /** A device unheard from this long is offline (heartbeats refresh every 10s). */
+    private static final long ONLINE_WINDOW_MS = 60_000;
+    /** Rolling key TTL so abandoned per-user zsets vanish without a reaper. */
+    private static final Duration PRESENCE_KEY_TTL = Duration.ofMinutes(10);
 
     // Registration email verification (OTP)
     private static final String OTP_SECRET_KEY = "otp_secret:";
@@ -41,125 +46,89 @@ public class RedisService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    /**
-     * Mark a user as "online" per device in Redis with an expiry time.
-     */
+    /** Marks a device online now: last-seen stamped on both the user zset and the index. */
     public void setUserOnline(String email, String deviceId) {
-        redisTemplate.opsForValue().set(
-                USER_STATUS_KEY + email + ":" + deviceId,
-                "online",
-                Duration.ofMinutes(ONLINE_TTL_MINUTES)
-        );
+        long now = System.currentTimeMillis();
+        String userKey = PRESENCE_USER_KEY + email;
+        redisTemplate.opsForZSet().add(userKey, deviceId, now);
+        redisTemplate.expire(userKey, PRESENCE_KEY_TTL);
+        redisTemplate.opsForZSet().add(PRESENCE_ONLINE_INDEX_KEY, email, now);
     }
 
-    /**
-     * Mark a user as "offline" and remove the device status from Redis.
-     */
+    /** Removes one device; the user leaves the online index once no device remains live. */
     public void setDeviceOffline(String email, String deviceId) {
-        redisTemplate.delete(USER_STATUS_KEY + email + ":" + deviceId); // Remove the device's status key from Redis
-        System.out.println("❌ Device offline: " + email + " (Device: " + deviceId + ")");
+        String userKey = PRESENCE_USER_KEY + email;
+        redisTemplate.opsForZSet().remove(userKey, deviceId);
+        if (!isUserOnlineAnywhere(email)) {
+            redisTemplate.delete(userKey);
+            redisTemplate.opsForZSet().remove(PRESENCE_ONLINE_INDEX_KEY, email);
+        }
     }
 
-    /**
-     * Refresh the TTL for a user's online status per device.
-     */
+    /** Heartbeat: same write as coming online — the score IS the liveness. */
     public void refreshUserOnlineStatus(String email, String deviceId) {
-        redisTemplate.opsForValue().set(
-                USER_STATUS_KEY + email + ":" + deviceId,
-                "online",
-                Duration.ofMinutes(ONLINE_TTL_MINUTES) // Extend TTL
-        );
+        setUserOnline(email, deviceId);
     }
 
-    /**
-     * Fetch all currently online users and their devices from Redis.
-     */
+    /** Everyone currently online, from one pruned index read — no keyspace scan. */
     public Map<String, String> getAllOnlineUsers() {
+        pruneStale(PRESENCE_ONLINE_INDEX_KEY);
+        Set<String> emails = redisTemplate.opsForZSet().range(PRESENCE_ONLINE_INDEX_KEY, 0, -1);
         Map<String, String> onlineUsers = new HashMap<>();
-        Set<String> keys = redisTemplate.keys(USER_STATUS_KEY + "*");
-
-        if (keys != null) {
-            for (String key : keys) {
-                String userEmail = key.replace(USER_STATUS_KEY, "").split(":")[0]; // Extract userEmail
-                String status = redisTemplate.opsForValue().get(key);
-                if ("online".equals(status)) {
-                    onlineUsers.put(userEmail, "online");
-                }
+        if (emails != null) {
+            for (String email : emails) {
+                onlineUsers.put(email, "online");
             }
         }
-
         return onlineUsers;
     }
 
-    /**
-     * Check if a user is online across any device.
-     */
+    /** Whether any of the user's devices was heard from inside the liveness window. */
     public boolean isUserOnlineAnywhere(String email) {
-        Set<String> keys = redisTemplate.keys(USER_STATUS_KEY + email + ":*");
-        System.out.println("Keys for user " + email + ": " + keys);
-        if (keys == null || keys.isEmpty()) return false;
-        return keys.stream().anyMatch(k -> "online".equals(redisTemplate.opsForValue().get(k)));
+        String userKey = PRESENCE_USER_KEY + email;
+        pruneStale(userKey);
+        Long live = redisTemplate.opsForZSet().zCard(userKey);
+        return live != null && live > 0;
     }
 
-
-    /**
-     * Check if a user is online on a specific device.
-     */
-    public boolean isUserOnline(String email, String deviceId) {
-        String status = redisTemplate.opsForValue().get(USER_STATUS_KEY + email + ":" + deviceId);
-        return "online".equalsIgnoreCase(status);
-    }
-
-    public List<String> getDeviceIdsForUser(String email) {
-        // Get all keys matching the pattern for the user status, including deviceId
-        Set<String> keys = redisTemplate.keys(USER_STATUS_KEY + email + ":*");
-
-        // If no keys exist, return an empty list (i.e., no devices found for the user)
-        if (keys == null || keys.isEmpty()) {
-            return List.of();
-        }
-
-        // Extract the deviceId from the keys and return them as a list
-        return keys.stream()
-                .map(key -> key.replace(USER_STATUS_KEY + email + ":", "")) // Remove the user status prefix to get the deviceId
-                .collect(Collectors.toList());
-    }
-
-    /** Remove all online-presence keys for an account email. */
+    /** Remove all online-presence state for an account email. */
     public void clearUserOnlineStatus(String email) {
         if (email == null || email.isBlank()) {
             return;
         }
-        Set<String> keys = redisTemplate.keys(USER_STATUS_KEY + email + ":*");
-        if (keys != null && !keys.isEmpty()) {
-            redisTemplate.delete(keys);
-        }
+        redisTemplate.delete(PRESENCE_USER_KEY + email);
+        redisTemplate.opsForZSet().remove(PRESENCE_ONLINE_INDEX_KEY, email);
     }
 
-    /**
-     * Check if a refresh token is expired for a specific user and device.
-     */
-    public boolean isRefreshTokenExpired(String email, String deviceId) {
-        String refreshToken = redisTemplate.opsForValue().get(REFRESH_TOKEN_KEY + email + ":" + deviceId);
-        if (refreshToken == null) {
-            return true;  // If the token doesn't exist, consider it expired
-        }
-
-        // Example: Check the expiration date from the JWT's 'exp' field (you may need to implement a decoding function here)
-        return jwtUtil.isTokenExpired(refreshToken);
+    /** Drops members whose last-seen fell out of the liveness window. */
+    private void pruneStale(String key) {
+        redisTemplate.opsForZSet().removeRangeByScore(
+                key, Double.NEGATIVE_INFINITY, System.currentTimeMillis() - ONLINE_WINDOW_MS);
     }
 
-    // ---- registration email verification (OTP) --------------------------
+    // ---- email verification codes (OTP) ---------------------------------
+    //
+    // Two flows share this machinery but must not share state: registration
+    // (verify a new address) and password reset (prove ownership of an existing
+    // one). The scope segment keeps their secrets, cooldowns, caps and failure
+    // counters separate per email. The one-arg overloads are the registration
+    // flow, unchanged for existing callers.
+
+    /** Registration scope — empty so existing keys stay valid across deploys. */
+    public static final String OTP_SCOPE_REGISTRATION = "";
+    /** Password-reset scope. */
+    public static final String OTP_SCOPE_RESET = "reset:";
 
     /**
      * Stable per-email TOTP secret so a code resent within the same time window
      * matches the one already emailed. Created on first request, expires in a day.
      */
     public String getOrCreateOtpSecret(String email) {
-        String key = OTP_SECRET_KEY + email;
+        return getOrCreateOtpSecret(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public String getOrCreateOtpSecret(String scope, String email) {
+        String key = OTP_SECRET_KEY + scope + email;
         String secret = redisTemplate.opsForValue().get(key);
         if (secret == null) {
             secret = TotpUtil.generateSecret();
@@ -170,25 +139,41 @@ public class RedisService {
 
     /** Read the stored secret without creating one (null if none/expired). */
     public String peekOtpSecret(String email) {
-        return redisTemplate.opsForValue().get(OTP_SECRET_KEY + email);
+        return peekOtpSecret(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public String peekOtpSecret(String scope, String email) {
+        return redisTemplate.opsForValue().get(OTP_SECRET_KEY + scope + email);
     }
 
     /** Acquire the 60s per-email cooldown slot. Returns false if one is already active. */
     public boolean tryStartOtpCooldown(String email) {
+        return tryStartOtpCooldown(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public boolean tryStartOtpCooldown(String scope, String email) {
         Boolean acquired = redisTemplate.opsForValue()
-                .setIfAbsent(OTP_COOLDOWN_KEY + email, "1", Duration.ofSeconds(OTP_COOLDOWN_SECONDS));
+                .setIfAbsent(OTP_COOLDOWN_KEY + scope + email, "1", Duration.ofSeconds(OTP_COOLDOWN_SECONDS));
         return Boolean.TRUE.equals(acquired);
     }
 
     /** Seconds left on the cooldown (0 if none active). */
     public long otpCooldownRemaining(String email) {
-        Long ttl = redisTemplate.getExpire(OTP_COOLDOWN_KEY + email);
+        return otpCooldownRemaining(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public long otpCooldownRemaining(String scope, String email) {
+        Long ttl = redisTemplate.getExpire(OTP_COOLDOWN_KEY + scope + email);
         return ttl == null || ttl < 0 ? 0 : ttl;
     }
 
     /** Increment today's request count for the email; false once the daily cap is exceeded. */
     public boolean withinOtpDailyLimit(String email) {
-        String key = OTP_COUNT_KEY + email + ":" + LocalDate.now();
+        return withinOtpDailyLimit(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public boolean withinOtpDailyLimit(String scope, String email) {
+        String key = OTP_COUNT_KEY + scope + email + ":" + LocalDate.now();
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1L) {
             redisTemplate.expire(key, Duration.ofDays(1));
@@ -198,7 +183,11 @@ public class RedisService {
 
     /** True once too many incorrect codes have been entered for this email recently. */
     public boolean isOtpVerifyLocked(String email) {
-        String v = redisTemplate.opsForValue().get(OTP_VERIFY_FAIL_KEY + email);
+        return isOtpVerifyLocked(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public boolean isOtpVerifyLocked(String scope, String email) {
+        String v = redisTemplate.opsForValue().get(OTP_VERIFY_FAIL_KEY + scope + email);
         if (v == null) return false;
         try {
             return Long.parseLong(v) >= OTP_VERIFY_MAX_FAILURES;
@@ -209,7 +198,11 @@ public class RedisService {
 
     /** Record a failed verification attempt; the window resets after the lock period. */
     public void recordOtpVerifyFailure(String email) {
-        String key = OTP_VERIFY_FAIL_KEY + email;
+        recordOtpVerifyFailure(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public void recordOtpVerifyFailure(String scope, String email) {
+        String key = OTP_VERIFY_FAIL_KEY + scope + email;
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1L) {
             redisTemplate.expire(key, Duration.ofMinutes(OTP_VERIFY_LOCK_MINUTES));
@@ -218,8 +211,48 @@ public class RedisService {
 
     /** Clear OTP state after a successful verification: the (single-use) secret and the failure counter. */
     public void clearOtpState(String email) {
-        redisTemplate.delete(OTP_SECRET_KEY + email);
-        redisTemplate.delete(OTP_VERIFY_FAIL_KEY + email);
+        clearOtpState(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public void clearOtpState(String scope, String email) {
+        redisTemplate.delete(OTP_SECRET_KEY + scope + email);
+        redisTemplate.delete(OTP_VERIFY_FAIL_KEY + scope + email);
+    }
+
+    // ---- Expo push receipts ---------------------------------------------
+    //
+    // Tickets that Expo accepted still fail later (DeviceNotRegistered often only
+    // shows up in the receipt, after delivery is attempted). Each accepted ticket
+    // is queued here; PushReceiptJob drains the queue and asks Expo for the
+    // receipts. A plain Redis list, entries as "ticketId|epochMillis|token".
+
+    private static final String PUSH_RECEIPT_QUEUE_KEY = "push:receipt-queue";
+    private static final long PUSH_RECEIPT_QUEUE_TTL_HOURS = 48;
+
+    public void enqueuePushReceipt(String ticketId, String token) {
+        if (ticketId == null || ticketId.isBlank() || token == null || token.isBlank()) return;
+        redisTemplate.opsForList().leftPush(PUSH_RECEIPT_QUEUE_KEY,
+                ticketId + "|" + System.currentTimeMillis() + "|" + token);
+        // Rolling TTL so an abandoned queue (job disabled, instance retired) vanishes.
+        redisTemplate.expire(PUSH_RECEIPT_QUEUE_KEY, Duration.ofHours(PUSH_RECEIPT_QUEUE_TTL_HOURS));
+    }
+
+    /** Pops up to {@code max} queued receipt entries (oldest first); never null. */
+    public List<String> drainPushReceipts(int max) {
+        List<String> entries = new java.util.ArrayList<>();
+        for (int i = 0; i < max; i++) {
+            String entry = redisTemplate.opsForList().rightPop(PUSH_RECEIPT_QUEUE_KEY);
+            if (entry == null) break;
+            entries.add(entry);
+        }
+        return entries;
+    }
+
+    /** Puts an entry back (queue tail) for a later drain to retry. */
+    public void requeuePushReceipt(String entry) {
+        if (entry == null || entry.isBlank()) return;
+        redisTemplate.opsForList().leftPush(PUSH_RECEIPT_QUEUE_KEY, entry);
+        redisTemplate.expire(PUSH_RECEIPT_QUEUE_KEY, Duration.ofHours(PUSH_RECEIPT_QUEUE_TTL_HOURS));
     }
 
     // ---- pending registration (pre-verification sign-up) ----------------

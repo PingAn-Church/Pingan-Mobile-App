@@ -21,11 +21,13 @@ public class WebSocketEventListener {
 
     @Autowired private UserRepository userRepository;
 
-//    /**
-
     /**
-     * Handle WebSocket connection: mark user as "online" for that specific device,
-     * and broadcast if it's their first device online.
+     * Marks the connecting device online and broadcasts "online" only on the
+     * offline->online TRANSITION. Reconnect churn used to broadcast on every
+     * connect — one flaky phone on a train notified every open client each time
+     * its socket came back. The was-online question works because the handshake
+     * interceptor no longer marks presence itself; this listener is the first
+     * writer for the session.
      */
     @EventListener
     public void handleWebSocketConnectListener(SessionConnectEvent event) {
@@ -34,23 +36,11 @@ public class WebSocketEventListener {
         String deviceId = (String) headerAccessor.getSessionAttributes().get("deviceId");
 
         if (email != null && deviceId != null) {
-
-            // Check if the user already has any devices online before setting the current device online
-            boolean isFirstDeviceOnline = !redisService.isUserOnlineAnywhere(email);
-
-//            System.out.println("ONLINE ANYWHERE" + isFirstDeviceOnline);
-//
-//            // If this is the first device connecting, broadcast the user's online status
-            // Note that WebSocketInterceptor sets it online first, hence this doenst work.
-//            if (isFirstDeviceOnline) {
-//                broadcastUserStatus(email, "online");
-//            }
-
-            broadcastUserStatus(email, "online");
-
-            // Now, set this device as online
+            boolean wasOnline = redisService.isUserOnlineAnywhere(email);
             redisService.setUserOnline(email, deviceId);
-            System.out.println("✅ User online: " + email + " (Device: " + deviceId + ")");
+            if (!wasOnline) {
+                broadcastUserStatus(email, "online");
+            }
         }
     }
 
@@ -66,7 +56,6 @@ public class WebSocketEventListener {
 
         if (email != null && deviceId != null) {
             redisService.setDeviceOffline(email, deviceId); // Mark the specific device as offline
-            System.out.println("❌ User offline: " + email + " (Device: " + deviceId + ")");
 
             // If user has no devices online anywhere, broadcast "offline"
             if (!redisService.isUserOnlineAnywhere(email)) {
