@@ -56,8 +56,10 @@
   "copyFailed": "Couldn't copy the message. Please try again.",
   "saveEventFailed": "Couldn't save the event. Please try again.",
   "enterEmail": "Please enter your email.",
-  "sendNewPasswordToEmail": "If this email is registered, you will receive a new password shortly.",
   "resetPassword": "Reset Password",
+  "resetCodeSent": "If this email is registered, a verification code is on its way.",
+  "resetCodeSubtitle": "Enter the code we emailed to",
+  "passwordResetSuccess": "Your password has been reset. Please log in with your new password.",
 
   "Home": "Home",
   "Chats": "Chat",

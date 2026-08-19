@@ -143,13 +143,21 @@ export const logoutUser = async () => {
   }
 };
 
+// Step 1 of the code-confirmed reset: asks the backend to email a verification
+// code. Succeeds identically whether or not the email has an account.
 export const requestPasswordReset = async (email) => {
   try {
     await axios.post(apiUrl(`/auth/reset-password`), { email });
   } catch (error) {
-    console.error("Error resetting password:", error);
+    console.error("Error requesting password reset:", error);
     throw error;
   }
+};
+
+// Step 2: submits the emailed code together with the new password. Throws on
+// wrong/expired code (400), lockout or cooldown (429).
+export const confirmPasswordReset = async (email, code, newPassword) => {
+  await axios.post(apiUrl(`/auth/confirm-password-reset`), { email, code, newPassword });
 };
 
 export const changePassword = async (currentPassword, newPassword) => {

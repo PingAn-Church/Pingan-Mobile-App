@@ -152,14 +152,29 @@ public class RedisService {
         return jwtUtil.isTokenExpired(refreshToken);
     }
 
-    // ---- registration email verification (OTP) --------------------------
+    // ---- email verification codes (OTP) ---------------------------------
+    //
+    // Two flows share this machinery but must not share state: registration
+    // (verify a new address) and password reset (prove ownership of an existing
+    // one). The scope segment keeps their secrets, cooldowns, caps and failure
+    // counters separate per email. The one-arg overloads are the registration
+    // flow, unchanged for existing callers.
+
+    /** Registration scope — empty so existing keys stay valid across deploys. */
+    public static final String OTP_SCOPE_REGISTRATION = "";
+    /** Password-reset scope. */
+    public static final String OTP_SCOPE_RESET = "reset:";
 
     /**
      * Stable per-email TOTP secret so a code resent within the same time window
      * matches the one already emailed. Created on first request, expires in a day.
      */
     public String getOrCreateOtpSecret(String email) {
-        String key = OTP_SECRET_KEY + email;
+        return getOrCreateOtpSecret(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public String getOrCreateOtpSecret(String scope, String email) {
+        String key = OTP_SECRET_KEY + scope + email;
         String secret = redisTemplate.opsForValue().get(key);
         if (secret == null) {
             secret = TotpUtil.generateSecret();
@@ -170,25 +185,41 @@ public class RedisService {
 
     /** Read the stored secret without creating one (null if none/expired). */
     public String peekOtpSecret(String email) {
-        return redisTemplate.opsForValue().get(OTP_SECRET_KEY + email);
+        return peekOtpSecret(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public String peekOtpSecret(String scope, String email) {
+        return redisTemplate.opsForValue().get(OTP_SECRET_KEY + scope + email);
     }
 
     /** Acquire the 60s per-email cooldown slot. Returns false if one is already active. */
     public boolean tryStartOtpCooldown(String email) {
+        return tryStartOtpCooldown(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public boolean tryStartOtpCooldown(String scope, String email) {
         Boolean acquired = redisTemplate.opsForValue()
-                .setIfAbsent(OTP_COOLDOWN_KEY + email, "1", Duration.ofSeconds(OTP_COOLDOWN_SECONDS));
+                .setIfAbsent(OTP_COOLDOWN_KEY + scope + email, "1", Duration.ofSeconds(OTP_COOLDOWN_SECONDS));
         return Boolean.TRUE.equals(acquired);
     }
 
     /** Seconds left on the cooldown (0 if none active). */
     public long otpCooldownRemaining(String email) {
-        Long ttl = redisTemplate.getExpire(OTP_COOLDOWN_KEY + email);
+        return otpCooldownRemaining(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public long otpCooldownRemaining(String scope, String email) {
+        Long ttl = redisTemplate.getExpire(OTP_COOLDOWN_KEY + scope + email);
         return ttl == null || ttl < 0 ? 0 : ttl;
     }
 
     /** Increment today's request count for the email; false once the daily cap is exceeded. */
     public boolean withinOtpDailyLimit(String email) {
-        String key = OTP_COUNT_KEY + email + ":" + LocalDate.now();
+        return withinOtpDailyLimit(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public boolean withinOtpDailyLimit(String scope, String email) {
+        String key = OTP_COUNT_KEY + scope + email + ":" + LocalDate.now();
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1L) {
             redisTemplate.expire(key, Duration.ofDays(1));
@@ -198,7 +229,11 @@ public class RedisService {
 
     /** True once too many incorrect codes have been entered for this email recently. */
     public boolean isOtpVerifyLocked(String email) {
-        String v = redisTemplate.opsForValue().get(OTP_VERIFY_FAIL_KEY + email);
+        return isOtpVerifyLocked(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public boolean isOtpVerifyLocked(String scope, String email) {
+        String v = redisTemplate.opsForValue().get(OTP_VERIFY_FAIL_KEY + scope + email);
         if (v == null) return false;
         try {
             return Long.parseLong(v) >= OTP_VERIFY_MAX_FAILURES;
@@ -209,7 +244,11 @@ public class RedisService {
 
     /** Record a failed verification attempt; the window resets after the lock period. */
     public void recordOtpVerifyFailure(String email) {
-        String key = OTP_VERIFY_FAIL_KEY + email;
+        recordOtpVerifyFailure(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public void recordOtpVerifyFailure(String scope, String email) {
+        String key = OTP_VERIFY_FAIL_KEY + scope + email;
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1L) {
             redisTemplate.expire(key, Duration.ofMinutes(OTP_VERIFY_LOCK_MINUTES));
@@ -218,8 +257,12 @@ public class RedisService {
 
     /** Clear OTP state after a successful verification: the (single-use) secret and the failure counter. */
     public void clearOtpState(String email) {
-        redisTemplate.delete(OTP_SECRET_KEY + email);
-        redisTemplate.delete(OTP_VERIFY_FAIL_KEY + email);
+        clearOtpState(OTP_SCOPE_REGISTRATION, email);
+    }
+
+    public void clearOtpState(String scope, String email) {
+        redisTemplate.delete(OTP_SECRET_KEY + scope + email);
+        redisTemplate.delete(OTP_VERIFY_FAIL_KEY + scope + email);
     }
 
     // ---- pending registration (pre-verification sign-up) ----------------

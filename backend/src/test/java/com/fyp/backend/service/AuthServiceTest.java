@@ -242,4 +242,118 @@ class AuthServiceTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
         verify(emailService, never()).sendVerificationCodeEmail(anyString(), anyString());
     }
+
+    // ---- code-confirmed password reset ---------------------------------------
+
+    private static final String RESET = RedisService.OTP_SCOPE_RESET;
+
+    @Test
+    void requestPasswordResetSendsCurrentTotpCode() {
+        String secret = TotpUtil.generateSecret();
+        when(redisService.tryStartOtpCooldown(RESET, EMAIL)).thenReturn(true);
+        when(redisService.withinOtpDailyLimit(RESET, EMAIL)).thenReturn(true);
+        when(redisService.getOrCreateOtpSecret(RESET, EMAIL)).thenReturn(secret);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(true)));
+
+        authService.requestPasswordReset(EMAIL);
+
+        verify(emailService).sendPasswordResetCodeEmail(EMAIL, TotpUtil.currentCode(secret));
+        verify(userRepository, never()).save(any(User.class)); // nothing changes at request time
+    }
+
+    @Test
+    void requestPasswordResetIsSilentForUnknownEmail() {
+        when(redisService.tryStartOtpCooldown(RESET, EMAIL)).thenReturn(true);
+        when(redisService.withinOtpDailyLimit(RESET, EMAIL)).thenReturn(true);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+
+        authService.requestPasswordReset(EMAIL); // no exception — no enumeration
+
+        verify(emailService, never()).sendPasswordResetCodeEmail(anyString(), anyString());
+    }
+
+    @Test
+    void requestPasswordResetRateLimitsBeforeTheUserLookup() {
+        // The cooldown fires for unknown emails too, so a 429 reveals nothing.
+        when(redisService.tryStartOtpCooldown(RESET, EMAIL)).thenReturn(false);
+        when(redisService.otpCooldownRemaining(RESET, EMAIL)).thenReturn(42L);
+
+        ApiException ex = assertApiException(() -> authService.requestPasswordReset(EMAIL));
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
+        verify(userRepository, never()).findByEmail(anyString());
+        verify(emailService, never()).sendPasswordResetCodeEmail(anyString(), anyString());
+    }
+
+    @Test
+    void requestPasswordResetEnforcesDailyCap() {
+        when(redisService.tryStartOtpCooldown(RESET, EMAIL)).thenReturn(true);
+        when(redisService.withinOtpDailyLimit(RESET, EMAIL)).thenReturn(false);
+
+        ApiException ex = assertApiException(() -> authService.requestPasswordReset(EMAIL));
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
+        verify(emailService, never()).sendPasswordResetCodeEmail(anyString(), anyString());
+    }
+
+    @Test
+    void confirmPasswordResetChangesPasswordAndConsumesCode() {
+        String secret = TotpUtil.generateSecret();
+        User u = user(true);
+        when(redisService.isOtpVerifyLocked(RESET, EMAIL)).thenReturn(false);
+        when(redisService.peekOtpSecret(RESET, EMAIL)).thenReturn(secret);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(u));
+        when(passwordEncoder.encode("newSecret123")).thenReturn("encoded-new");
+
+        authService.confirmPasswordReset(EMAIL, TotpUtil.currentCode(secret), "newSecret123");
+
+        assertEquals("encoded-new", u.getPassword());
+        verify(userRepository).save(u);
+        verify(redisService).clearOtpState(RESET, EMAIL); // single-use
+    }
+
+    @Test
+    void confirmPasswordResetRejectsWrongCodeAndRecordsFailure() {
+        when(redisService.isOtpVerifyLocked(RESET, EMAIL)).thenReturn(false);
+        when(redisService.peekOtpSecret(RESET, EMAIL)).thenReturn(TotpUtil.generateSecret());
+
+        ApiException ex = assertApiException(
+                () -> authService.confirmPasswordReset(EMAIL, "000000", "newSecret123"));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(redisService).recordOtpVerifyFailure(RESET, EMAIL);
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void confirmPasswordResetIsLockedAfterTooManyFailures() {
+        when(redisService.isOtpVerifyLocked(RESET, EMAIL)).thenReturn(true);
+
+        ApiException ex = assertApiException(
+                () -> authService.confirmPasswordReset(EMAIL, "000000", "newSecret123"));
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void confirmPasswordResetRejectsBlankPassword() {
+        ApiException ex = assertApiException(
+                () -> authService.confirmPasswordReset(EMAIL, "123456", "  "));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void resetFlowNeverTouchesRegistrationOtpState() {
+        String secret = TotpUtil.generateSecret();
+        when(redisService.tryStartOtpCooldown(RESET, EMAIL)).thenReturn(true);
+        when(redisService.withinOtpDailyLimit(RESET, EMAIL)).thenReturn(true);
+        when(redisService.getOrCreateOtpSecret(RESET, EMAIL)).thenReturn(secret);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user(true)));
+
+        authService.requestPasswordReset(EMAIL);
+
+        // The one-arg overloads are the registration scope; the reset flow must not
+        // collide with a registration code pending for the same address.
+        verify(redisService, never()).tryStartOtpCooldown(EMAIL);
+        verify(redisService, never()).getOrCreateOtpSecret(EMAIL);
+        verify(redisService, never()).clearOtpState(EMAIL);
+    }
 }

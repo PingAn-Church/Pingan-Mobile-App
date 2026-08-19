@@ -1,7 +1,6 @@
 package com.fyp.backend.service;
 
 import java.util.Optional;
-import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -152,20 +151,68 @@ public class AuthService {
         return userRepository.findByEmail(email).map(User::isActive).orElse(false);
     }
 
-    public void resetUserPassword(String email) {
-        Optional<User> userOptional = userRepository.findByEmail(email);
-        
-        if (userOptional.isPresent()) {
-            User user = userOptional.get();
-            
-            // Generate a random password
-            String newPassword = UUID.randomUUID().toString().substring(0, 8);
-            user.setPassword(passwordEncoder.encode(newPassword));
-            userRepository.save(user);
-            
-            // Send email to user
-            emailService.sendPasswordResetEmail(user.getEmail(), newPassword);
+    /**
+     * Step 1 of the code-confirmed password reset: email a time-based code.
+     *
+     * Rate limits run BEFORE the user lookup on purpose — if the 429s only ever
+     * happened for real accounts, the cooldown itself would be an email-
+     * enumeration oracle. Unknown, inactive and bot accounts then return
+     * silently, so the response is identical whether or not the email exists.
+     * Nothing about the account changes here; the password moves only in
+     * {@link #confirmPasswordReset}, once the code proves mailbox ownership.
+     */
+    public void requestPasswordReset(String email) {
+        if (!redisService.tryStartOtpCooldown(RedisService.OTP_SCOPE_RESET, email)) {
+            long wait = redisService.otpCooldownRemaining(RedisService.OTP_SCOPE_RESET, email);
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Please wait " + wait + " seconds before requesting another code.");
         }
+        if (!redisService.withinOtpDailyLimit(RedisService.OTP_SCOPE_RESET, email)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Daily reset limit reached. Please try again tomorrow.");
+        }
+
+        Optional<User> user = userRepository.findByEmail(email);
+        if (user.isEmpty() || !user.get().isActive() || user.get().isBot()) {
+            return; // silent success — no enumeration
+        }
+        String secret = redisService.getOrCreateOtpSecret(RedisService.OTP_SCOPE_RESET, email);
+        emailService.sendPasswordResetCodeEmail(email, TotpUtil.currentCode(secret));
+    }
+
+    /**
+     * Step 2: verify the emailed code and, only then, set the new password.
+     * Wrong codes count towards the same brute-force lock the sign-up flow uses,
+     * and a consumed code cannot be replayed (state cleared on success).
+     */
+    public void confirmPasswordReset(String email, String code, String newPassword) {
+        if (newPassword == null || newPassword.isBlank()) {
+            throw ApiException.badRequest("New password is required.");
+        }
+        if (redisService.isOtpVerifyLocked(RedisService.OTP_SCOPE_RESET, email)) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many incorrect attempts. Please try again later.");
+        }
+
+        String secret = redisService.peekOtpSecret(RedisService.OTP_SCOPE_RESET, email);
+        if (secret == null || !TotpUtil.verify(secret, code)) {
+            redisService.recordOtpVerifyFailure(RedisService.OTP_SCOPE_RESET, email);
+            throw ApiException.badRequest("Invalid or expired verification code.");
+        }
+
+        // A valid code can only exist for an email that passed requestPasswordReset,
+        // but keep the failure message uniform anyway.
+        User user = userRepository.findByEmail(email)
+                .filter(User::isActive)
+                .filter(u -> !u.isBot())
+                .orElse(null);
+        if (user == null) {
+            throw ApiException.badRequest("Invalid or expired verification code.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        redisService.clearOtpState(RedisService.OTP_SCOPE_RESET, email);
     }
 
     /**

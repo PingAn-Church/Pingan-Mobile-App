@@ -56,8 +56,10 @@
   "copyFailed": "无法复制该消息，请重试。",
   "saveEventFailed": "无法保存活动，请重试。",
   "enterEmail": "请输入您的电子邮箱",
-  "sendNewPasswordToEmail": "如果该电子邮箱已注册，您将很快收到一个新密码。",
   "resetPassword": "重置密码",
+  "resetCodeSent": "如果该电子邮箱已注册，验证码已发送。",
+  "resetCodeSubtitle": "请输入我们发送到以下邮箱的验证码：",
+  "passwordResetSuccess": "密码已重置，请使用新密码登录。",
 
   "Home": "主页",
   "Chats": "聊天",

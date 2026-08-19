@@ -172,6 +172,13 @@ public class AuthController {
         }
     }
 
+    /**
+     * Step 1 of the code-confirmed reset: emails a verification code. The old
+     * behaviour (instantly overwriting the password and emailing the new one)
+     * let anyone who knew an email lock that member out at will; now nothing
+     * changes until the code proves mailbox ownership in confirm-password-reset.
+     * The response is identical whether or not the account exists.
+     */
     @PostMapping("/reset-password")
     public ResponseEntity<String> resetPassword(@RequestBody Map<String, String> request) {
         String email = request.get("email");
@@ -180,8 +187,31 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Email is required");
         }
 
-        authService.resetUserPassword(email);
-        return ResponseEntity.ok("Password reset email sent.");
+        try {
+            authService.requestPasswordReset(email);
+            return ResponseEntity.ok("If an account exists for this email, a verification code has been sent.");
+        } catch (ApiException e) {
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
+        }
+    }
+
+    /** Step 2: {email, code, newPassword} — the password changes only here. */
+    @PostMapping("/confirm-password-reset")
+    public ResponseEntity<String> confirmPasswordReset(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String code = body.get("code");
+        String newPassword = body.get("newPassword");
+
+        if (email == null || email.isBlank() || code == null || code.isBlank()) {
+            return ResponseEntity.badRequest().body("Email and code are required.");
+        }
+
+        try {
+            authService.confirmPasswordReset(email, code, newPassword);
+            return ResponseEntity.ok("Password has been reset. You can now log in with your new password.");
+        } catch (ApiException e) {
+            return ResponseEntity.status(e.getStatus()).body(e.getMessage());
+        }
     }
 
     @PostMapping("/change-password")

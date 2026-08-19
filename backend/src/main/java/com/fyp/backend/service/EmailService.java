@@ -25,9 +25,11 @@ public class EmailService {
     @Value("${spring.mail.username:}")
     private String fromAddress;
 
-    public void sendPasswordResetEmail(String toEmail, String newPassword) {
-        send(toEmail, "Ping An App - Password Reset Request",
-                "Your new password is: " + newPassword + "\nPlease change it after logging in.");
+    public void sendPasswordResetCodeEmail(String toEmail, String code) {
+        send(toEmail, "Ping An App - Password reset code",
+                "Your password reset code is: " + code +
+                "\nIt is valid for a few minutes. If you didn't request a password reset, "
+                + "you can ignore this email - your password has not been changed.");
     }
 
     public void sendVerificationCodeEmail(String toEmail, String code) {
