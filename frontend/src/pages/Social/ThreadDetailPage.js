@@ -197,7 +197,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+// Keeps the reply bar above the Android system navigation bar (edge-to-edge).
+import StickyInputFooter from "../../components/StickyInputFooter";
 import {
   fetchReplies,
   postReply,
@@ -831,11 +833,7 @@ const ThreadDetailPage = ({ route }) => {
         }}
       />
 
-      {Platform.OS === "android" ? (
-        <KeyboardStickyView>{replyComposer}</KeyboardStickyView>
-      ) : (
-        replyComposer
-      )}
+      <StickyInputFooter background="#fafafa">{replyComposer}</StickyInputFooter>
     </KeyboardAvoidingView>
   );
 };
