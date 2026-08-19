@@ -31,6 +31,22 @@ public class GroupConversation extends Conversation {
     @Column(nullable = true)
     private String groupIcon;
 
+    /**
+     * Whether the in-app assistant answers when mentioned here.
+     *
+     * Off by default: nobody should discover mid-conversation that an LLM has been
+     * reading along, so switching it on is a deliberate act by a group admin and
+     * posts a notice in the group.
+     *
+     * Turning it on must also put the assistant on the participant list — a mention
+     * of a non-participant is stripped before the message is stored, so a flag on
+     * its own produces an assistant that is silently, unreportably dead.
+     * See ConversationService and AssistantAccountService.
+     */
+    @ColumnDefault("false")
+    @Column(nullable = false)
+    private boolean assistantEnabled = false;
+
     @ManyToMany
     @JoinTable(
             name = "group_conversation_participants",

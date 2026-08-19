@@ -40,7 +40,18 @@ public class ThreadService {
 
     /** Paginated, newest-first forum threads with a stable id tiebreaker. */
     public Map<String, Object> getThreads(int page, int size, String token) {
-        User requester = requireUser(token);
+        return getThreads(page, size, requireUser(token));
+    }
+
+    /**
+     * Same listing, for a caller that already holds the user.
+     *
+     * The in-app assistant has no JWT — it is a machine account — and minting one
+     * for it would create a credential to protect. Passing the user directly also
+     * keeps its view identical to a member's, since visibility is decided by the
+     * requester inside mapToDto rather than by anything the caller filters.
+     */
+    public Map<String, Object> getThreads(int page, int size, User requester) {
         int safeSize = Pagination.clampSize(size);
         int safePage = Pagination.clampPage(page);
         Pageable pageable = PageRequest.of(safePage, safeSize,

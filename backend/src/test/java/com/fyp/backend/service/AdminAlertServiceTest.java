@@ -67,13 +67,13 @@ class AdminAlertServiceTest {
         // push path, where a silent write would swallow the very sign-up being
         // announced. Markers come from the backfill and from promotion.
         verify(userRepository, never()).save(any(User.class));
-        verify(userRepository, never()).countByIdGreaterThanAndDeletedAccountFalse(anyLong());
+        verify(userRepository, never()).countByIdGreaterThanAndDeletedAccountFalseAndBotFalse(anyLong());
     }
 
     @Test
     void countsOnlyTheAccountsNewerThanTheMarker() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(admin(1L, 40L)));
-        when(userRepository.countByIdGreaterThanAndDeletedAccountFalse(40L)).thenReturn(3L);
+        when(userRepository.countByIdGreaterThanAndDeletedAccountFalseAndBotFalse(40L)).thenReturn(3L);
 
         assertEquals(3, adminAlertService.unseenNewMemberCount(1L));
     }
@@ -85,7 +85,7 @@ class AdminAlertServiceTest {
         when(userRepository.findById(9L)).thenReturn(Optional.of(demoted));
 
         assertEquals(0, adminAlertService.unseenNewMemberCount(9L));
-        verify(userRepository, never()).countByIdGreaterThanAndDeletedAccountFalse(anyLong());
+        verify(userRepository, never()).countByIdGreaterThanAndDeletedAccountFalseAndBotFalse(anyLong());
     }
 
     @Test

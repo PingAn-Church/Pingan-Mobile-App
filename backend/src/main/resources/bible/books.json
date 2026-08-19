@@ -1,0 +1,746 @@
+[
+ {
+  "id": 1,
+  "code": "GEN",
+  "en": "Genesis",
+  "zh": "创世记",
+  "aliases": [
+   "GEN",
+   "Genesis",
+   "创世记"
+  ]
+ },
+ {
+  "id": 2,
+  "code": "EXO",
+  "en": "Exodus",
+  "zh": "出埃及记",
+  "aliases": [
+   "EXO",
+   "Exodus",
+   "出埃及记"
+  ]
+ },
+ {
+  "id": 3,
+  "code": "LEV",
+  "en": "Leviticus",
+  "zh": "利未记",
+  "aliases": [
+   "LEV",
+   "Leviticus",
+   "利未记"
+  ]
+ },
+ {
+  "id": 4,
+  "code": "NUM",
+  "en": "Numbers",
+  "zh": "民数记",
+  "aliases": [
+   "NUM",
+   "Numbers",
+   "民数记"
+  ]
+ },
+ {
+  "id": 5,
+  "code": "DEU",
+  "en": "Deuteronomy",
+  "zh": "申命记",
+  "aliases": [
+   "DEU",
+   "Deuteronomy",
+   "申命记"
+  ]
+ },
+ {
+  "id": 6,
+  "code": "JOS",
+  "en": "Joshua",
+  "zh": "约书亚记",
+  "aliases": [
+   "JOS",
+   "Joshua",
+   "约书亚记"
+  ]
+ },
+ {
+  "id": 7,
+  "code": "JDG",
+  "en": "Judges",
+  "zh": "士师记",
+  "aliases": [
+   "JDG",
+   "Judges",
+   "士师记"
+  ]
+ },
+ {
+  "id": 8,
+  "code": "RUT",
+  "en": "Ruth",
+  "zh": "路得记",
+  "aliases": [
+   "RUT",
+   "Ruth",
+   "路得记"
+  ]
+ },
+ {
+  "id": 9,
+  "code": "1SA",
+  "en": "1 Samuel",
+  "zh": "撒母耳记上",
+  "aliases": [
+   "1SA",
+   "1 Samuel",
+   "1Samuel",
+   "撒母耳记上"
+  ]
+ },
+ {
+  "id": 10,
+  "code": "2SA",
+  "en": "2 Samuel",
+  "zh": "撒母耳记下",
+  "aliases": [
+   "2SA",
+   "2 Samuel",
+   "2Samuel",
+   "撒母耳记下"
+  ]
+ },
+ {
+  "id": 11,
+  "code": "1KI",
+  "en": "1 Kings",
+  "zh": "列王纪上",
+  "aliases": [
+   "1KI",
+   "1 Kings",
+   "1Kings",
+   "列王纪上"
+  ]
+ },
+ {
+  "id": 12,
+  "code": "2KI",
+  "en": "2 Kings",
+  "zh": "列王纪下",
+  "aliases": [
+   "2KI",
+   "2 Kings",
+   "2Kings",
+   "列王纪下"
+  ]
+ },
+ {
+  "id": 13,
+  "code": "1CH",
+  "en": "1 Chronicles",
+  "zh": "历代志上",
+  "aliases": [
+   "1CH",
+   "1 Chronicles",
+   "1Chronicles",
+   "历代志上"
+  ]
+ },
+ {
+  "id": 14,
+  "code": "2CH",
+  "en": "2 Chronicles",
+  "zh": "历代志下",
+  "aliases": [
+   "2CH",
+   "2 Chronicles",
+   "2Chronicles",
+   "历代志下"
+  ]
+ },
+ {
+  "id": 15,
+  "code": "EZR",
+  "en": "Ezra",
+  "zh": "以斯拉记",
+  "aliases": [
+   "EZR",
+   "Ezra",
+   "以斯拉记"
+  ]
+ },
+ {
+  "id": 16,
+  "code": "NEH",
+  "en": "Nehemiah",
+  "zh": "尼希米记",
+  "aliases": [
+   "NEH",
+   "Nehemiah",
+   "尼希米记"
+  ]
+ },
+ {
+  "id": 17,
+  "code": "EST",
+  "en": "Esther",
+  "zh": "以斯帖记",
+  "aliases": [
+   "EST",
+   "Esther",
+   "以斯帖记"
+  ]
+ },
+ {
+  "id": 18,
+  "code": "JOB",
+  "en": "Job",
+  "zh": "约伯记",
+  "aliases": [
+   "JOB",
+   "Job",
+   "约伯记"
+  ]
+ },
+ {
+  "id": 19,
+  "code": "PSA",
+  "en": "Psalms",
+  "zh": "诗篇",
+  "aliases": [
+   "PSA",
+   "Psalms",
+   "诗篇"
+  ]
+ },
+ {
+  "id": 20,
+  "code": "PRO",
+  "en": "Proverbs",
+  "zh": "箴言",
+  "aliases": [
+   "PRO",
+   "Proverbs",
+   "箴言"
+  ]
+ },
+ {
+  "id": 21,
+  "code": "ECC",
+  "en": "Ecclesiastes",
+  "zh": "传道书",
+  "aliases": [
+   "ECC",
+   "Ecclesiastes",
+   "传道书"
+  ]
+ },
+ {
+  "id": 22,
+  "code": "SNG",
+  "en": "Song of Solomon",
+  "zh": "雅歌",
+  "aliases": [
+   "SNG",
+   "Song of Solomon",
+   "SongofSolomon",
+   "雅歌"
+  ]
+ },
+ {
+  "id": 23,
+  "code": "ISA",
+  "en": "Isaiah",
+  "zh": "以赛亚书",
+  "aliases": [
+   "ISA",
+   "Isaiah",
+   "以赛亚书"
+  ]
+ },
+ {
+  "id": 24,
+  "code": "JER",
+  "en": "Jeremiah",
+  "zh": "耶利米书",
+  "aliases": [
+   "JER",
+   "Jeremiah",
+   "耶利米书"
+  ]
+ },
+ {
+  "id": 25,
+  "code": "LAM",
+  "en": "Lamentations",
+  "zh": "耶利米哀歌",
+  "aliases": [
+   "LAM",
+   "Lamentations",
+   "耶利米哀歌"
+  ]
+ },
+ {
+  "id": 26,
+  "code": "EZK",
+  "en": "Ezekiel",
+  "zh": "以西结书",
+  "aliases": [
+   "EZK",
+   "Ezekiel",
+   "以西结书"
+  ]
+ },
+ {
+  "id": 27,
+  "code": "DAN",
+  "en": "Daniel",
+  "zh": "但以理书",
+  "aliases": [
+   "DAN",
+   "Daniel",
+   "但以理书"
+  ]
+ },
+ {
+  "id": 28,
+  "code": "HOS",
+  "en": "Hosea",
+  "zh": "何西阿书",
+  "aliases": [
+   "HOS",
+   "Hosea",
+   "何西阿书"
+  ]
+ },
+ {
+  "id": 29,
+  "code": "JOL",
+  "en": "Joel",
+  "zh": "约珥书",
+  "aliases": [
+   "JOL",
+   "Joel",
+   "约珥书"
+  ]
+ },
+ {
+  "id": 30,
+  "code": "AMO",
+  "en": "Amos",
+  "zh": "阿摩司书",
+  "aliases": [
+   "AMO",
+   "Amos",
+   "阿摩司书"
+  ]
+ },
+ {
+  "id": 31,
+  "code": "OBA",
+  "en": "Obadiah",
+  "zh": "俄巴底亚书",
+  "aliases": [
+   "OBA",
+   "Obadiah",
+   "俄巴底亚书"
+  ]
+ },
+ {
+  "id": 32,
+  "code": "JON",
+  "en": "Jonah",
+  "zh": "约拿书",
+  "aliases": [
+   "JON",
+   "Jonah",
+   "约拿书"
+  ]
+ },
+ {
+  "id": 33,
+  "code": "MIC",
+  "en": "Micah",
+  "zh": "弥迦书",
+  "aliases": [
+   "MIC",
+   "Micah",
+   "弥迦书"
+  ]
+ },
+ {
+  "id": 34,
+  "code": "NAM",
+  "en": "Nahum",
+  "zh": "那鸿书",
+  "aliases": [
+   "NAM",
+   "Nahum",
+   "那鸿书"
+  ]
+ },
+ {
+  "id": 35,
+  "code": "HAB",
+  "en": "Habakkuk",
+  "zh": "哈巴谷书",
+  "aliases": [
+   "HAB",
+   "Habakkuk",
+   "哈巴谷书"
+  ]
+ },
+ {
+  "id": 36,
+  "code": "ZEP",
+  "en": "Zephaniah",
+  "zh": "西番雅书",
+  "aliases": [
+   "ZEP",
+   "Zephaniah",
+   "西番雅书"
+  ]
+ },
+ {
+  "id": 37,
+  "code": "HAG",
+  "en": "Haggai",
+  "zh": "哈该书",
+  "aliases": [
+   "HAG",
+   "Haggai",
+   "哈该书"
+  ]
+ },
+ {
+  "id": 38,
+  "code": "ZEC",
+  "en": "Zechariah",
+  "zh": "撒迦利亚书",
+  "aliases": [
+   "ZEC",
+   "Zechariah",
+   "撒迦利亚书"
+  ]
+ },
+ {
+  "id": 39,
+  "code": "MAL",
+  "en": "Malachi",
+  "zh": "玛拉基书",
+  "aliases": [
+   "MAL",
+   "Malachi",
+   "玛拉基书"
+  ]
+ },
+ {
+  "id": 40,
+  "code": "MAT",
+  "en": "Matthew",
+  "zh": "马太福音",
+  "aliases": [
+   "MAT",
+   "Matthew",
+   "马太福音"
+  ]
+ },
+ {
+  "id": 41,
+  "code": "MRK",
+  "en": "Mark",
+  "zh": "马可福音",
+  "aliases": [
+   "MRK",
+   "Mark",
+   "马可福音"
+  ]
+ },
+ {
+  "id": 42,
+  "code": "LUK",
+  "en": "Luke",
+  "zh": "路加福音",
+  "aliases": [
+   "LUK",
+   "Luke",
+   "路加福音"
+  ]
+ },
+ {
+  "id": 43,
+  "code": "JHN",
+  "en": "John",
+  "zh": "约翰福音",
+  "aliases": [
+   "JHN",
+   "John",
+   "约翰福音"
+  ]
+ },
+ {
+  "id": 44,
+  "code": "ACT",
+  "en": "Acts",
+  "zh": "使徒行传",
+  "aliases": [
+   "ACT",
+   "Acts",
+   "使徒行传"
+  ]
+ },
+ {
+  "id": 45,
+  "code": "ROM",
+  "en": "Romans",
+  "zh": "罗马书",
+  "aliases": [
+   "ROM",
+   "Romans",
+   "罗马书"
+  ]
+ },
+ {
+  "id": 46,
+  "code": "1CO",
+  "en": "1 Corinthians",
+  "zh": "哥林多前书",
+  "aliases": [
+   "1CO",
+   "1 Corinthians",
+   "1Corinthians",
+   "哥林多前书"
+  ]
+ },
+ {
+  "id": 47,
+  "code": "2CO",
+  "en": "2 Corinthians",
+  "zh": "哥林多后书",
+  "aliases": [
+   "2CO",
+   "2 Corinthians",
+   "2Corinthians",
+   "哥林多后书"
+  ]
+ },
+ {
+  "id": 48,
+  "code": "GAL",
+  "en": "Galatians",
+  "zh": "加拉太书",
+  "aliases": [
+   "GAL",
+   "Galatians",
+   "加拉太书"
+  ]
+ },
+ {
+  "id": 49,
+  "code": "EPH",
+  "en": "Ephesians",
+  "zh": "以弗所书",
+  "aliases": [
+   "EPH",
+   "Ephesians",
+   "以弗所书"
+  ]
+ },
+ {
+  "id": 50,
+  "code": "PHP",
+  "en": "Philippians",
+  "zh": "腓立比书",
+  "aliases": [
+   "PHP",
+   "Philippians",
+   "腓立比书"
+  ]
+ },
+ {
+  "id": 51,
+  "code": "COL",
+  "en": "Colossians",
+  "zh": "歌罗西书",
+  "aliases": [
+   "COL",
+   "Colossians",
+   "歌罗西书"
+  ]
+ },
+ {
+  "id": 52,
+  "code": "1TH",
+  "en": "1 Thessalonians",
+  "zh": "帖撒罗尼迦前书",
+  "aliases": [
+   "1TH",
+   "1 Thessalonians",
+   "1Thessalonians",
+   "帖撒罗尼迦前书"
+  ]
+ },
+ {
+  "id": 53,
+  "code": "2TH",
+  "en": "2 Thessalonians",
+  "zh": "帖撒罗尼迦后书",
+  "aliases": [
+   "2TH",
+   "2 Thessalonians",
+   "2Thessalonians",
+   "帖撒罗尼迦后书"
+  ]
+ },
+ {
+  "id": 54,
+  "code": "1TI",
+  "en": "1 Timothy",
+  "zh": "提摩太前书",
+  "aliases": [
+   "1TI",
+   "1 Timothy",
+   "1Timothy",
+   "提摩太前书"
+  ]
+ },
+ {
+  "id": 55,
+  "code": "2TI",
+  "en": "2 Timothy",
+  "zh": "提摩太后书",
+  "aliases": [
+   "2TI",
+   "2 Timothy",
+   "2Timothy",
+   "提摩太后书"
+  ]
+ },
+ {
+  "id": 56,
+  "code": "TIT",
+  "en": "Titus",
+  "zh": "提多书",
+  "aliases": [
+   "TIT",
+   "Titus",
+   "提多书"
+  ]
+ },
+ {
+  "id": 57,
+  "code": "PHM",
+  "en": "Philemon",
+  "zh": "腓利门书",
+  "aliases": [
+   "PHM",
+   "Philemon",
+   "腓利门书"
+  ]
+ },
+ {
+  "id": 58,
+  "code": "HEB",
+  "en": "Hebrews",
+  "zh": "希伯来书",
+  "aliases": [
+   "HEB",
+   "Hebrews",
+   "希伯来书"
+  ]
+ },
+ {
+  "id": 59,
+  "code": "JAS",
+  "en": "James",
+  "zh": "雅各书",
+  "aliases": [
+   "JAS",
+   "James",
+   "雅各书"
+  ]
+ },
+ {
+  "id": 60,
+  "code": "1PE",
+  "en": "1 Peter",
+  "zh": "彼得前书",
+  "aliases": [
+   "1PE",
+   "1 Peter",
+   "1Peter",
+   "彼得前书"
+  ]
+ },
+ {
+  "id": 61,
+  "code": "2PE",
+  "en": "2 Peter",
+  "zh": "彼得后书",
+  "aliases": [
+   "2PE",
+   "2 Peter",
+   "2Peter",
+   "彼得后书"
+  ]
+ },
+ {
+  "id": 62,
+  "code": "1JN",
+  "en": "1 John",
+  "zh": "约翰一书",
+  "aliases": [
+   "1JN",
+   "1 John",
+   "1John",
+   "约翰一书"
+  ]
+ },
+ {
+  "id": 63,
+  "code": "2JN",
+  "en": "2 John",
+  "zh": "约翰二书",
+  "aliases": [
+   "2JN",
+   "2 John",
+   "2John",
+   "约翰二书"
+  ]
+ },
+ {
+  "id": 64,
+  "code": "3JN",
+  "en": "3 John",
+  "zh": "约翰三书",
+  "aliases": [
+   "3JN",
+   "3 John",
+   "3John",
+   "约翰三书"
+  ]
+ },
+ {
+  "id": 65,
+  "code": "JUD",
+  "en": "Jude",
+  "zh": "犹大书",
+  "aliases": [
+   "JUD",
+   "Jude",
+   "犹大书"
+  ]
+ },
+ {
+  "id": 66,
+  "code": "REV",
+  "en": "Revelation",
+  "zh": "启示录",
+  "aliases": [
+   "REV",
+   "Revelation",
+   "启示录"
+  ]
+ }
+]

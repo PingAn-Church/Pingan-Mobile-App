@@ -74,6 +74,31 @@ public class DatabaseIntegrityMigration {
                 ON group_conversations (app_level)
                 WHERE app_level = TRUE
                 """);
+
+        // One assistant reply per triggering message, enforced by the database.
+        //
+        // The queue is at-least-once and the listener's retry advice re-runs a
+        // failed handler in-process, so a worker that posts a reply and then throws
+        // would post a second one. Redis holds a claim/done marker as the cheap
+        // filter, but this index is the guarantee: it survives an eviction, a flush
+        // and a restart, and it is what a duplicate insert actually collides with.
+        //
+        // Partial, because every message a person sends leaves this column NULL.
+        jdbc.update("""
+                UPDATE messages SET responds_to_message_id = NULL
+                WHERE responds_to_message_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM messages parent
+                                  WHERE parent.id = messages.responds_to_message_id)
+                """);
+        jdbc.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_messages_responds_to
+                ON messages (responds_to_message_id)
+                WHERE responds_to_message_id IS NOT NULL
+                """);
+        // SET NULL, not CASCADE: deleting your question must not delete the answer
+        // the whole group has already read.
+        ensureForeignKey(jdbc, "messages", "responds_to_message_id",
+                "messages", "id", "fk_messages_responds_to", "SET NULL");
     }
 
     static void requireSingleAppGroup(List<Long> ids) {
@@ -95,6 +120,20 @@ public class DatabaseIntegrityMigration {
      */
     private void ensureCascadeForeignKey(JdbcTemplate jdbc, String table, String column,
             String targetTable, String targetColumn, String desiredName) {
+        ensureForeignKey(jdbc, table, column, targetTable, targetColumn, desiredName, "CASCADE");
+    }
+
+    /**
+     * As above, but the delete action is the caller's choice.
+     *
+     * SET NULL is right where the child row outlives its parent: an assistant reply
+     * is something a whole group has already read, so deleting the question it
+     * answered must not take the answer with it.
+     */
+    private void ensureForeignKey(JdbcTemplate jdbc, String table, String column,
+            String targetTable, String targetColumn, String desiredName, String deleteAction) {
+        // pg_constraint records the action as a single char: 'c' cascade, 'n' set null.
+        String expectedAction = "SET NULL".equalsIgnoreCase(deleteAction) ? "n" : "c";
         List<Map<String, Object>> constraints = jdbc.queryForList("""
                 SELECT con.conname,
                        con.confdeltype::text AS delete_action,
@@ -118,7 +157,7 @@ public class DatabaseIntegrityMigration {
         for (Map<String, Object> constraint : constraints) {
             String name = String.valueOf(constraint.get("conname"));
             boolean desired = desiredName.equals(name)
-                    && "c".equals(String.valueOf(constraint.get("delete_action")))
+                    && expectedAction.equals(String.valueOf(constraint.get("delete_action")))
                     && targetTable.equals(String.valueOf(constraint.get("target_table")))
                     && targetColumn.equals(String.valueOf(constraint.get("target_column")));
             if (desired) {
@@ -132,7 +171,7 @@ public class DatabaseIntegrityMigration {
             jdbc.execute("ALTER TABLE " + quote(table)
                     + " ADD CONSTRAINT " + quote(desiredName)
                     + " FOREIGN KEY (" + quote(column) + ") REFERENCES " + quote(targetTable)
-                    + " (" + quote(targetColumn) + ") ON DELETE CASCADE");
+                    + " (" + quote(targetColumn) + ") ON DELETE " + deleteAction);
         }
     }
 

@@ -48,6 +48,9 @@ class ChatMessageDeletionOrderingTest {
 
     private ChatService chatService;
 
+    private final AssistantAccountService assistantAccountService =
+            org.mockito.Mockito.mock(AssistantAccountService.class);
+
     @BeforeEach
     void setUp() {
         OssCleanupService cleanupService = new OssCleanupService(ossService, mediaReferenceService);
@@ -55,7 +58,7 @@ class ChatMessageDeletionOrderingTest {
                 privateConversationRepository, userRepository, messageDeliveryStatusRepository,
                 messagingTemplate, cleanupService, fanoutPublisher,
                 userBlockService, contentSanitizer, pushMessages,
-                conversationReadStateService);
+                conversationReadStateService, assistantAccountService);
         TransactionSynchronizationManager.initSynchronization();
     }
 

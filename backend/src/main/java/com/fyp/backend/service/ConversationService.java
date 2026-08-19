@@ -39,6 +39,7 @@ public class ConversationService {
     private final ConversationMuteRepository conversationMuteRepository;
     private final OssCleanupService ossCleanupService;
     private final ConversationReadStateService conversationReadStateService;
+    private final AssistantAccountService assistantAccountService;
 
     @Autowired
     public ConversationService(GroupConversationRepository groupConversationRepository,
@@ -50,7 +51,8 @@ public class ConversationService {
                                MessageDeliveryStatusRepository messageDeliveryStatusRepository,
                                ConversationMuteRepository conversationMuteRepository,
                                OssCleanupService ossCleanupService,
-                               ConversationReadStateService conversationReadStateService) {
+                               ConversationReadStateService conversationReadStateService,
+                               AssistantAccountService assistantAccountService) {
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
         this.userRepository = userRepository;
@@ -61,6 +63,63 @@ public class ConversationService {
         this.conversationMuteRepository = conversationMuteRepository;
         this.ossCleanupService = ossCleanupService;
         this.conversationReadStateService = conversationReadStateService;
+        this.assistantAccountService = assistantAccountService;
+    }
+
+    /**
+     * Stamps the assistant's identity onto a conversation the client is about to
+     * receive, so the @ picker can offer it without a directory lookup.
+     */
+    private ConversationDto withAssistantIdentity(ConversationDto dto) {
+        if (dto == null || !dto.isAssistantEnabled()) {
+            return dto;
+        }
+        assistantAccountService.findAssistant().ifPresent(assistant -> {
+            dto.setAssistantId(assistant.getId());
+            dto.setAssistantName(assistant.getFirstName());
+            dto.setAssistantNameZh(assistant.getDisplayNameZh());
+        });
+        return dto;
+    }
+
+    /**
+     * Turns the in-app assistant on or off for one group.
+     *
+     * The flag and the roster move together on purpose. A mention of someone who is
+     * not a participant is stripped by ChatService before the message is stored, so
+     * setting the flag alone would produce an assistant that never answers and
+     * reports nothing — the single most likely way to ship this feature broken.
+     *
+     * The app-level group is the exception: its roster is derived from who is
+     * verified and reconciled on every boot, and the assistant qualifies, so it is
+     * already a participant there and must not be hand-edited in.
+     */
+    @Transactional
+    public ConversationDto setAssistantEnabled(Long conversationId, boolean enabled, Long currentUserId) {
+        GroupConversation group = groupConversationRepository.findById(conversationId)
+                .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
+        if (group.getAdmins() == null || group.getAdmins().stream()
+                .noneMatch(admin -> admin.getId().equals(currentUserId))) {
+            throw new AccessDeniedException("Only group admins can change the assistant.");
+        }
+
+        User assistant = assistantAccountService.findAssistant()
+                .orElseThrow(() -> new IllegalStateException("The assistant account is not available."));
+
+        if (!group.isAppLevel()) {
+            boolean present = group.getParticipants().stream()
+                    .anyMatch(participant -> participant.getId().equals(assistant.getId()));
+            if (enabled && !present) {
+                group.getParticipants().add(assistant);
+            } else if (!enabled && present) {
+                group.getParticipants().removeIf(participant -> participant.getId().equals(assistant.getId()));
+            }
+        }
+
+        group.setAssistantEnabled(enabled);
+        group.setUpdatedAt(now());
+        groupConversationRepository.save(group);
+        return withAssistantIdentity(new ConversationDto(group));
     }
 
     /**
@@ -143,6 +202,7 @@ public class ConversationService {
             if (c.isAppLevel()) {
                 c.setParticipantCount(groupConversationRepository.countParticipants(c.getConversationId()));
             }
+            withAssistantIdentity(c);
         }
 
         return conversations;
@@ -151,7 +211,7 @@ public class ConversationService {
     public ConversationDto getConversationById(Long conversationId) {
         Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
         if (groupConversationOpt.isPresent()) {
-            ConversationDto dto = new ConversationDto(groupConversationOpt.get());
+            ConversationDto dto = withAssistantIdentity(new ConversationDto(groupConversationOpt.get()));
             if (dto.isAppLevel()) {
                 dto.setParticipantCount(groupConversationRepository.countParticipants(conversationId));
             }
@@ -414,6 +474,15 @@ public class ConversationService {
 
         if (!groupConversation.getParticipants().contains(userToRemove)) {
             throw new IllegalArgumentException("User is not a participant in this group.");
+        }
+
+        // The assistant is on the roster because it has to be: a mention of a
+        // non-participant is stripped before the message is stored, so removing it
+        // while it is switched on would leave an assistant that never answers and
+        // reports no error. Turning it off is the way to take it out.
+        if (userToRemove.isBot() && groupConversation.isAssistantEnabled()) {
+            throw new IllegalArgumentException(
+                    "Turn the assistant off for this group before removing it.");
         }
 
         if (userId.equals(currentUserId)) {

@@ -72,4 +72,7 @@ public interface GroupConversationRepository extends JpaRepository<GroupConversa
             + "WHERE p.id = :userId AND g.groupIcon LIKE CONCAT('%', :fileName, '%') ESCAPE '!'")
     boolean isParticipantOfGroupWithIcon(@Param("userId") Long userId,
                                          @Param("fileName") String fileName);
+
+    /** Groups with the in-app assistant switched on — used by the startup health check. */
+    java.util.List<GroupConversation> findByAssistantEnabledTrue();
 }

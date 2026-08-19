@@ -100,8 +100,11 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query("SELECT COALESCE(MAX(u.id), 0) FROM User u")
     long findHighestUserId();
 
-    /** Accounts registered after a given id, ignoring ones since self-deleted. */
-    long countByIdGreaterThanAndDeletedAccountFalse(Long id);
+    /**
+     * Accounts registered after a given id, ignoring ones since self-deleted and
+     * the assistant, which is not a member arriving and should raise no badge.
+     */
+    long countByIdGreaterThanAndDeletedAccountFalseAndBotFalse(Long id);
 
     /** Admins with no new-member marker yet — backfilled once at startup. */
     List<User> findByIsAdminTrueAndLastSeenMemberIdIsNull();
@@ -109,6 +112,12 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     /**
      * Everyone entitled to be in the app-level group: admin-verified, still
      * active, not self-deleted. The same three conditions the chat gates on.
+     *
+     * DELIBERATELY includes bot accounts. AppGroupChatService reconciles the
+     * roster against this list on every boot and evicts anyone missing from it,
+     * so excluding the assistant here would silently drop it out of the group —
+     * and a mention of a non-participant is stripped by ChatService before the
+     * message is stored, leaving no error to notice. Keep bots in.
      */
     @Query("SELECT u FROM User u WHERE u.isVerifiedUser = true AND u.active = true AND u.deletedAccount = false")
     List<User> findChatEligibleMembers();

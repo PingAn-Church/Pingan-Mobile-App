@@ -129,6 +129,13 @@ public class AuthService {
         User user = userRepository.findByEmail(loginDto.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid email or password."));
 
+        // Machine accounts have no owner and no usable password hash. Refused
+        // with the same message as a wrong password so the response cannot be
+        // used to discover which addresses are service accounts.
+        if (user.isBot()) {
+            throw new IllegalArgumentException("Invalid email or password.");
+        }
+
         if (!passwordEncoder.matches(loginDto.getPassword(), user.getPassword())) {
             throw new IllegalArgumentException("Invalid email or password.");
         }

@@ -89,6 +89,13 @@ public class UserService {
         return (root, query, cb) -> {
             List<Predicate> predicates = new java.util.ArrayList<>();
 
+            // The assistant is a user row, but it is not a member: it must not
+            // appear in the directory, the admin member lists, role management,
+            // "start a new chat", or add-participants. The mention picker offers
+            // it from the conversation instead (ConversationDto.assistantId), so
+            // nothing legitimate needs it here.
+            predicates.add(cb.isFalse(root.get("bot")));
+
             if (deletedAccount != null) {
                 predicates.add(cb.equal(root.get("deletedAccount"), deletedAccount));
             }

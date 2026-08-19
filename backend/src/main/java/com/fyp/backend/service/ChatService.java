@@ -8,6 +8,7 @@ import com.fyp.backend.repository.*;
 import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -40,6 +41,7 @@ public class ChatService {
     private final ContentSanitizer contentSanitizer;
     private final PushMessages pushMessages;
     private final ConversationReadStateService conversationReadStateService;
+    private final AssistantAccountService assistantAccountService;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -52,7 +54,8 @@ public class ChatService {
                        UserBlockService userBlockService,
                        ContentSanitizer contentSanitizer,
                        PushMessages pushMessages,
-                       ConversationReadStateService conversationReadStateService) {
+                       ConversationReadStateService conversationReadStateService,
+                       AssistantAccountService assistantAccountService) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -65,6 +68,7 @@ public class ChatService {
         this.contentSanitizer = contentSanitizer;
         this.pushMessages = pushMessages;
         this.conversationReadStateService = conversationReadStateService;
+        this.assistantAccountService = assistantAccountService;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -306,6 +310,89 @@ public class ChatService {
                 : new ArrayList<>(message.getMentionedUserIds());
     }
 
+    /**
+     * Whether this message asks the assistant to answer.
+     *
+     * Deliberately NOT triggered by @all: an admin broadcasting to the whole church
+     * is addressing people, not summoning a bot. Also never triggered by the
+     * assistant's own messages — sanitiseMentions already strips self-mentions, but
+     * this survives that rule changing.
+     */
+    private boolean summonsAssistant(Message message, Conversation conversation, User sender) {
+        if (sender.isBot() || Boolean.TRUE.equals(message.getMentionsEveryone())) {
+            return false;
+        }
+        if (!(conversation instanceof GroupConversation group) || !group.isAssistantEnabled()) {
+            return false;
+        }
+        Set<Long> mentioned = message.getMentionedUserIds();
+        return mentioned != null
+                && assistantAccountService.assistantUserId().map(mentioned::contains).orElse(false);
+    }
+
+    /**
+     * Posts the assistant's answer, as an ordinary message from its account.
+     *
+     * Idempotency lives here rather than in the worker: {@code respondsToMessageId}
+     * carries a partial unique index, so a redelivered task — or a retry after the
+     * handler failed downstream of this insert — collides instead of posting a
+     * second reply. The collision is a normal outcome, not an error.
+     *
+     * The reply mentions whoever asked. There is no reply-to in the schema, so in a
+     * busy group an unattached answer is hard to place; the mention also gives them
+     * the conversation-row marker and a push that ignores their mute, which is
+     * reasonable for an answer they are waiting on.
+     *
+     * @return the posted reply, or null if one already existed
+     */
+    @Transactional
+    public MessageDto sendAssistantReply(Long conversationId, Long triggerMessageId,
+                                         Long askerId, User assistant, String content) {
+        Conversation conversation = getConversationByTypeAndId(conversationId, "group");
+        checkUserIsParticipant(conversation, assistant.getId());
+
+        Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+        MessageDto outgoing = new MessageDto();
+        outgoing.setContent(contentSanitizer.mask(content));
+        outgoing.setType("text");
+        outgoing.setConversationType("group");
+        outgoing.setMentionedUserIds(askerId == null ? List.of() : List.of(askerId));
+
+        Message message = new Message(outgoing, conversation, assistant, timestamp.toString());
+        message.setConversationType("group");
+        message.setRespondsToMessageId(triggerMessageId);
+        sanitiseMentions(message, conversation, assistant, "group");
+
+        try {
+            message = messageRepository.saveAndFlush(message);
+        } catch (DataIntegrityViolationException duplicate) {
+            // The unique index did its job: something already answered this message.
+            return null;
+        }
+
+        MessageDto savedMessage = buildResponseDto(message, conversation);
+        LocalizedText notificationTitle =
+                getPushNotificationTitle("group", assistant, conversationId);
+        LocalizedText assistantName =
+                pushMessages.personName(assistant.getFirstName(), assistant.getLastName());
+        LocalizedText mentionedBody = language -> pushMessages.get(
+                language, "push.chat.mentionedYou", assistantName.render(language));
+
+        // Only the asker is pushed. Everyone else still sees the answer in the group
+        // and still gets the unread count, but one member's Bible question must not
+        // vibrate several hundred phones — that is how a feature gets muted into
+        // uselessness in a week. Hence an EMPTY plain-recipient batch.
+        List<Long> mentionedRecipients = resolveMentionedRecipients(message, conversation, assistant);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                fanoutPublisher.publishChat(savedMessage, List.of(), mentionedRecipients,
+                        notificationTitle, mentionedBody, mentionedBody);
+            }
+        });
+        return savedMessage;
+    }
+
     @Transactional
     public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
@@ -358,6 +445,15 @@ public class ChatService {
         LocalizedText mentionedBody = language -> pushMessages.get(
                 language, "push.chat.mentionedYou", senderName.render(language));
 
+        // Whether this message summons the assistant.
+        //
+        // The check is an id comparison against the mentions the server just
+        // validated, not a search of the text: names contain spaces, the assistant
+        // has one in each language, and either could be renamed. @all is excluded
+        // on purpose — an admin addressing the whole church is not asking a bot.
+        boolean assistantSummoned = summonsAssistant(message, conversation, sender);
+        Long triggerMessageId = message.getId();
+
         // Defer messaging and bounded push batches until the message row commits.
         // Rabbit retries each batch independently, while reconnect history remains
         // the source of truth if the broker is unavailable at this boundary.
@@ -367,6 +463,10 @@ public class ChatService {
                 fanoutPublisher.publishChat(savedMessage, plainRecipients,
                         mentionedRecipients, notificationTitle, notificationBody,
                         mentionedBody);
+                if (assistantSummoned) {
+                    fanoutPublisher.publishAssistantReply(
+                            savedMessage.getConversationId(), triggerMessageId, sender.getId());
+                }
             }
         });
 

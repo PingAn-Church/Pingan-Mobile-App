@@ -29,6 +29,13 @@ public class MessageDto {
     // is speaking without the client first loading the whole participant roster —
     // which the app-level group deliberately does not ship.
     private String senderProfileImage;
+    // Written by the in-app assistant rather than a person. The client draws the
+    // app icon, an "AI" badge and the disclaimer footer off this.
+    private boolean senderBot = false;
+    // The assistant's Chinese name, so a bot message names itself in the reader's
+    // language without the client having to hold the conversation to find out.
+    // Null on every message a person sent.
+    private String senderDisplayNameZh;
 
     private List<Long> recipientIds = new ArrayList<>();
     // Ids this message calls out by name, and the @all flag. Both travel in
@@ -62,6 +69,8 @@ public class MessageDto {
         this.senderFirstName = displayFirstName(message.getSender());
         this.senderLastName = displayLastName(message.getSender());
         this.senderProfileImage = displayProfileImage(message.getSender());
+        this.senderBot = message.getSender() != null && message.getSender().isBot();
+        this.senderDisplayNameZh = this.senderBot ? message.getSender().getDisplayNameZh() : null;
         this.reported = Boolean.TRUE.equals(message.getReported());
         this.mentionedUserIds = message.getMentionedUserIds() == null
                 ? new ArrayList<>()

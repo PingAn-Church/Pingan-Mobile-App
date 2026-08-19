@@ -125,6 +125,9 @@ public class UserAccountDeletionService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        if (user.isBot()) {
+            throw new RuntimeException("Cannot delete the in-app assistant account.");
+        }
         if (user.isAdmin()) {
             throw new RuntimeException("Cannot delete an admin account. Downgrade it first.");
         }

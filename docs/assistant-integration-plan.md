@@ -4,7 +4,9 @@ Add a built-in AI assistant that members summon by `@`-mentioning it inside a gr
 chat. It answers Bible-study questions by quoting **real** scripture, and answers
 "what's on this week / what courses are there" from the app's own data.
 
-This is a **plan only** — no code is written yet.
+**Status: implemented** on `feature/shalombot-assistant`, all six commits below. The
+backend suite is green at 439 tests. What remains is operational, not code — see
+*Before switching it on* at the end.
 
 ## Decisions locked in
 
@@ -14,7 +16,7 @@ This is a **plan only** — no code is written yet.
 | **Where it works** | Group chats only, admin-enabled per group — **including the church-wide app group**. Never private chats (v1). |
 | **Trigger** | Being `@`-mentioned. Never `@all`. |
 | **Translations** | **KJV** (English) and **和合本 CUV, simplified** (Chinese). Both public domain. |
-| **Corpus** | eBible.org USFM → JSON offline, **committed to the repo**, held in memory at runtime. No table, no deploy step. |
+| **Corpus** | eBible.org HTML → JSON offline, **committed to the repo**, held in memory at runtime. No table, no deploy step. |
 | **Scripture output** | The model emits **IR tokens only** (`[bible:CUV:42:10:27]`); the backend substitutes real verse text. |
 | **Context sent to provider** | ~10 messages, **anchored at the trigger message**, display names stripped. |
 | **Delivery** | Exactly **one reply per triggering message**, enforced by a partial unique index. |
@@ -84,6 +86,12 @@ insert, and re-running is a no-op.
 
 **Seed values:** `firstName = "ShalomBot"`, `lastName = ""`, `displayNameZh = "平安小助手"`,
 `isVerifiedUser = true`, **`isAdmin = false`**.
+
+`profileImage` needs a decision. Left null, the bot renders with the same bundled
+`defaultProfileImage` as any member without a photo, which reads as a person and works
+against the "this is not a human" signal the badge and footer are trying to send. Either
+upload an avatar to `userProfilePictures/` during seeding, or bundle one client-side and
+select it on `senderBot`. The latter is simpler and avoids a seed-time OSS dependency.
 
 `formatName` returns `first || last` when either side is blank, so an empty
 `lastName` renders as `ShalomBot` in both locales with no trailing space and no
@@ -341,25 +349,47 @@ Storing IR in `Message.content` and substituting on the client *would* give each
 their own language, but it breaks push notification text, conversation previews, and every
 1.0.x client that has never heard of IR. Explicitly rejected.
 
-### Corpus — eBible.org USFM, converted to JSON at build time
+### Corpus — eBible.org HTML, converted to JSON offline · **DONE**
 
-**Source:** [eBible.org](https://ebible.org), which distributes translations as USFM
-downloads with per-translation licence terms stated on each page. Take the KJV and the
-**simplified** 和合本 (eBible hosts both scripts — verify which edition the download is
-before importing; the whole app is simplified elsewhere).
+**Source:** [eBible.org](https://ebible.org) HTML downloads, one `.htm` per chapter.
+
+| download | edition | books | verses |
+|---|---|---|---|
+| `eng-kjv` | King James Version **+ Apocrypha** | 81 codes → **66 kept** | **31,102** |
+| `cmn-cu89s` | 和合本 1989, **simplified** | 66 | **31,021** |
+
+31,102 is the canonical KJV verse count, which is the strongest single signal that the
+conversion is faithful.
+
+**The apocrypha are excluded.** The converter whitelists the 66 canonical books by their
+code and drops everything else, logging what it skipped — `1ES 1MA 2ES 2MA BAR BEL ESG
+FRT JDT MAN S3Y SIR SUS TOB WIS` (fourteen apocryphal books plus front matter). CUV
+shipped the 66 only. The whitelist is also what defines `book_id` 1–66, so `LUK` = 42.
 
 **Pipeline — offline, run once, output committed:**
 
 ```
-eBible USFM (one file per book)
-      │   backend/tools/usfm-to-json/     ← standalone script, OUTSIDE src/
-      ▼                                     so Maven never compiles it into the jar
-resources/bible/kjv.json
-resources/bible/cuv.json                  ← flat arrays: [{b,c,v,t}, ...]
-resources/bible/books.json                ← 1-66 ↔ USFM code ↔ EN/ZH names ↔ aliases
+docs/eng-kjv/*.htm, docs/cmn-cu89s/*.htm
+      │   backend/tools/ebible-to-json/convert.mjs   ← plain Node, OUTSIDE src/
+      ▼                                                so Maven never jars it
+resources/bible/kjv.json     5.0 MB
+resources/bible/cuv.json     4.1 MB   ← flat arrays: [{b,c,v,t}, {b,c,v,ve,t}, ...]
+resources/bible/books.json   9.5 KB   ← 1-66 ↔ code ↔ EN/ZH names ↔ aliases
 ```
 
-Nothing parses USFM at runtime and the app never depends on eBible being reachable.
+8.7 MB on disk, roughly 3 MB in the packfile. `ve` appears only on bridged verses.
+
+Book names are read from each book's index-page title (`新标点和合本 路加福音`) rather than
+typed out, so they match the editions actually shipped. **The Chinese names exist nowhere
+else** — `books.json` had to be generated before the HTML was deleted. All 66 resolved,
+no duplicate aliases.
+
+Aliases are mechanical: code, English name, English name without spaces, Chinese name.
+**Curated abbreviations — `Jn`, `太`, `路` — are a separate reviewed pass.** Guessing
+sixty-six of them is how a lookup silently misroutes to the wrong book, and the model
+emits numeric ids anyway, so this only affects reference strings a human types.
+
+Nothing parses HTML at runtime and the app never depends on eBible being reachable.
 
 **Why the JSON is committed rather than fetched or hand-placed.** Three ways to get the
 corpus onto the server, and the differences matter more than they look:
@@ -377,17 +407,27 @@ It is added once and never churns. Optionally gzip the resources and inflate on 
 Commit the conversion script alongside it so a future re-import is a documented one-liner
 rather than an archaeology exercise.
 
-**USFM parsing traps** — these are where a converter quietly corrupts the text:
+**The markup, and the delete-vs-unwrap rules.** Verses are marked by
+`<span class="verse" id="Vn">n&#160;</span>` and run until the next such span. Every
+element is then either DELETED (element *and* its text) or UNWRAPPED (tag dropped, text
+kept). Getting one backwards produces verses that read almost right — the worst possible
+failure for this feature.
 
-| marker | handling |
-|---|---|
-| `\f … \f*` footnotes, `\x … \x*` cross-refs | **delete contents entirely** — unwrapping drops footnote prose into the verse |
-| `\add … \add*` | **unwrap, keep the words** — in the KJV these are the italicised supplied words and they are part of the verse |
-| `\w … \w*`, `\nd … \nd*`, `\q`, `\q1`, `\p`, `\m`, `\s`, `\b` | strip the marker, keep any text |
-| `\v 1-2` bridged verses | store under the first number, record the span; do **not** silently drop the second |
+| element | action | why |
+|---|---|---|
+| `<a class="notemark">…<span class="popup">note</span></a>` | **DELETE** | The note text is **inline inside the verse**, not in a footer. Unwrapping splices editorial prose into scripture. This is the trap. |
+| `<div class='s'>`, `<div class='r'>` | **DELETE** | Section headings and cross-reference lines — editorial, not scripture. CUV has 146 and 108 of them in Luke alone. |
+| `chapterlabel`, `tnav`, `footnote`, `copyright`, `mt`, `toc` | **DELETE** | Page chrome. `tnav` in particular contains link text that would otherwise land mid-verse. |
+| `<span class='add'>` | **UNWRAP** | The KJV's italicised supplied words. Part of the verse. |
+| `<span class='wj'>` | **UNWRAP** | Words of Jesus — KJV red-letter markup. |
+| `<span class='pn'>`, `<span class='nd'>` | **UNWRAP** | Proper names, divine name. CUV uses `pn` heavily. |
+| `<div class='p'>`, `<div class='q'>`, `<div class='m'>` | **UNWRAP** | Paragraph and poetry containers **carry verse text** — deleting them loses whole poetic books. |
+| `¶` | strip | A rendered paragraph mark, not text. |
+| `<span class="verse">1-2</span>` | record span | CUV has **70** bridged verses; KJV none. Store under the first number with `ve` — see the parity rule below. |
 
-Delete-vs-unwrap is the one distinction that matters. Getting it backwards produces
-verses that read almost right, which is the worst possible failure for this feature.
+Two encoding details: `&#160;` follows every verse number and must go, and the CUV's
+**U+3000 ideographic space before 神** is authentic reverence spacing — preserve it, do
+not fold it into ordinary whitespace collapsing.
 
 ### Hold it in memory, not in Postgres
 
@@ -421,17 +461,36 @@ Even so, `search_passages` should **run against KJV by default and render the ma
 coordinates in CUV**, because the English index ranks better. The bigram index is the
 fallback for queries with no English form.
 
-### Versification parity — spot-check before trusting it
+### Versification parity — **measured, not assumed**
 
 The "search in English, render in Chinese" trick depends on KJV and CUV sharing verse
-coordinates. Both are the 66-book Protestant canon and they broadly do, but there are
-known divergence points — Psalm superscriptions counted as verse 1 in some traditions,
-and a handful of chapter-boundary differences.
+coordinates. Measured across the full corpus:
 
-**A mismatch renders the wrong Chinese verse**, which is precisely the failure the whole
-IR design exists to prevent. Verify with a spot-check across the Psalms, Malachi/Joel
-(chapter-boundary differences), and 3 John before relying on it. If parity turns out to
-be imperfect, store an explicit coordinate-mapping table rather than assuming.
+| | result |
+|---|---|
+| Chapter counts | **identical in all 66 books** — no chapter-boundary divergence |
+| KJV coordinates resolving to an exact CUV verse | **31,019** |
+| …resolving via a bridged CUV span | **71** |
+| …genuinely absent from CUV | **12** |
+| CUV-only coordinates | **2** — 3 John 1:15, Revelation 12:18 |
+
+**No mapping table is needed.** One fallback rule covers the 71:
+
+> When a coordinate has no exact CUV row, use the bridged row whose span contains it
+> (`r.v <= v <= r.ve`).
+
+The 12 absent verses are exactly the Textus-Receptus readings the CUV's base text omits:
+
+```
+MAT 18:11, MAT 23:14, MRK 7:16, MRK 15:28, LUK 17:36, LUK 23:17,
+JHN 5:4,   JHN 7:53,  ACT 8:37, ACT 15:34, ACT 24:7,  ACT 28:29
+```
+
+That this list is precisely the classic set — rather than twelve scattered verses — is
+itself evidence the converter lost nothing by accident. **These must answer "not present
+in 和合本", never silently render a neighbouring verse.** Rendering Acts 8:36 when asked
+for 8:37 is exactly the failure the IR design exists to prevent, and it is the one case
+where the substitution step must refuse rather than approximate.
 
 ### Tools
 
@@ -784,16 +843,23 @@ new `AssistantAccountService` with the idempotent seed **and the never-admin sta
 assertion** · `MessageDto.senderBot` + `senderDisplayNameZh`.
 
 ### 2 — `dev: import the KJV and 和合本 corpora with passage lookup and search`
-`backend/tools/usfm-to-json/` converter (outside `src/`) · generated
-`resources/bible/{kjv,cuv,books}.json` committed · `BibleService` loading both into
-memory at startup · KJV inverted index + CUV bigram index · `lookupPassage` /
-`searchPassages` · **the `[bible:…]` IR resolver and its verse/token caps**.
+**Already done:** `backend/tools/ebible-to-json/convert.mjs` and the generated
+`resources/bible/{kjv,cuv,books}.json`. Versification measured (§4) — no mapping table
+needed.
+
+**Remaining:** `BibleService` loading the three files into memory at startup · KJV
+inverted index + CUV bigram index · `lookupPassage` / `searchPassages` · the bridged-span
+fallback and the twelve "not present in 和合本" refusals · **the `[bible:…]` IR resolver
+and its verse/token caps**.
 
 No entity, no repository, no migration — the corpus is immutable reference data (§4).
 Independently testable with no LLM and no database involved.
 
-**Do the versification spot-check here**, before anything depends on cross-translation
-coordinates.
+**Load it lazily or behind a profile.** Parsing 8.7 MB of JSON costs a few hundred
+milliseconds and ~30 MB of heap. That is nothing in production, where it happens once at
+boot, but the Spring test context would pay it for every suite that never touches the
+assistant. `@Lazy` on the corpus bean, or a test profile that loads a stub, keeps the
+existing tests as fast as they are now.
 
 ### 3 — `dev: add the OpenAI-compatible assistant client behind env config`
 `AssistantProperties` · `AssistantClient` on `RestClient` · tool-call loop with the round
@@ -843,13 +909,13 @@ Nothing is user-visible until 5 and 6.
 - A mention of a bot that is *not* a participant is stripped — proving the failure mode,
   so the startup warning is what catches it in production.
 
-*Corpus*
-- Converter output round-trips: a sampled verse from each of the 66 books matches the
-  USFM source.
-- `\f`/`\x` content never appears inside a verse; `\add` words are kept.
-- Bridged verses (`\v 1-2`) are present, not silently dropped.
-- Versification spot-check: Psalms with superscriptions, Malachi/Joel chapter boundaries,
-  3 John — KJV and CUV coordinates agree, or the mapping table covers the difference.
+*Corpus* — the first four already pass against the generated JSON
+- KJV totals 31,102 verses across 66 books; no apocryphal book appears.
+- Footnote popup text never appears inside a verse (`Luke 10:6` CUV, `Gen 4:1` KJV).
+- `add` words survive (`Luke 10:2` KJV reads "The harvest truly is great").
+- No verse text ends with the next verse's number — the marker-boundary regression.
+- Bridged-span fallback resolves 71 coordinates; the 12 listed in §4 return
+  "not present in 和合本" rather than a neighbouring verse.
 - CUV bigram search for 邻舍 returns Luke 10:27 (the check that would fail silently under
   Postgres FTS).
 
@@ -917,7 +983,7 @@ Nothing is user-visible until 5 and 6.
 | **Assistant silently never fires** | Bot must be on the group roster; `findChatEligibleMembers` keeps bots; remove-participant refuses it; startup warning (§1) |
 | Wrong Chinese verse from coordinate drift | Versification spot-check in commit 2; mapping table if parity is imperfect (§4) |
 | Chinese search returning nothing | In-memory bigram index, not Postgres FTS, which cannot segment CJK (§4) |
-| Corrupted verse text from USFM conversion | Delete-vs-unwrap marker rules; per-book round-trip test (§4) |
+| Corrupted verse text from HTML conversion | Delete-vs-unwrap element rules; per-book round-trip test (§4) |
 | Client squatting the idempotency key | `respondsToMessageId` is server-side only, never on `MessageDto` (§3) |
 | Duplicate reply from a retry or lost ACK | Partial unique index on `responds_to_message_id`; Redis claim/done as fast path (§3) |
 | Answering with a conversation that has moved on | Context anchored at the trigger message; task carries ids, worker re-reads (§3) |
@@ -937,9 +1003,29 @@ Nothing is user-visible until 5 and 6.
 1. **Rate limits** — are 5/user/hour and 200/conversation/day the right starting numbers?
    They are config values, easily changed, but the first setting shapes expectations.
 2. **Who signs off the system prompt** in §10, and by when?
-3. **Licence terms** — record what eBible.org states for each of the two downloads, and
-   confirm the KJV's UK Crown-copyright position does not bite in Singapore, before the
-   corpus is committed.
+3. **Licence terms** — both downloads state **"Public Domain"** in their own
+   `copyright.htm` and on every chapter page. That is eBible's statement, not legal
+   advice; confirm the KJV's UK Crown-copyright position does not bite in Singapore
+   before the corpus ships.
 4. **Which group hosts the trial** before the app-level group is switched on?
 5. **Scripture language in a mixed group** — §4 renders in the *asker's* language for
    everyone. Acceptable, or worth revisiting once there is real usage?
+
+---
+
+## Before switching it on
+
+The code is in place and inert. Nothing answers anybody until each of these is done.
+
+| step | why it matters |
+|---|---|
+| 1. Deploy, then check the boot log for `Creating the in-app assistant account` and `Bible corpora loaded` | Confirms the seed ran and the corpus parsed on the real database |
+| 2. Confirm `LLM_BASE_URL` ends in the provider's version path (e.g. `/v1`) | `/chat/completions` is appended to it; a bare host produces a 404 that reads like a provider outage |
+| 3. Get the §10 system prompt reviewed and signed off | It encodes doctrinal posture; it should not ship on an engineer's say-so |
+| 4. Turn it on for **one** trial group — `PUT /chat/conversation/{id}/assistant` with `{"enabled":true}` | The toggle also puts the assistant on that group's roster; a flag alone leaves it silently mute |
+| 5. Ask it a Bible question, an events question, and something it cannot know | Checks quoting, app-data grounding, and that it says "I don't know" rather than inventing |
+| 6. Watch that only the asker is pushed | The empty plain-recipient batch is what keeps the church-wide group usable |
+| 7. Only then consider the app-level group | Its roster already contains the assistant, so step 4 is the only change needed |
+
+To turn it off again, set `enabled:false` on the group, or clear `ASSISTANT_ENABLED` /
+the credentials to disable it everywhere at once.

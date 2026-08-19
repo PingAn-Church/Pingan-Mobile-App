@@ -1,0 +1,224 @@
+package com.fyp.backend.service.assistant;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.sql.Timestamp;
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Pageable;
+
+import com.fyp.backend.config.app.AssistantProperties;
+import com.fyp.backend.model.GroupConversation;
+import com.fyp.backend.model.Message;
+import com.fyp.backend.model.User;
+import com.fyp.backend.repository.GroupConversationRepository;
+import com.fyp.backend.repository.MessageRepository;
+import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.service.AssistantAccountService;
+import com.fyp.backend.service.ChatService;
+
+/**
+ * The worker has to be safe to run twice and must never throw: a redelivery or an
+ * in-process retry after a partial success is exactly how one question gets
+ * answered twice, and an escaping exception is what triggers the retry.
+ */
+class AssistantServiceTest {
+
+    private static final long CONVERSATION = 5L;
+    private static final long TRIGGER = 900L;
+    private static final long ASKER = 3L;
+
+    private AssistantClient client;
+    private AssistantReplyRenderer renderer;
+    private AssistantThrottle throttle;
+    private AssistantAccountService accounts;
+    private ChatService chatService;
+    private MessageRepository messageRepository;
+    private GroupConversationRepository groups;
+    private UserRepository userRepository;
+    private AssistantService assistant;
+
+    private static User user(long id, boolean bot) {
+        User user = new User();
+        user.setId(id);
+        user.setBot(bot);
+        user.setFirstName(bot ? "ShalomBot" : "A");
+        user.setLastName(bot ? "" : "Member");
+        return user;
+    }
+
+    private static Message message(long id, User sender, String content) {
+        Message message = new Message();
+        message.setId(id);
+        message.setSender(sender);
+        message.setContent(content);
+        message.setType("text");
+        message.setTimestamp(new Timestamp(System.currentTimeMillis()));
+        return message;
+    }
+
+    @BeforeEach
+    void setUp() {
+        client = mock(AssistantClient.class);
+        renderer = mock(AssistantReplyRenderer.class);
+        throttle = mock(AssistantThrottle.class);
+        accounts = mock(AssistantAccountService.class);
+        chatService = mock(ChatService.class);
+        messageRepository = mock(MessageRepository.class);
+        groups = mock(GroupConversationRepository.class);
+        userRepository = mock(UserRepository.class);
+
+        assistant = new AssistantService(new AssistantProperties(), client,
+                mock(AssistantToolRegistry.class), renderer, throttle, accounts, chatService,
+                messageRepository, groups, userRepository);
+
+        GroupConversation group = new GroupConversation();
+        group.setId(CONVERSATION);
+        group.setAssistantEnabled(true);
+
+        when(client.isAvailable()).thenReturn(true);
+        when(throttle.alreadyAnswered(anyLong())).thenReturn(false);
+        when(throttle.claim(anyLong())).thenReturn(true);
+        when(throttle.withinLimits(any(), any())).thenReturn(true);
+        when(groups.findById(CONVERSATION)).thenReturn(Optional.of(group));
+        when(accounts.findAssistant()).thenReturn(Optional.of(user(99L, true)));
+        when(userRepository.findById(ASKER)).thenReturn(Optional.of(user(ASKER, false)));
+        when(messageRepository.findById(TRIGGER))
+                .thenReturn(Optional.of(message(TRIGGER, user(ASKER, false), "@ShalomBot what is love?")));
+        when(messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(anyLong(), anyLong(), any()))
+                .thenReturn(List.of());
+        when(client.complete(any(), any())).thenReturn("Some answer.");
+        when(renderer.render(anyString(), any())).thenAnswer(call -> call.getArgument(0));
+    }
+
+    @Test
+    void answersOnce() {
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(chatService).sendAssistantReply(eq(CONVERSATION), eq(TRIGGER), eq(ASKER), any(),
+                eq("Some answer."));
+        verify(throttle).markAnswered(TRIGGER);
+    }
+
+    @Test
+    void aRedeliveryOfAnAnsweredMessageDoesNothing() {
+        when(throttle.alreadyAnswered(TRIGGER)).thenReturn(true);
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(client, never()).complete(any(), any());
+        verify(chatService, never()).sendAssistantReply(any(), any(), any(), any(), anyString());
+    }
+
+    @Test
+    void aMessageAnotherWorkerHasClaimedIsLeftAlone() {
+        when(throttle.claim(TRIGGER)).thenReturn(false);
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(client, never()).complete(any(), any());
+    }
+
+    /** Deleting a message is a hard delete, so the question can vanish first. */
+    @Test
+    void aDeletedQuestionIsNotAnswered() {
+        when(messageRepository.findById(TRIGGER)).thenReturn(Optional.empty());
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(client, never()).complete(any(), any());
+        verify(chatService, never()).sendAssistantReply(any(), any(), any(), any(), anyString());
+    }
+
+    @Test
+    void aGroupThatHasTurnedTheAssistantOffIsNotAnswered() {
+        GroupConversation off = new GroupConversation();
+        off.setId(CONVERSATION);
+        off.setAssistantEnabled(false);
+        when(groups.findById(CONVERSATION)).thenReturn(Optional.of(off));
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(client, never()).complete(any(), any());
+    }
+
+    /**
+     * The listener runs with maxAttempts(1) precisely because a throw after a
+     * partial success would post a second reply. Nothing may escape.
+     */
+    @Test
+    void aProviderFailureBecomesAFallbackReplyNotAnException() {
+        when(client.complete(any(), any())).thenThrow(new RuntimeException("provider down"));
+
+        assertDoesNotThrow(() -> assistant.answer(CONVERSATION, TRIGGER, ASKER));
+
+        ArgumentCaptor<String> posted = ArgumentCaptor.forClass(String.class);
+        verify(chatService).sendAssistantReply(any(), any(), any(), any(), posted.capture());
+        assertTrue(posted.getValue().toLowerCase().contains("couldn't answer"), posted.getValue());
+        verify(throttle).markAnswered(TRIGGER);
+    }
+
+    @Test
+    void theClaimIsAlwaysReleased() {
+        when(client.complete(any(), any())).thenThrow(new RuntimeException("provider down"));
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(throttle).releaseClaim(TRIGGER);
+    }
+
+    @Test
+    void aRateLimitedRequestSaysSoOnceAndCostsNothing() {
+        when(throttle.withinLimits(ASKER, CONVERSATION)).thenReturn(false);
+        when(throttle.shouldAnnounceLimit(ASKER)).thenReturn(true);
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        verify(client, never()).complete(any(), any());
+        verify(chatService, times(1)).sendAssistantReply(any(), any(), any(), any(), anyString());
+        verify(throttle).markAnswered(TRIGGER);
+    }
+
+    @Test
+    void aRepeatedlyRateLimitedRequestStaysSilent() {
+        when(throttle.withinLimits(ASKER, CONVERSATION)).thenReturn(false);
+        when(throttle.shouldAnnounceLimit(ASKER)).thenReturn(false);
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        verify(chatService, never()).sendAssistantReply(any(), any(), any(), any(), anyString());
+        verify(throttle).markAnswered(TRIGGER);
+    }
+
+    /**
+     * Context ends at the triggering message, not at whatever is newest when the
+     * worker runs — otherwise a retry hours later answers a different conversation.
+     */
+    @Test
+    void contextIsAnchoredAtTheTriggeringMessage() {
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        ArgumentCaptor<Long> before = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
+        verify(messageRepository).findByConversationIdAndIdLessThanOrderByIdDesc(
+                eq(CONVERSATION), before.capture(), page.capture());
+
+        assertAll(
+                () -> assertEquals(TRIGGER, before.getValue()),
+                () -> assertTrue(page.getValue().getPageSize() > 0));
+    }
+
+    @Test
+    void anUnconfiguredProviderIsSilentRatherThanNoisy() {
+        when(client.isAvailable()).thenReturn(false);
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+        verify(throttle, never()).claim(anyLong());
+        verify(chatService, never()).sendAssistantReply(any(), any(), any(), any(), anyString());
+    }
+}

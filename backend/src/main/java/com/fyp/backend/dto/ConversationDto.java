@@ -26,6 +26,21 @@ public class ConversationDto {
     // Members, for conversations whose roster is not shipped (see below).
     private long participantCount = 0;
     private String groupIcon;
+
+    // Whether the in-app assistant answers when mentioned in this group. The client
+    // uses it to decide whether to offer the assistant in the @ picker at all.
+    private boolean assistantEnabled = false;
+
+    // Who to offer in the @ picker for the assistant, and under which names.
+    //
+    // Sent on the conversation rather than found through the member search: the
+    // app-level group deliberately never ships its roster, and the assistant is
+    // excluded from the user directory so it cannot turn up in "start a new chat"
+    // or the admin member lists. Both names travel because either may have been
+    // typed — see the mention highlighting in ChatPage.
+    private Long assistantId;
+    private String assistantName;
+    private String assistantNameZh;
     private List<Long> participants = new ArrayList<>();  // Ensure initialization
     private List<String> participantNames = new ArrayList<>();
     // Minimal per-participant info (id, name, avatar — no email) so chat clients
@@ -53,6 +68,7 @@ public class ConversationDto {
         this.groupNameZh = groupConversation.getGroupNameZh();
         this.appLevel = groupConversation.isAppLevel();
         this.groupIcon = groupConversation.getGroupIcon();
+        this.assistantEnabled = groupConversation.isAssistantEnabled();
         this.createdAt = groupConversation.getCreatedAt() != null
                 ? groupConversation.getCreatedAt().getTime()
                 : null;
