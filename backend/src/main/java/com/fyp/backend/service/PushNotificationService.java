@@ -316,10 +316,57 @@ public class PushNotificationService {
             }
         }
 
+        // Sub-batches retry locally, and the whole task is only rethrown for Rabbit
+        // redelivery when NOTHING was delivered — a redelivered task that had partly
+        // succeeded would re-send the successful sub-batches as duplicate
+        // notifications. Total failure is the one case where a replay cannot duplicate.
+        int sentPayloads = 0;
+        int failedPayloads = 0;
         for (int from = 0; from < payloads.size(); from += 100) {
             int to = Math.min(from + 100, payloads.size());
-            sendPushBatch(payloads.subList(from, to));
+            List<Map<String, Object>> chunk = payloads.subList(from, to);
+            if (sendChunkWithRetry(chunk)) {
+                sentPayloads += chunk.size();
+            } else {
+                failedPayloads += chunk.size();
+            }
         }
+        if (failedPayloads > 0 && sentPayloads == 0) {
+            throw new IllegalStateException(
+                    "Expo push batch failed entirely (" + failedPayloads + " payloads)");
+        }
+        if (failedPayloads > 0) {
+            System.err.println("⚠️ Partial Expo push failure: " + sentPayloads
+                    + " sent, " + failedPayloads + " dropped after local retries");
+        }
+    }
+
+    /**
+     * Sends one Expo sub-batch with a short local retry (this runs on a Rabbit
+     * listener thread, so the backoff stays in the hundreds of milliseconds).
+     * Returns false once attempts are exhausted rather than throwing, so one bad
+     * sub-batch cannot force the whole task into redelivery.
+     */
+    private boolean sendChunkWithRetry(List<Map<String, Object>> chunk) {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                sendPushBatch(chunk);
+                return true;
+            } catch (Exception e) {
+                if (attempt == 3) {
+                    System.err.println("❌ Expo sub-batch failed after " + attempt
+                            + " attempts: " + e.getMessage());
+                    return false;
+                }
+                try {
+                    Thread.sleep(250L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     /**

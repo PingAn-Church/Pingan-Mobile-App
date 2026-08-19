@@ -622,14 +622,20 @@ public class ConversationService {
 
         rejectAppGroupRosterEdit(groupConversation);
 
-        User userToAdd = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        User currentUser = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new IllegalArgumentException("Current user not found"));
+        // Same eligibility bar as every other path that grants someone standing in
+        // a conversation — an unverified or deactivated account cannot be promoted.
+        User userToAdd = requireChatEligible(userId, "User not found");
+        User currentUser = requireChatEligible(currentUserId, "Current user not found");
 
         // Ensure only admins can add new admins
         if (!groupConversation.getAdmins().contains(currentUser)) {
             throw new IllegalArgumentException("Only admins can add new admins.");
+        }
+
+        // Admin implies member: promoting an outsider would give them authority over
+        // a group they cannot even read, and the roster fan-out would never reach them.
+        if (!groupConversation.getParticipants().contains(userToAdd)) {
+            throw new IllegalArgumentException("User must be a participant of the group before becoming an admin.");
         }
 
         // Prevent adding the same user as an admin
@@ -657,14 +663,6 @@ public class ConversationService {
                 }
             }
         });
-
-        // Notify all participants about the new admin (WebSocket)
-//        for (Long participantId : updatedConversation.getParticipants()) {
-//            messagingTemplate.convertAndSendToUser(
-//                    participantId.toString(),
-//                    "/queue/group-admin-updates", updatedConversation
-//            );
-//        }
 
         return updatedConversation;
     }

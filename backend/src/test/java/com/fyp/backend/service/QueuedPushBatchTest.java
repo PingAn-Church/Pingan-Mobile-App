@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -65,6 +66,8 @@ class QueuedPushBatchTest {
 
     @Test
     void transportFailureEscapesForRabbitRetry() {
+        // Every sub-batch fails, nothing was delivered — the ONE case where Rabbit
+        // redelivery cannot duplicate, so the exception must escape.
         User active = user(1L, true);
         when(userRepository.findAllById(List.of(1L))).thenReturn(List.of(active));
         when(pushTokenRepository.findByUserIdIn(List.of(1L)))
@@ -75,6 +78,52 @@ class QueuedPushBatchTest {
         assertThrows(RuntimeException.class, () -> service.sendQueuedBatch(
                 List.of(1L), language -> "Body", language -> "Title",
                 null, "thread", 7L, false));
+        // Each sub-batch gets a short local retry before giving up.
+        verify(restTemplate, times(3)).postForObject(
+                any(String.class), any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void partialSubBatchFailureDoesNotEscapeToRabbit() {
+        // 150 device payloads -> two Expo sub-batches. The first fails through all
+        // local retries, the second succeeds; redelivering the whole task would
+        // re-send the successful sub-batch as duplicate notifications, so no
+        // exception may escape.
+        User active = user(1L, true);
+        List<PushToken> tokens = new java.util.ArrayList<>();
+        for (int i = 0; i < 150; i++) {
+            tokens.add(token(active, "ExponentPushToken[t" + i + "]"));
+        }
+        when(userRepository.findAllById(List.of(1L))).thenReturn(List.of(active));
+        when(pushTokenRepository.findByUserIdIn(List.of(1L))).thenReturn(tokens);
+        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new RuntimeException("network"))
+                .thenThrow(new RuntimeException("network"))
+                .thenThrow(new RuntimeException("network"))
+                .thenReturn("{\"data\":[]}");
+
+        service.sendQueuedBatch(List.of(1L), language -> "Body", language -> "Title",
+                null, "thread", 7L, false); // must not throw
+
+        verify(restTemplate, times(4)).postForObject(
+                any(String.class), any(HttpEntity.class), eq(String.class));
+    }
+
+    @Test
+    void transientFailureRecoversWithinLocalRetries() {
+        User active = user(1L, true);
+        when(userRepository.findAllById(List.of(1L))).thenReturn(List.of(active));
+        when(pushTokenRepository.findByUserIdIn(List.of(1L)))
+                .thenReturn(List.of(token(active, "ExponentPushToken[active]")));
+        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new RuntimeException("blip"))
+                .thenReturn("{\"data\":[]}");
+
+        service.sendQueuedBatch(List.of(1L), language -> "Body", language -> "Title",
+                null, "thread", 7L, false); // must not throw
+
+        verify(restTemplate, times(2)).postForObject(
+                any(String.class), any(HttpEntity.class), eq(String.class));
     }
 
     private User user(Long id, boolean verified) {
