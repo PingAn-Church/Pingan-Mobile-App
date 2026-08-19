@@ -34,6 +34,21 @@ export const createAnnouncement = async (title, imageUrl, announcementLink) => {
   }
 };
 
+export const updateAnnouncement = async (id, title, imageUrl, announcementLink) => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No authentication token found.");
+
+  const response = await axios.put(
+    apiUrl(`/api/announcements/${id}`),
+    null,
+    {
+      params: { title, imageUrl, announcementLink },
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return response.data;
+};
+
 export const deleteAnnouncement = async (id) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No authentication token found.");
