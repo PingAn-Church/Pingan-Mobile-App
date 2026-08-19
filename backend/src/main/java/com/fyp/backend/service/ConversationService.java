@@ -372,6 +372,19 @@ public class ConversationService {
         Long otherParticipantId = conversationDto.getParticipants().get(0);
         User otherUser = requireChatEligible(otherParticipantId, "Other participant not found");
 
+        // One conversation per pair: if these two already have one, hand it back
+        // instead of splitting their history across a duplicate. Both parties
+        // already hold the conversation, so no WS announcement is re-sent. A race
+        // between two simultaneous creates is caught by the unique pair index the
+        // startup migration installs; per the pattern documented in
+        // MessageRepository#existsByRespondsToMessageId, the violation is not
+        // caught in-transaction — the client retries and then receives this branch.
+        List<PrivateConversation> existing =
+                privateConversationRepository.findByPair(creatorId, otherParticipantId);
+        if (!existing.isEmpty()) {
+            return new ConversationDto(existing.get(0));
+        }
+
         // Create a private conversation
         PrivateConversation privateConversation = new PrivateConversation();
         privateConversation.setUserOne(creator);

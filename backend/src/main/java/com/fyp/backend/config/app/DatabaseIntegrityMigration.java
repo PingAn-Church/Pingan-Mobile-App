@@ -107,6 +107,108 @@ public class DatabaseIntegrityMigration {
         // the whole group has already read.
         ensureForeignKey(jdbc, "messages", "responds_to_message_id",
                 "messages", "id", "fk_messages_responds_to", "SET NULL");
+
+        // One private conversation per pair of users. Duplicates created before this
+        // guard existed are merged into the oldest conversation FIRST — the unique
+        // index below would otherwise refuse to build. Both run under the advisory
+        // lock above, and on every later boot the merge finds nothing and no-ops.
+        mergeDuplicatePrivateConversations(jdbc);
+        jdbc.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_private_conversations_pair
+                ON private_conversations (LEAST(user_one_id, user_two_id),
+                                          GREATEST(user_one_id, user_two_id))
+                """);
+    }
+
+    /**
+     * Merges duplicate private conversations between the same two users into the
+     * oldest one. Duplicates arose from races/two devices before
+     * createPrivateConversation gained its pair guard; each split the pair's
+     * history. Messages are repointed wholesale — message_mentions and
+     * message_delivery_status reference messages by message_id only, so they ride
+     * along and need no step of their own. Read watermarks merge to the furthest
+     * position per user; mutes move only where the keeper has none.
+     *
+     * Kept H2-portable (no Postgres-only syntax) so the test suite can exercise it;
+     * a congregation-sized app has at most a handful of duplicates, so the per-pair
+     * Java loop costs nothing.
+     */
+    void mergeDuplicatePrivateConversations(JdbcTemplate jdbc) {
+        List<Map<String, Object>> dups = jdbc.queryForList("""
+                SELECT pc.id AS dup_id, k.keep_id
+                FROM private_conversations pc
+                JOIN (SELECT LEAST(user_one_id, user_two_id) AS u1,
+                             GREATEST(user_one_id, user_two_id) AS u2,
+                             MIN(id) AS keep_id
+                      FROM private_conversations
+                      GROUP BY LEAST(user_one_id, user_two_id),
+                               GREATEST(user_one_id, user_two_id)
+                      HAVING COUNT(*) > 1) k
+                  ON LEAST(pc.user_one_id, pc.user_two_id) = k.u1
+                 AND GREATEST(pc.user_one_id, pc.user_two_id) = k.u2
+                WHERE pc.id <> k.keep_id
+                ORDER BY pc.id
+                """);
+        if (dups.isEmpty()) {
+            return;
+        }
+
+        for (Map<String, Object> row : dups) {
+            long dup = ((Number) row.get("dup_id")).longValue();
+            long keep = ((Number) row.get("keep_id")).longValue();
+
+            // Messages (and their mention/delivery-status children, via message_id).
+            jdbc.update("UPDATE messages SET conversation_id = ? WHERE conversation_id = ?",
+                    keep, dup);
+
+            // Read watermarks, respecting the (conversation_id, user_id) unique:
+            // where the user has a row on both sides, keep the furthest position...
+            jdbc.update("""
+                    UPDATE conversation_read_state SET last_read_message_id =
+                        GREATEST(COALESCE(last_read_message_id, 0),
+                                 COALESCE((SELECT d.last_read_message_id
+                                           FROM conversation_read_state d
+                                           WHERE d.conversation_id = ?
+                                             AND d.user_id = conversation_read_state.user_id), 0))
+                    WHERE conversation_id = ?
+                      AND EXISTS (SELECT 1 FROM conversation_read_state d
+                                  WHERE d.conversation_id = ?
+                                    AND d.user_id = conversation_read_state.user_id)
+                    """, dup, keep, dup);
+            // ...move rows only the duplicate has...
+            jdbc.update("""
+                    UPDATE conversation_read_state SET conversation_id = ?
+                    WHERE conversation_id = ?
+                      AND NOT EXISTS (SELECT 1 FROM conversation_read_state k
+                                      WHERE k.conversation_id = ?
+                                        AND k.user_id = conversation_read_state.user_id)
+                    """, keep, dup, keep);
+            // ...and drop what remains on the duplicate.
+            jdbc.update("DELETE FROM conversation_read_state WHERE conversation_id = ?", dup);
+
+            // Mutes: same move-where-absent scheme; the unique includes conversation_type.
+            jdbc.update("""
+                    UPDATE conversation_mutes SET conversation_id = ?
+                    WHERE conversation_id = ?
+                      AND NOT EXISTS (SELECT 1 FROM conversation_mutes k
+                                      WHERE k.conversation_id = ?
+                                        AND k.user_id = conversation_mutes.user_id
+                                        AND k.conversation_type = conversation_mutes.conversation_type)
+                    """, keep, dup, keep);
+            jdbc.update("DELETE FROM conversation_mutes WHERE conversation_id = ?", dup);
+
+            // Keep the most recent activity stamp, then retire the duplicate row.
+            jdbc.update("""
+                    UPDATE private_conversations SET updated_at = GREATEST(
+                        COALESCE(updated_at, TIMESTAMP '1970-01-01 00:00:00'),
+                        COALESCE((SELECT d.updated_at FROM private_conversations d WHERE d.id = ?),
+                                 TIMESTAMP '1970-01-01 00:00:00'))
+                    WHERE id = ?
+                    """, dup, keep);
+            jdbc.update("DELETE FROM private_conversations WHERE id = ?", dup);
+        }
+        log.warn("Merged {} duplicate private conversation(s) into their oldest counterpart.",
+                dups.size());
     }
 
     static void requireSingleAppGroup(List<Long> ids) {
