@@ -1242,16 +1242,27 @@ export default function ChatPage({ route }) {
     }, 250);
   }, []);
 
-  // Open a conversation positioned at its OLDEST UNREAD message instead of the bottom.
-  // Runs once per conversation open, before the read-marking effect clears unread state.
-  // Respects the sliding window: it targets the oldest unread that is currently loaded
-  // (for very large unread counts the older ones page in as the user scrolls up).
+  // Open a PRIVATE conversation positioned at its oldest unread message instead of
+  // the bottom. Runs once per open, before the read-marking effect clears unread
+  // state, and respects the sliding window: it targets the oldest unread currently
+  // loaded (older ones page in as the user scrolls up).
+  //
+  // Groups deliberately open at the latest message. Their read state is a watermark,
+  // not a receipt per message — the church-wide group would otherwise write one row
+  // per member per message — so `deliveryStatus` is empty for every group message
+  // and the test below cannot see the boundary at all. It used to degrade to "the
+  // oldest loaded message somebody else sent", which in a busy group is an arbitrary
+  // point days back. Landing on the newest message is both correct and what someone
+  // three hundred messages behind actually wants.
   useEffect(() => {
     if (!conversation || anchorHandledRef.current === conversationId) return;
     const history = conversation.chatHistory || [];
     if (!history.length) return; // wait until the first page of messages is present
     anchorHandledRef.current = conversationId; // handle once per open
 
+    // Read off the conversation rather than the state mirror of it, so the type can
+    // never lag the history this effect is about to inspect.
+    if (conversation.conversationType === "group") return; // newest message; see above
     if (!(conversation.unreadCount > 0)) return; // nothing unread -> default to bottom
 
     const oldestUnread = [...history].sort(sortByTimeAscending).find(
@@ -1276,7 +1287,14 @@ export default function ChatPage({ route }) {
         // handled by onScrollToIndexFailed
       }
     });
-  }, [conversation?.chatHistory, conversation?.unreadCount, conversationId, currentUser?.id, messages]);
+  }, [
+    conversation?.chatHistory,
+    conversation?.conversationType,
+    conversation?.unreadCount,
+    conversationId,
+    currentUser?.id,
+    messages,
+  ]);
 
   // Opening a conversation reads all of it, not just the page on screen. The
   // per-message receipts below can only speak for messages the client has loaded,
