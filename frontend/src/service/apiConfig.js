@@ -1,4 +1,10 @@
 import Constants from "expo-constants";
+import axios from "axios";
+
+// Global request timeout. Axios defaults to no timeout at all, so on a flaky
+// mobile link a stalled request would spin forever. Set here because every
+// service imports this module; axios reads defaults at request time.
+axios.defaults.timeout = 15000;
 
 const extra = Constants.expoConfig?.extra || Constants.manifest?.extra || {};
 
