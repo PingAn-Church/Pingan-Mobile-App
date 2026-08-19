@@ -63,6 +63,16 @@ cd backend
 
 The backend reads `backend/env.properties` through `spring.config.import=optional:file:env.properties`.
 
+## Database Migrations
+
+The schema is baselined with Flyway (`spring.flyway.baseline-on-migrate=true`):
+existing databases are stamped at version 1 and skip `V1__baseline.sql`. Put any
+**future** DDL in `backend/src/main/resources/db/migration/` as `V2__…`, `V3__…`
+— do not rely on Hibernate `ddl-auto=update` for schema changes; it only ever
+adds tables/columns and silently skips type changes. `ddl-auto=update` remains
+enabled for now, alongside the idempotent startup runners in
+`backend/src/main/java/com/fyp/backend/config/app/`.
+
 ## Docker Compose
 
 The root Compose file starts RabbitMQ, Redis, and the backend. The backend also joins an external PostgreSQL network:

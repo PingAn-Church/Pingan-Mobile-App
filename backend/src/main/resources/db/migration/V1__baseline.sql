@@ -1,0 +1,4 @@
+-- Baseline: the schema up to this point is managed by Hibernate ddl-auto=update
+-- plus the idempotent runners in config/app (DatabaseIntegrityMigration etc.).
+-- Existing databases are stamped at version 1 via baseline-on-migrate and never
+-- run this file. Future DDL belongs here as V2+, one change per file.
