@@ -1,6 +1,7 @@
 package com.fyp.backend.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Timestamp;
@@ -335,5 +336,44 @@ class MessageRepositoryTest {
         em.flush();
 
         assertEquals(0, messageRepository.countTotalUnread(me.getId()));
+    }
+
+    /**
+     * A reply carrying scripture is long — one substituted verse can exceed the
+     * varchar(255) Hibernate gives an unannotated String, which is what made every
+     * Bible answer fail to insert while ordinary chat messages sailed through.
+     */
+    @Test
+    void aMessageMayBeLongerThanTheDefaultColumnWidth() {
+        String scripture = "“And he answering said, Thou shalt love the Lord thy God with all "
+                + "thy heart, and with all thy soul, and with all thy strength, and with all thy "
+                + "mind; and thy neighbour as thyself.” (Luke 10:27, KJV) ".repeat(4);
+        assertTrue(scripture.length() > 255, "the fixture has to clear the old limit to be a test");
+
+        Message saved = message(me, scripture);
+        em.flush();
+        em.clear();
+
+        assertEquals(scripture, messageRepository.findById(saved.getId()).orElseThrow().getContent());
+    }
+
+    /**
+     * The duplicate check the assistant relies on. It has to be asked BEFORE the
+     * insert: catching the unique index's violation inside a transaction leaves it
+     * marked rollback-only, and the commit then fails regardless.
+     */
+    @Test
+    void answeredMessagesAreDetectableWithoutAttemptingAnInsert() {
+        Message question = message(me, "@ShalomBot what does neighbour mean?");
+        em.flush();
+
+        assertFalse(messageRepository.existsByRespondsToMessageId(question.getId()));
+
+        Message reply = message(other, "An answer.");
+        reply.setRespondsToMessageId(question.getId());
+        em.persist(reply);
+        em.flush();
+
+        assertTrue(messageRepository.existsByRespondsToMessageId(question.getId()));
     }
 }

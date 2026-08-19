@@ -8,7 +8,6 @@ import com.fyp.backend.repository.*;
 import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -351,6 +350,14 @@ public class ChatService {
         Conversation conversation = getConversationByTypeAndId(conversationId, "group");
         checkUserIsParticipant(conversation, assistant.getId());
 
+        // Asked before inserting, not discovered by catching the unique index.
+        // Once a constraint violation marks this transaction rollback-only, catching
+        // it changes nothing — the commit still fails, with UnexpectedRollbackException.
+        if (triggerMessageId != null
+                && messageRepository.existsByRespondsToMessageId(triggerMessageId)) {
+            return null;
+        }
+
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         MessageDto outgoing = new MessageDto();
         outgoing.setContent(contentSanitizer.mask(content));
@@ -363,12 +370,12 @@ public class ChatService {
         message.setRespondsToMessageId(triggerMessageId);
         sanitiseMentions(message, conversation, assistant, "group");
 
-        try {
-            message = messageRepository.saveAndFlush(message);
-        } catch (DataIntegrityViolationException duplicate) {
-            // The unique index did its job: something already answered this message.
-            return null;
-        }
+        // Not wrapped in a try/catch: a violation here means two workers raced past
+        // the check above, and the only honest thing to do is let it out. Swallowing
+        // it would leave the transaction rollback-only and fail at commit anyway.
+        // AssistantService recognises the race and stays quiet rather than posting a
+        // second reply — the other worker's answer is already in the group.
+        message = messageRepository.saveAndFlush(message);
 
         MessageDto savedMessage = buildResponseDto(message, conversation);
         LocalizedText notificationTitle =

@@ -9,8 +9,10 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.UnexpectedRollbackException;
 
 import com.fyp.backend.config.app.AssistantProperties;
 import com.fyp.backend.model.GroupConversation;
@@ -146,11 +148,39 @@ public class AssistantService {
             post(conversationId, triggerMessageId, askerId, assistant, reply);
             throttle.markAnswered(triggerMessageId);
         } catch (RuntimeException e) {
-            log.warn("Assistant could not answer message {}: {}", triggerMessageId, e.toString());
-            failSoftly(conversationId, triggerMessageId, askerId);
+            if (lostTheRaceToAnswer(e)) {
+                // Another worker got its reply in first. Its answer is already in
+                // the group, so an apology here would be a second message about a
+                // question that was answered fine.
+                log.debug("Message {} was answered by another worker.", triggerMessageId);
+                throttle.markAnswered(triggerMessageId);
+            } else {
+                log.warn("Assistant could not answer message {}: {}", triggerMessageId, e.toString());
+                failSoftly(conversationId, triggerMessageId, askerId);
+            }
         } finally {
             throttle.releaseClaim(triggerMessageId);
         }
+    }
+
+    /**
+     * Whether this failure is the unique index refusing a second reply.
+     *
+     * The violation may surface directly, or as the UnexpectedRollbackException
+     * thrown at commit once the transaction has been marked rollback-only, so both
+     * are checked, and through the cause chain because Spring wraps them.
+     */
+    private static boolean lostTheRaceToAnswer(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof DataIntegrityViolationException
+                    || current instanceof UnexpectedRollbackException) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+        }
+        return false;
     }
 
     /**

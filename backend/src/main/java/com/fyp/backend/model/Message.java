@@ -24,6 +24,17 @@ public class Message {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Unbounded on purpose.
+     *
+     * With no annotation Hibernate maps a String to varchar(255), which every
+     * ordinary chat message fits inside — so the limit went unnoticed until the
+     * assistant started quoting scripture, where a single substituted verse can be
+     * longer than that on its own and the insert failed. Thread.content ran into
+     * the same thing and settled for length = 5000; text has no ceiling to
+     * rediscover later.
+     */
+    @Column(columnDefinition = "text")
     private String content;
 
     private String type;  // "text", "image", etc.

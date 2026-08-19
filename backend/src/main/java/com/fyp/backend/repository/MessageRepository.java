@@ -132,4 +132,16 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
         deleteMessageRowsByConversationIdAndSenderId(conversationId, senderId);
     }
 
+
+    /**
+     * Whether this triggering message has already been answered.
+     *
+     * Checked BEFORE inserting rather than relying on the unique index to reject a
+     * duplicate: catching a constraint violation inside a transaction does not undo
+     * the rollback-only mark JPA has already set, so the commit fails afterwards
+     * with UnexpectedRollbackException and the "quietly ignore duplicates" path
+     * never actually worked. The index is still the guarantee against a race; this
+     * is what keeps the ordinary case from ever reaching it.
+     */
+    boolean existsByRespondsToMessageId(Long respondsToMessageId);
 }
