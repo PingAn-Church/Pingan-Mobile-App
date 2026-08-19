@@ -206,8 +206,10 @@ public class DatabaseIntegrityMigration {
         if ("text".equalsIgnoreCase(type)) {
             return;
         }
-        log.warn("Widening {}.{} from {} to text — messages were being truncated at the "
-                + "old limit.", table, column, type);
+        // Rejected, not truncated: PostgreSQL refuses the whole INSERT rather than
+        // clipping the value, so nothing was ever half-saved.
+        log.warn("Widening {}.{} from {} to text — inserts over the old limit were "
+                + "being rejected.", table, column, type);
         jdbc.execute("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(column)
                 + " TYPE text");
     }
