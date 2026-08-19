@@ -59,6 +59,10 @@ public class ConversationDto {
     // orange [@] on the row: a mention is worth spotting even in a busy or muted
     // conversation, where the plain unread count says nothing about urgency.
     private boolean mentioned = false;
+    // Newest message in the conversation, so the list row can show its preview,
+    // sender and tick without the client fetching a history page per conversation.
+    // Null for a conversation with no messages yet. Additive: older clients ignore it.
+    private LastMessageDto lastMessage;
 
     // Constructor for GroupConversation
     public ConversationDto(GroupConversation groupConversation) {

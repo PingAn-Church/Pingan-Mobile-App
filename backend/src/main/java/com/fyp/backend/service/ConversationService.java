@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import com.fyp.backend.dto.ConversationDto;
 import com.fyp.backend.dto.GroupConversationDto;
+import com.fyp.backend.dto.LastMessageDto;
 import com.fyp.backend.dto.PrivateConversationDto;
 import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.*;
@@ -188,17 +189,68 @@ public class ConversationService {
                 .map(ConversationMute::getConversationId)
                 .collect(Collectors.toSet());
 
-        // Attach a server-computed unread count so the client no longer needs to load
-        // every message just to render unread badges.
         // One query covers the whole list; being mentioned is rare enough that this
         // usually comes back empty.
         Set<Long> mentionedIn = new java.util.HashSet<>(
                 messageRepository.findConversationIdsWithUnreadMention(userId));
 
+        List<Long> conversationIds = conversations.stream()
+                .map(ConversationDto::getConversationId)
+                .collect(Collectors.toList());
+
+        // Server-computed unread badges, one grouped query for the whole list —
+        // this used to be a COUNT per conversation, which grew with every chat a
+        // person belonged to. Conversations absent from the result have 0 unread.
+        Map<Long, Long> unreadByConversation = new java.util.HashMap<>();
+        if (!conversationIds.isEmpty()) {
+            for (Object[] row : messageRepository.countUnreadByConversationIds(conversationIds, userId)) {
+                unreadByConversation.put((Long) row[0], (Long) row[1]);
+            }
+        }
+
+        // Newest message per conversation, batched the same way. This is what lets
+        // the client draw list previews without prefetching a page of history for
+        // every conversation on every start.
+        Map<Long, Message> newestByConversation = new java.util.HashMap<>();
+        if (!conversationIds.isEmpty()) {
+            for (Message newest : messageRepository.findNewestPerConversation(conversationIds)) {
+                // getId() on the conversation proxy reads the FK without initialising it.
+                newestByConversation.put(newest.getConversation().getId(), newest);
+            }
+        }
+
+        // Receipts, but only for the newest messages of PRIVATE conversations —
+        // groups carry none by design (read state there is a watermark).
+        Set<Long> privateConversationIds = conversations.stream()
+                .filter(c -> "private".equals(c.getConversationType()))
+                .map(ConversationDto::getConversationId)
+                .collect(Collectors.toSet());
+        List<Long> privateNewestMessageIds = newestByConversation.entrySet().stream()
+                .filter(e -> privateConversationIds.contains(e.getKey()))
+                .map(e -> e.getValue().getId())
+                .collect(Collectors.toList());
+        Map<Long, Map<String, String>> deliveryByMessage = new java.util.HashMap<>();
+        if (!privateNewestMessageIds.isEmpty()) {
+            for (MessageDeliveryStatus status : messageDeliveryStatusRepository
+                    .findByMessageIdIn(privateNewestMessageIds)) {
+                deliveryByMessage
+                        .computeIfAbsent(status.getMessage().getId(), ignored -> new java.util.HashMap<>())
+                        .put(String.valueOf(status.getUser().getId()), status.getStatus());
+            }
+        }
+
+        // Reported-content masking in the previews follows the viewer, like history.
+        User viewer = userRepository.findById(userId).orElse(null);
+
         for (ConversationDto c : conversations) {
-            c.setUnreadCount(messageRepository.countUnread(c.getConversationId(), userId));
+            c.setUnreadCount(unreadByConversation.getOrDefault(c.getConversationId(), 0L));
             c.setMuted(mutedConversationIds.contains(c.getConversationId()));
             c.setMentioned(mentionedIn.contains(c.getConversationId()));
+            Message newest = newestByConversation.get(c.getConversationId());
+            if (newest != null) {
+                c.setLastMessage(new LastMessageDto(newest, viewer,
+                        deliveryByMessage.getOrDefault(newest.getId(), Map.of())));
+            }
             // The app-level group ships no roster, so its size has to be counted
             // rather than read off a list that isn't there.
             if (c.isAppLevel()) {
