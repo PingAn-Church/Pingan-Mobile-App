@@ -98,8 +98,13 @@ export const refreshAccessToken = async () => {
 
     const { accessToken, refreshToken: newRefreshToken } = response.data;
 
-    await AsyncStorage.setItem("accessToken", accessToken);
-    await AsyncStorage.setItem("refreshToken", newRefreshToken);
+    // One atomic write: the old refresh token is already invalidated server-side
+    // (rotation), so being killed between two separate setItem calls would strand
+    // the session with a dead refresh token.
+    await AsyncStorage.multiSet([
+      ["accessToken", accessToken],
+      ["refreshToken", newRefreshToken],
+    ]);
 
     console.log("🔄 Successfully refreshed access token.");
     return { accessToken, refreshToken: newRefreshToken };

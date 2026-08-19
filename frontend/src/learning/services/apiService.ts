@@ -136,14 +136,17 @@ class ApiService {
         return (isJson(res) ? await parseJson(res) : {}) as T;
       } catch (error) {
         if (error instanceof ApiError) throw error;
+        // Only GET is safe to retry: a timed-out POST/PUT/DELETE may have reached
+        // the server, and replaying it double-submits (e.g. a second quiz attempt).
+        const retryable = method === "GET";
         if (error instanceof Error && error.name === "AbortError") {
-          if (attempt < retries) {
+          if (retryable && attempt < retries) {
             await sleep(RETRY_DELAY * (attempt + 1));
             continue;
           }
           throw new TimeoutError();
         }
-        if (attempt < retries) {
+        if (retryable && attempt < retries) {
           await sleep(RETRY_DELAY * (attempt + 1));
           continue;
         }
