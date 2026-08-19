@@ -470,8 +470,13 @@ export default function ChatPage({ route }) {
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
   const { user: currentUser } = useContext(UserContext);
-  const { conversations, setConversations, setConversationMuted, loadOlderMessages } =
-    useContext(ChatContext);
+  const {
+    conversations,
+    setConversations,
+    setConversationMuted,
+    loadOlderMessages,
+    ensureHistoryLoaded,
+  } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
   const headerHeight = useHeaderHeight();
@@ -618,6 +623,12 @@ export default function ChatPage({ route }) {
 
     setConversation(conv);
     setConversationType(conv.conversationType);
+
+    // History loads lazily on first open (the list no longer prefetches it);
+    // ensureHistoryLoaded is idempotent and no-ops once the page is in.
+    if (!conv.historyLoaded) {
+      ensureHistoryLoaded(conv.conversationId, conv.conversationType);
+    }
 
     const fetchParticipantDetails = async () => {
       try {

@@ -219,18 +219,23 @@ const ChatHomePage = () => {
   };
 
   const getLastMessage = (conversation) => {
-    const { chatHistory } = conversation;
+    // The preview comes from the server-computed lastMessage (history is loaded
+    // lazily and usually absent here); loaded history is only a fallback for
+    // payloads that predate the field.
+    const source =
+      conversation.lastMessage ||
+      conversation.chatHistory?.[conversation.chatHistory.length - 1];
 
-    if (!chatHistory || chatHistory.length === 0) return null;
+    if (!source) return null;
 
     if (!user) {
       console.warn("⚠️ User is null, skipping last message processing.");
       return null; // Prevents crash when user logs out
     }
 
-    const lastMessage = chatHistory[chatHistory.length - 1];
-
-    console.log("LAST MESSAGE", lastMessage);
+    // Derive display fields onto a copy — the source object lives in context
+    // state and must not be mutated during render.
+    const lastMessage = { ...source };
 
     if (conversation.conversationType === "private") {
       const otherParticipantIndex = conversation.participants.findIndex(
