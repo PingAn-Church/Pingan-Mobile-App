@@ -265,6 +265,42 @@ public class RedisService {
         redisTemplate.delete(OTP_VERIFY_FAIL_KEY + scope + email);
     }
 
+    // ---- Expo push receipts ---------------------------------------------
+    //
+    // Tickets that Expo accepted still fail later (DeviceNotRegistered often only
+    // shows up in the receipt, after delivery is attempted). Each accepted ticket
+    // is queued here; PushReceiptJob drains the queue and asks Expo for the
+    // receipts. A plain Redis list, entries as "ticketId|epochMillis|token".
+
+    private static final String PUSH_RECEIPT_QUEUE_KEY = "push:receipt-queue";
+    private static final long PUSH_RECEIPT_QUEUE_TTL_HOURS = 48;
+
+    public void enqueuePushReceipt(String ticketId, String token) {
+        if (ticketId == null || ticketId.isBlank() || token == null || token.isBlank()) return;
+        redisTemplate.opsForList().leftPush(PUSH_RECEIPT_QUEUE_KEY,
+                ticketId + "|" + System.currentTimeMillis() + "|" + token);
+        // Rolling TTL so an abandoned queue (job disabled, instance retired) vanishes.
+        redisTemplate.expire(PUSH_RECEIPT_QUEUE_KEY, Duration.ofHours(PUSH_RECEIPT_QUEUE_TTL_HOURS));
+    }
+
+    /** Pops up to {@code max} queued receipt entries (oldest first); never null. */
+    public List<String> drainPushReceipts(int max) {
+        List<String> entries = new java.util.ArrayList<>();
+        for (int i = 0; i < max; i++) {
+            String entry = redisTemplate.opsForList().rightPop(PUSH_RECEIPT_QUEUE_KEY);
+            if (entry == null) break;
+            entries.add(entry);
+        }
+        return entries;
+    }
+
+    /** Puts an entry back (queue tail) for a later drain to retry. */
+    public void requeuePushReceipt(String entry) {
+        if (entry == null || entry.isBlank()) return;
+        redisTemplate.opsForList().leftPush(PUSH_RECEIPT_QUEUE_KEY, entry);
+        redisTemplate.expire(PUSH_RECEIPT_QUEUE_KEY, Duration.ofHours(PUSH_RECEIPT_QUEUE_TTL_HOURS));
+    }
+
     // ---- pending registration (pre-verification sign-up) ----------------
 
     /**

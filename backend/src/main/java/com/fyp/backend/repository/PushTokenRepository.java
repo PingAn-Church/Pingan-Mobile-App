@@ -38,6 +38,16 @@ public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
     int deactivateByUserEmailAndDeviceId(@Param("email") String email,
                                          @Param("deviceId") String deviceId);
 
+    /**
+     * Retires a token Expo has told us is dead (DeviceNotRegistered). Transactional
+     * here because the delivery paths that discover this are not transactional
+     * themselves — a same-bean @Transactional would never proxy.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update PushToken p set p.isActive = false where p.token = :token and p.isActive = true")
+    int deactivateByToken(@Param("token") String token);
+
     Optional<PushToken> findByUserIdAndTokenAndDeviceId(Long userId, String token, String deviceId);
     List<PushToken> findByUserIdAndDeviceId(Long userId, String deviceId);
     Optional<PushToken> findByUserIdAndToken(Long userId, String token);
