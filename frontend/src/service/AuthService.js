@@ -54,9 +54,11 @@ export const verifyCode = async (email, code) => {
     );
     if (response.status === 200) {
       const { accessToken, refreshToken, user } = response.data;
-      await AsyncStorage.setItem("accessToken", accessToken);
-      await AsyncStorage.setItem("refreshToken", refreshToken);
-      await AsyncStorage.setItem("user", JSON.stringify(user));
+      await AsyncStorage.multiSet([
+        ["accessToken", accessToken],
+        ["refreshToken", refreshToken],
+        ["user", JSON.stringify(user)],
+      ]);
       return { success: true, user };
     }
     return { success: false };
@@ -83,10 +85,12 @@ export const loginUser = async (loginDetails) => {
     if (response.status === 200) {
       const { accessToken, refreshToken, user } = response.data;
 
-      // Save tokens and user info to AsyncStorage
-      await AsyncStorage.setItem("accessToken", accessToken);
-      await AsyncStorage.setItem("refreshToken", refreshToken);
-      await AsyncStorage.setItem("user", JSON.stringify(user));
+      // Save tokens and user info in one atomic write.
+      await AsyncStorage.multiSet([
+        ["accessToken", accessToken],
+        ["refreshToken", refreshToken],
+        ["user", JSON.stringify(user)],
+      ]);
 
       return { success: true, user };  // Return success and user info
     }
