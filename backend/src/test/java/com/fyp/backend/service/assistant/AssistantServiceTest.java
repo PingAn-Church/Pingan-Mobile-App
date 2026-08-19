@@ -21,6 +21,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 
 import com.fyp.backend.config.app.AssistantProperties;
@@ -220,5 +221,38 @@ class AssistantServiceTest {
         assistant.answer(CONVERSATION, TRIGGER, ASKER);
         verify(throttle, never()).claim(anyLong());
         verify(chatService, never()).sendAssistantReply(any(), any(), any(), any(), anyString());
+    }
+
+    /**
+     * A constraint failure is NOT proof that somebody else answered.
+     *
+     * Classifying on exception type alone filed "the value is too long for this
+     * column" as a harmless race: the group got no reply, and the log got one debug
+     * line nobody sees. The question has to be settled by looking for the reply.
+     */
+    @Test
+    void aConstraintFailureWithNoReplyIsReportedAndApologisedFor() {
+        when(chatService.sendAssistantReply(any(), any(), any(), any(), anyString()))
+                .thenThrow(new DataIntegrityViolationException("value too long for varchar(255)"))
+                .thenReturn(null);
+        when(messageRepository.existsByRespondsToMessageId(TRIGGER)).thenReturn(false);
+
+        assertDoesNotThrow(() -> assistant.answer(CONVERSATION, TRIGGER, ASKER));
+
+        // Twice: the failed answer, then the fallback apology.
+        verify(chatService, times(2)).sendAssistantReply(any(), any(), any(), any(), anyString());
+    }
+
+    /** A genuine race stays quiet — the other worker's answer is already there. */
+    @Test
+    void aConstraintFailureWithAReplyPresentStaysQuiet() {
+        when(chatService.sendAssistantReply(any(), any(), any(), any(), anyString()))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+        when(messageRepository.existsByRespondsToMessageId(TRIGGER)).thenReturn(true);
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        verify(chatService, times(1)).sendAssistantReply(any(), any(), any(), any(), anyString());
+        verify(throttle).markAnswered(TRIGGER);
     }
 }

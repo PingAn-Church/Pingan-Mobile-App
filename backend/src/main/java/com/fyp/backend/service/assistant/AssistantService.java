@@ -164,14 +164,14 @@ public class AssistantService {
             post(conversationId, triggerMessageId, askerId, assistant, reply);
             throttle.markAnswered(triggerMessageId);
         } catch (RuntimeException e) {
-            if (lostTheRaceToAnswer(e)) {
+            if (lostTheRaceToAnswer(triggerMessageId, e)) {
                 // Another worker got its reply in first. Its answer is already in
                 // the group, so an apology here would be a second message about a
                 // question that was answered fine.
                 log.debug("Message {} was answered by another worker.", triggerMessageId);
                 throttle.markAnswered(triggerMessageId);
             } else {
-                log.warn("Assistant could not answer message {}: {}", triggerMessageId, e.toString());
+                log.warn("Assistant could not answer message {}: {}", triggerMessageId, e.toString(), e);
                 failSoftly(conversationId, triggerMessageId, askerId);
             }
         } finally {
@@ -180,23 +180,39 @@ public class AssistantService {
     }
 
     /**
-     * Whether this failure is the unique index refusing a second reply.
+     * Whether this failure really is the unique index refusing a second reply.
      *
-     * The violation may surface directly, or as the UnexpectedRollbackException
-     * thrown at commit once the transaction has been marked rollback-only, so both
-     * are checked, and through the cause chain because Spring wraps them.
+     * The exception type alone is not enough to say so. Every constraint failure on
+     * this insert arrives as a DataIntegrityViolationException — or, once the
+     * transaction is marked rollback-only, as an UnexpectedRollbackException at
+     * commit — so classifying on type quietly filed "the value is too long for this
+     * column" as a harmless race and left the group with no reply and no log line.
+     *
+     * So the question is answered by looking: a reply either exists now or it does
+     * not. If it does, another worker won and silence is right. If it does not,
+     * something is actually broken and it gets a warning and a stack trace.
      */
-    private static boolean lostTheRaceToAnswer(Throwable failure) {
+    private boolean lostTheRaceToAnswer(Long triggerMessageId, Throwable failure) {
+        boolean constraintFailure = false;
         for (Throwable current = failure; current != null; current = current.getCause()) {
             if (current instanceof DataIntegrityViolationException
                     || current instanceof UnexpectedRollbackException) {
-                return true;
+                constraintFailure = true;
+                break;
             }
             if (current.getCause() == current) {
                 break;
             }
         }
-        return false;
+        if (!constraintFailure) {
+            return false;
+        }
+        try {
+            return messageRepository.existsByRespondsToMessageId(triggerMessageId);
+        } catch (RuntimeException unavailable) {
+            // Cannot tell, so assume the worse case and report it.
+            return false;
+        }
     }
 
     /**

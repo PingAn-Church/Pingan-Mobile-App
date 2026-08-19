@@ -75,6 +75,14 @@ public class DatabaseIntegrityMigration {
                 WHERE app_level = TRUE
                 """);
 
+        // Chat messages outgrew varchar(255) when the assistant started quoting
+        // scripture. Mapping the field as text is not enough on an existing
+        // database: ddl-auto=update only ADDS tables and columns, it never alters
+        // the type of one that is already there — so the entity said text, the
+        // column stayed varchar(255), and every reply carrying a verse failed to
+        // insert while short ones sailed through.
+        widenToText(jdbc, "messages", "content");
+
         // One assistant reply per triggering message, enforced by the database.
         //
         // The queue is at-least-once and the listener's retry advice re-runs a
@@ -173,6 +181,35 @@ public class DatabaseIntegrityMigration {
                     + " FOREIGN KEY (" + quote(column) + ") REFERENCES " + quote(targetTable)
                     + " (" + quote(targetColumn) + ") ON DELETE " + deleteAction);
         }
+    }
+
+    /**
+     * Converts a length-limited character column to unbounded text.
+     *
+     * Checked first so this is a no-op on every boot after the first: in PostgreSQL
+     * varchar(n) and text share a storage format, so the conversion is a catalogue
+     * change with no table rewrite, but it still takes an ACCESS EXCLUSIVE lock and
+     * there is no reason to take one for nothing.
+     */
+    private void widenToText(JdbcTemplate jdbc, String table, String column) {
+        List<Map<String, Object>> found = jdbc.queryForList("""
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = ?
+                  AND column_name = ?
+                """, table, column);
+        if (found.isEmpty()) {
+            return;
+        }
+        String type = String.valueOf(found.get(0).get("data_type"));
+        if ("text".equalsIgnoreCase(type)) {
+            return;
+        }
+        log.warn("Widening {}.{} from {} to text — messages were being truncated at the "
+                + "old limit.", table, column, type);
+        jdbc.execute("ALTER TABLE " + quote(table) + " ALTER COLUMN " + quote(column)
+                + " TYPE text");
     }
 
     private static String quote(String identifier) {
