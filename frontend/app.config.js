@@ -18,7 +18,7 @@ export default {
     expo: {
       name: "Ping An",
       slug: "pingan-mobile-app",
-      version: "1.1.3",
+      version: "1.1.4",
       // Tablets rotate freely (landscape sidebar layout); phones are locked to
       // portrait at runtime in App.js via expo-screen-orientation, and natively
       // on iPhone via the UISupportedInterfaceOrientations keys below. Keep
@@ -33,7 +33,7 @@ export default {
       },
       ios: {
         supportsTablet: true,
-        buildNumber: "10103",
+        buildNumber: "10104",
         // Push entitlement. It used to live only in the generated
         // ios/frontend.entitlements, which `expo prebuild --clean` rebuilds from
         // this config — so a regeneration silently dropped it and killed iOS
@@ -86,7 +86,7 @@ export default {
           "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         ],
         package: "org.pingan.app",
-        versionCode: 10103,
+        versionCode: 10104,
         googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       },
       web: {
@@ -149,7 +149,7 @@ export default {
         IP_ADDR: process.env.IP_ADDR,
         ENABLE_LIBRE_TRANSLATE: process.env.ENABLE_LIBRE_TRANSLATE === "true",
         DISTRIBUTION_CHANNEL: process.env.DISTRIBUTION_CHANNEL || "direct",
-        ANDROID_VERSION_CODE: 10103,
+        ANDROID_VERSION_CODE: 10104,
         eas: {
           projectId: "39be103c-2ac5-446e-abc7-506f4c087c45",
         },
