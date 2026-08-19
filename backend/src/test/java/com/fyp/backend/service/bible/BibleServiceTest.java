@@ -157,4 +157,48 @@ class BibleServiceTest {
         assertNotNull(found);
         assertEquals(bible.lookup("John 3:16", BibleService.KJV).text(), found.text());
     }
+
+    /**
+     * A model replying in Chinese types a fullwidth colon without thinking. Before
+     * this was tolerated the token missed TOKEN, matched the leftover sweep, and was
+     * deleted — the quote vanished with nothing left to show it had been there.
+     */
+    @Test
+    void aTokenWrittenWithAFullwidthColonStillResolves() {
+        String rendered = bible.render("[bible:CUV:43:3:16]", "zh");
+        assertEquals(rendered, bible.render("[bible:CUV:43:3：16]", "zh"));
+        assertTrue(rendered.contains("神爱世人"));
+    }
+
+    @Test
+    void aTokenWithStraySpacingStillResolves() {
+        assertTrue(bible.render("[bible: KJV : 43 : 3 : 16 ]", "en")
+                .contains("For God so loved the world"));
+    }
+
+    /** A citation the assistant may point at without quoting. */
+    @Test
+    void aWrittenReferenceIsNormalisedWhenItNamesSomethingReal() {
+        assertEquals("路加福音 15:11-32", bible.normaliseReference("路加福音15：11-32", "zh"));
+        assertEquals("Luke 15:11-32", bible.normaliseReference("Luke 15:11-32", "en"));
+        assertEquals("John 3:16", bible.normaliseReference("JHN 3:16", "en"));
+        assertEquals("Psalms 23", bible.normaliseReference("Psalms 23", "en"));
+    }
+
+    /**
+     * The range is echoed, not clamped. Fifteen verses limits how much text lands in
+     * a chat bubble; trimming a citation to "15:11-25" would just make it wrong.
+     */
+    @Test
+    void aLongReferenceKeepsItsRangeBecauseItIsAPointerNotAQuote() {
+        assertEquals("Luke 15:11-32", bible.normaliseReference("Luke 15:11-32", "en"));
+    }
+
+    @Test
+    void aReferenceToNothingRealIsRejected() {
+        assertNull(bible.normaliseReference("Hesitations 4:2", "en"));
+        assertNull(bible.normaliseReference("John 999:1", "en"));
+        assertNull(bible.normaliseReference("photo", "en"));
+        assertNull(bible.normaliseReference("", "en"));
+    }
 }

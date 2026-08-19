@@ -49,8 +49,18 @@ public class BibleService {
     private static final Pattern REFERENCE = Pattern.compile(
             "^(.*?)\\s*(\\d{1,3})(?:\\s*[:：]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?)?$");
 
+    /**
+     * Deliberately forgiving about punctuation, strict about structure.
+     *
+     * A model replying in Chinese types a fullwidth colon without thinking about it,
+     * and a token that misses by one character is worse than one that misses by a
+     * mile: it still looks like a token, so it gets stripped as debris and the quote
+     * disappears with nothing to show it was ever there. Accepting ：and stray
+     * spaces costs nothing and turns a near miss into the right verse.
+     */
     private static final Pattern TOKEN = Pattern.compile(
-            "\\[bible:([A-Za-z]{2,10}):(\\d{1,2}):(\\d{1,3}):(\\d{1,3})(?:-(\\d{1,3}))?\\]");
+            "\\[\\s*bible\\s*[:：]\\s*([A-Za-z]{2,10})\\s*[:：]\\s*(\\d{1,2})\\s*[:：]\\s*"
+                    + "(\\d{1,3})\\s*[:：]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?\\s*\\]");
 
     private volatile Loaded loaded;
 
@@ -156,6 +166,51 @@ public class BibleService {
                 : Integer.parseInt(matcher.group(4));
 
         return passage(state, target, book, chapter, from, to);
+    }
+
+    /**
+     * A written citation, tidied for printing — or null if it names nothing real.
+     *
+     * For a reference the assistant wants to point at rather than quote. The verse
+     * range is echoed as written rather than clamped the way {@link #lookup} clamps
+     * a passage: fifteen verses is a limit on how much text may land in a chat
+     * bubble, and shortening "15:11-32" to "15:11-25" would turn a correct citation
+     * into a wrong one.
+     *
+     * Existence is still checked, because an unverified reference is exactly what
+     * the token design exists to prevent — only now the thing being verified is a
+     * signpost rather than a quotation.
+     */
+    public String normaliseReference(String written, String language) {
+        Loaded state = corpus();
+        Matcher matcher = REFERENCE.matcher(written == null ? "" : written.trim());
+        if (!matcher.matches()) {
+            return null;
+        }
+        BibleBook book = state.booksByAlias().get(normalise(matcher.group(1)));
+        if (book == null) {
+            return null;
+        }
+
+        int chapter = Integer.parseInt(matcher.group(2));
+        Integer from = matcher.group(3) == null ? null : Integer.parseInt(matcher.group(3));
+        // Either translation is enough: the twelve verses the CUV omits are still
+        // real references, and a Chinese reader may legitimately be pointed at one.
+        int probe = from == null ? 1 : from;
+        boolean exists = state.corpora().values().stream()
+                .anyMatch(c -> c.at(book.id(), chapter, probe) != null);
+        if (!exists) {
+            return null;
+        }
+
+        String name = book.nameFor(language);
+        if (from == null) {
+            return name + " " + chapter;
+        }
+        String to = matcher.group(4);
+        return to == null
+                ? name + " " + chapter + ":" + from
+                : name + " " + chapter + ":" + from + "-" + Integer.parseInt(to);
     }
 
     /** Verses matching a free-text query, in the given translation. */

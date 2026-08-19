@@ -58,8 +58,16 @@ public class AssistantService {
               To quote scripture, emit a token: [bible:TRANSLATION:BOOK:CHAPTER:VERSE]
               e.g. [bible:CUV:42:10:27] or a range [bible:KJV:42:10:25-37].
               The app replaces these with the exact wording. A token is the ONLY way to quote.
+            - The token is a machine code, not text for the reader. It is ALWAYS written this
+              exact way whatever language you are replying in: plain ASCII, colons as ":",
+              and BOOK as the NUMBER the tools gave you — never a book name, in any language.
+              [bible:CUV:42:15:11-32] is right even in a Chinese reply.
+              [路加福音15：11-32] and [Luke 15:11-32] are both wrong and will not work.
+            - Every tool result hands you a ready-made `quote_token`. Copy it verbatim.
             - Look a passage up with your tools before referring to it. Never cite a reference
-              you have not looked up; the tools give you the token to use.
+              you have not looked up.
+            - Do not put a reference in square brackets. If you want to name a passage without
+              quoting it, write it as ordinary prose — 路加福音 15:11-32 — with no brackets.
             - At most 6 tokens per reply, and no range longer than 15 verses.
 
             Tone and doctrine:
