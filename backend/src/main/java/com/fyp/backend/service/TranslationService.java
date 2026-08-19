@@ -20,7 +20,12 @@ public class TranslationService {
 
     @Autowired
     public TranslationService() {
-        this.restTemplate = new RestTemplate();
+        // Timeouts keep a hung LibreTranslate container from pinning request threads.
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restTemplate = new RestTemplate(factory);
         String configuredLibreUrl = System.getenv("LIBRE_URL");
         this.libreUrl = (configuredLibreUrl == null || configuredLibreUrl.isBlank())
                 ? DEFAULT_LIBRE_URL

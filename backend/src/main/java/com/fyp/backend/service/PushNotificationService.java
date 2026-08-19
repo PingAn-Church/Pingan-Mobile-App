@@ -59,7 +59,18 @@ public class PushNotificationService {
 
     // Reused across sends — RestTemplate is thread-safe once built, and a new one
     // per device meant a fresh converter/connection setup for every notification.
-    private RestTemplate restTemplate = new RestTemplate();
+    // Timeouts are mandatory: a hung Expo call would otherwise pin the calling
+    // request thread, or a Rabbit consumer thread through its whole retry budget.
+    // Non-final on purpose — tests inject a mock into this field.
+    private RestTemplate restTemplate = buildRestTemplate();
+
+    private static RestTemplate buildRestTemplate() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        return new RestTemplate(factory);
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
