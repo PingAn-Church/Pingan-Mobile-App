@@ -77,11 +77,14 @@ import { subscribeModerationEvents } from "../../service/ModerationEventService"
 import CachedImage from "../../components/CachedImage";
 import { Ionicons } from "@expo/vector-icons";
 import { setThreadSubscription } from "../../service/ThreadService";
+import { parseServerDate } from "../../utils/serverDate";
 
-// Helper to format ISO date to readable format
+// Helper to format a server timestamp to a readable local time. parseServerDate
+// applies the server-UTC rule (zone-less LocalDateTime strings would otherwise
+// be read as device-local and display 8 hours early for UTC+8 users).
 const formatDateTime = (isoDate) => {
-  const date = new Date(isoDate);
-  return date.toLocaleString(); // You can use .toLocaleDateString() if you want only date
+  const date = parseServerDate(isoDate);
+  return date ? date.toLocaleString() : "";
 };
 
 const ThreadHomePage = () => {

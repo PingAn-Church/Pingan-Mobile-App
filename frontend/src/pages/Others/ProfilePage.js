@@ -39,6 +39,7 @@ import { formatName } from "../../utils/formatName";
 import { showAlert } from "../../utils/showAlert";
 import AppUpdateStatusIcon from "../../components/AppUpdateStatusIcon";
 import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
+import { parseServerDate } from "../../utils/serverDate";
 
 export default function ProfilePage() {
   const { user, setUser, logout } = useContext(UserContext);
@@ -676,7 +677,7 @@ export function ManageApplicationsPage({ navigation }) {
               </Text>
               <Text style={styles.detail}>
                 {i18n.t("date")}
-                {new Date(item.submittedAt).toLocaleDateString()}
+                {parseServerDate(item.submittedAt)?.toLocaleDateString() ?? ""}
               </Text>
               <Text style={styles.detail}>
                 {i18n.t("remarks")} {item.remarks}
