@@ -23,11 +23,15 @@ import { LanguageContext } from "./LanguageContext";
 import {
   evaluateAndroidRelease,
   fetchLatestAndroidRelease,
+  fetchLatestIosRelease,
   getCurrentAndroidVersion,
+  getCurrentIosVersion,
   getDistributionChannel,
   getIgnoredVersionCode,
   ignoreReleaseVersion,
   isAndroidNative,
+  isIosNative,
+  isSupportedUpdatePlatform,
   openReleaseTarget,
   resolveDirectDownload,
 } from "../service/AppUpdateService";
@@ -51,7 +55,7 @@ const localizedReleaseNotes = (release, language) => {
 
 export const AppUpdateProvider = ({ children }) => {
   const { language } = useContext(LanguageContext);
-  const [status, setStatus] = useState(isAndroidNative() ? "checking" : "latest");
+  const [status, setStatus] = useState(isSupportedUpdatePlatform() ? "checking" : "latest");
   const [checking, setChecking] = useState(false);
   const [currentVersion, setCurrentVersion] = useState(null);
   const [release, setRelease] = useState(null);
@@ -72,7 +76,7 @@ export const AppUpdateProvider = ({ children }) => {
 
   const checkForUpdates = useCallback(
     async ({ autoPrompt = false, manual = false } = {}) => {
-      if (!isAndroidNative()) {
+      if (!isSupportedUpdatePlatform()) {
         setStatus("latest");
         return { status: "latest", updateAvailable: false };
       }
@@ -85,9 +89,15 @@ export const AppUpdateProvider = ({ children }) => {
         setOpenError(null);
 
         try {
-          const nextChannel = getDistributionChannel();
-          const current = getCurrentAndroidVersion();
-          const latest = await fetchLatestAndroidRelease(nextChannel);
+          // iOS asks the App Store itself (iTunes lookup), so its prompt can only
+          // appear once the store is really serving the version; Android asks the
+          // backend, whose published-* gate provides the same guarantee.
+          const ios = isIosNative();
+          const nextChannel = ios ? "appstore" : getDistributionChannel();
+          const current = ios ? getCurrentIosVersion() : getCurrentAndroidVersion();
+          const latest = ios
+            ? await fetchLatestIosRelease()
+            : await fetchLatestAndroidRelease(nextChannel);
           const evaluation = evaluateAndroidRelease(current, latest);
           const ignoredVersionCode = await getIgnoredVersionCode();
 
@@ -162,8 +172,9 @@ export const AppUpdateProvider = ({ children }) => {
   const openUpdate = useCallback(async () => {
     if (!release) return;
     // Password-gated China mirrors (e.g. Lanzou) get a confirmation that surfaces
-    // the password before we leave the app. Play-store links are never gated.
-    if (channel !== "play") {
+    // the password before we leave the app. Store links (Play, App Store) are
+    // never gated, so only Android's direct channel takes this detour.
+    if (isAndroidNative() && channel !== "play") {
       const { url, password } = resolveDirectDownload(release);
       if (url && password) {
         setOpenError(null);
@@ -209,7 +220,7 @@ export const AppUpdateProvider = ({ children }) => {
       release,
       channel,
       error,
-      isSupportedPlatform: isAndroidNative(),
+      isSupportedPlatform: isSupportedUpdatePlatform(),
       checkForUpdates,
       showUpdatePrompt,
     }),
