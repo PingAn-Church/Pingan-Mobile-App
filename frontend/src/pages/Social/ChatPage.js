@@ -61,9 +61,11 @@ import {
 import {
   KeyboardAvoidingView,
   KeyboardController,
-  KeyboardStickyView,
   useReanimatedKeyboardAnimation,
 } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+// Keeps the composer above the Android system navigation bar (edge-to-edge).
+import StickyInputFooter from "../../components/StickyInputFooter";
 import {
   getConversationDownloadUrl,
   getConversationUploadUrl,
@@ -84,19 +86,12 @@ import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
 import { reportMessage } from "../../service/ReportService";
 import { getBlockStatus, getBlockedIds } from "../../service/BlockService";
+import { parseServerDate } from "../../utils/serverDate";
 
-const normalizeDate = (raw) => {
-  if (!raw) return null;
-  const normalized =
-    typeof raw === "string" && raw.includes(" ") && !raw.includes("T")
-      ? raw.replace(" ", "T") + "Z"
-      : raw;
-
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const getMessageDate = (msg) => normalizeDate(msg?.timestamp) || normalizeDate(msg?.createdAt) || new Date(0);
+// Shared server-UTC normalization — the local variant this replaces only
+// covered the space-separated shape; see utils/serverDate for the full contract.
+const getMessageDate = (msg) =>
+  parseServerDate(msg?.timestamp) || parseServerDate(msg?.createdAt) || new Date(0);
 
 const formatTime = (msg) => {
   const date = getMessageDate(msg);
@@ -459,9 +454,17 @@ const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
 
 const AndroidKeyboardListSpacer = React.memo(function AndroidKeyboardListSpacer() {
   const { height } = useReanimatedKeyboardAnimation();
-  const spacerStyle = useAnimatedStyle(() => ({
-    height: Math.max(0, -height.value),
-  }));
+  // The keyboard height spans from the screen edge, but the composer already
+  // stands bottom-inset above it (StickyInputFooter's nav-bar strip), so the
+  // list only needs lifting by the difference — the full height would open an
+  // inset-sized gap between the newest message and the composer.
+  const bottomInset = useSafeAreaInsets().bottom;
+  const spacerStyle = useAnimatedStyle(
+    () => ({
+      height: Math.max(0, -height.value - bottomInset),
+    }),
+    [bottomInset]
+  );
 
   return <Reanimated.View pointerEvents="none" style={spacerStyle} />;
 });
@@ -2891,11 +2894,7 @@ export default function ChatPage({ route }) {
         onClose={closeImageViewer}
       />
 
-      {Platform.OS === "android" ? (
-        <KeyboardStickyView>{composerContent}</KeyboardStickyView>
-      ) : (
-        composerContent
-      )}
+      <StickyInputFooter background="#F2F2F7">{composerContent}</StickyInputFooter>
     </KeyboardAvoidingView>
   );
 
@@ -3360,7 +3359,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   webNewGroupInput: {
-    height: 40,
+    // minHeight, not height: at large system font sizes a fixed box clips the text.
+    minHeight: 40,
     borderRadius: 10,
     backgroundColor: "#F2F3F7",
     borderWidth: 1,
@@ -3980,7 +3980,8 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     minWidth: 74,
-    height: 40,
+    // minHeight, not height: "Send"/"Update" must survive large accessibility fonts.
+    minHeight: 40,
     borderRadius: 20,
     paddingHorizontal: 14,
     marginLeft: 7,

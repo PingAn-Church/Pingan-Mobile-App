@@ -547,7 +547,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   searchBar: {
-    height: 44,
+    // minHeight, not height: a fixed box clips the text at large system fonts.
+    minHeight: 44,
     backgroundColor: "#ffffff",
     borderRadius: 8,
     paddingHorizontal: 16,

@@ -197,7 +197,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { KeyboardAvoidingView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+// Keeps the reply bar above the Android system navigation bar (edge-to-edge).
+import StickyInputFooter from "../../components/StickyInputFooter";
 import {
   fetchReplies,
   postReply,
@@ -229,10 +231,14 @@ import {
   pickThreadImage,
   uploadThreadImage,
 } from "../../utils/threadMedia";
+import { parseServerDate } from "../../utils/serverDate";
 
+// parseServerDate, not bare new Date(): thread timestamps are zone-less
+// LocalDateTime strings in server UTC — a bare parse read them as device-local
+// and showed every topic 8 hours early for UTC+8 users.
 const formatDateTime = (isoDate) => {
-  const date = new Date(isoDate);
-  return date.toLocaleString();
+  const date = parseServerDate(isoDate);
+  return date ? date.toLocaleString() : "";
 };
 
 const ThreadDetailPage = ({ route }) => {
@@ -831,11 +837,7 @@ const ThreadDetailPage = ({ route }) => {
         }}
       />
 
-      {Platform.OS === "android" ? (
-        <KeyboardStickyView>{replyComposer}</KeyboardStickyView>
-      ) : (
-        replyComposer
-      )}
+      <StickyInputFooter background="#fafafa">{replyComposer}</StickyInputFooter>
     </KeyboardAvoidingView>
   );
 };
