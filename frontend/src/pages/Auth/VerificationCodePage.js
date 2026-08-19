@@ -90,8 +90,14 @@ export default function VerificationCodePage() {
     try {
       const result = await verifyCode(email, code.trim());
       if (result.success) {
-        await fetchUserData();
-        await handleLoginPushToken();
+        const profile = await fetchUserData();
+        if (!profile) {
+          showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [{ text: i18n.t("ok") }]);
+          return;
+        }
+        // Not awaited — see the note in LoginPage. The OS notification prompt has
+        // no business standing between finishing sign-up and reaching the app.
+        handleLoginPushToken().catch(() => {});
         navigation.reset({
           index: 0,
           routes: [{ name: "HomeTabs", params: { screen: "Home" } }],

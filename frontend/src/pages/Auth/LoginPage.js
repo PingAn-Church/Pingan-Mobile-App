@@ -51,16 +51,29 @@ const LoginPage = () => {
     try {
       const response = await loginUser({ email, password });
 
-      console.log("REACHEDDD!");
-
       if (response.success) {
-        await fetchUserData(); // Refresh user data
-        await handleLoginPushToken(); // Register Push Token
-        // await connectWebSocket(); // ✅ Connect WebSocket after login
+        // Credentials being accepted is not the same as being signed in: the
+        // profile fetch swallows its own failures and leaves the user null, and
+        // announcing success then navigating in that state lands on a screen the
+        // AuthGuard immediately bounces back to Welcome.
+        const profile = await fetchUserData();
+        if (!profile) {
+          showAlert(i18n.t("error"), i18n.t("somethingWentWrong"), [{ text: i18n.t("ok") }]);
+          return;
+        }
+
+        // Deliberately NOT awaited. Registering a push token can put up the OS
+        // notification prompt and makes two network calls, none of which decide
+        // whether the login worked — awaiting it held both the success message
+        // and the transition behind it for seconds, so the alert arrived after
+        // the user was already using the app.
+        handleLoginPushToken().catch(() => {
+          // Already logged and surfaced inside the notification context.
+        });
+
         showAlert(i18n.t("success"), i18n.t("loginSuccess"), [
           { text: i18n.t("ok") },
         ]);
-        console.log("V2!");
         navigation.reset({
           index: 0,
           routes: [{ name: "HomeTabs", params: { screen: "Home" } }],
