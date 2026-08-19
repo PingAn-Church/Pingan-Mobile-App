@@ -12,6 +12,9 @@ import java.util.List;
 public interface MessageDeliveryStatusRepository extends JpaRepository<MessageDeliveryStatus, Long> {
     List<MessageDeliveryStatus> findByMessageId(Long messageId);
 
+    /** Receipts for many messages at once — the chat list's newest-message previews. */
+    List<MessageDeliveryStatus> findByMessageIdIn(java.util.Collection<Long> messageIds);
+
     long countByUserId(Long userId);
 
     // Account-deletion sweep: drop this user's delivery rows across every message
