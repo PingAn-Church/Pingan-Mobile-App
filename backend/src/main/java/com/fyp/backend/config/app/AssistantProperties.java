@@ -41,7 +41,27 @@ public class AssistantProperties {
      */
     private int maxContextMessages = 10;
 
-    private int maxOutputTokens = 600;
+    /**
+     * The output budget.
+     *
+     * Generous because on a reasoning model this covers the model's invisible
+     * reasoning as well as the reply — too small a value there is spent thinking
+     * and returns an empty answer rather than a short one. It is a ceiling, not a
+     * target: a model writing three sentences still bills for three sentences.
+     */
+    private int maxOutputTokens = 2000;
+
+    /**
+     * Which name to send the output budget under: {@code max_tokens},
+     * {@code max_completion_tokens}, or {@code auto}.
+     *
+     * OpenAI's newer models refuse {@code max_tokens}; most other compatible
+     * providers accept only that. On {@code auto} the client starts with
+     * {@code max_tokens} and switches for good the first time a provider says it
+     * wants the other one, which costs a single rejected request per restart. Pin
+     * it once you know, and that cost goes away.
+     */
+    private String maxTokensParameter = "auto";
 
     /** Tool round trips per reply. A confused model would otherwise loop on budget. */
     private int maxToolRounds = 4;

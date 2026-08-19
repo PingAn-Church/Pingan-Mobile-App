@@ -11,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,6 +29,18 @@ import com.fyp.backend.config.app.AssistantProperties;
 public class AssistantClient {
 
     private static final Logger log = LoggerFactory.getLogger(AssistantClient.class);
+
+    /** What most OpenAI-compatible providers, and OpenAI's older models, expect. */
+    static final String MAX_TOKENS = "max_tokens";
+
+    /** What OpenAI's newer (reasoning-capable) models require instead. */
+    static final String MAX_COMPLETION_TOKENS = "max_completion_tokens";
+
+    /**
+     * Which spelling this provider turned out to want, remembered for the life of
+     * the process so only the first call can ever pay for the negotiation.
+     */
+    private volatile String negotiatedTokenParameter = MAX_TOKENS;
 
     private final AssistantProperties properties;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -130,11 +143,42 @@ public class AssistantClient {
         }
     }
 
+    /**
+     * Sends one request, negotiating the output-budget parameter if the provider
+     * disagrees about its name.
+     *
+     * OpenAI's newer models refuse {@code max_tokens} and require
+     * {@code max_completion_tokens}; most other OpenAI-compatible providers, and
+     * OpenAI's older models, accept only {@code max_tokens}. There is no name that
+     * works everywhere, so the first rejection teaches this client which one this
+     * provider wants and every later call uses it. Pin
+     * {@code assistant.max-tokens-parameter} to skip even that first retry.
+     */
     private JsonNode send(List<Map<String, Object>> conversation, AssistantTools tools) {
+        String parameter = tokenParameter();
+        try {
+            return post(conversation, tools, parameter);
+        } catch (HttpClientErrorException.BadRequest rejection) {
+            String alternative = alternativeTokenParameter(parameter, rejection.getResponseBodyAsString());
+            if (alternative == null) {
+                throw rejection;
+            }
+            log.info("Provider rejected '{}' for the output budget; using '{}' from now on. "
+                    + "Set assistant.max-tokens-parameter to skip this negotiation.",
+                    parameter, alternative);
+            negotiatedTokenParameter = alternative;
+            return post(conversation, tools, alternative);
+        }
+    }
+
+    private JsonNode post(List<Map<String, Object>> conversation, AssistantTools tools,
+                          String tokenParameter) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", properties.getModel());
         body.put("messages", conversation);
-        body.put("max_tokens", properties.getMaxOutputTokens());
+        // Deliberately no temperature/top_p: the newer reasoning models reject any
+        // value but the default, and nothing here needs to move it.
+        body.put(tokenParameter, properties.getMaxOutputTokens());
         if (tools != null) {
             List<Map<String, Object>> specifications = tools.specifications();
             if (!specifications.isEmpty()) {
@@ -153,7 +197,43 @@ public class AssistantClient {
                 .retrieve()
                 .body(JsonNode.class);
 
-        JsonNode message = response == null ? null : response.path("choices").path(0).path("message");
+        JsonNode choice = response == null ? null : response.path("choices").path(0);
+        if (choice != null && "length".equals(choice.path("finish_reason").asText(""))) {
+            // On a reasoning model the budget covers invisible reasoning as well as
+            // the reply, so this usually means the answer was cut off — or never
+            // written at all — rather than that the model rambled.
+            log.warn("Assistant reply hit the {} limit of {}; raise assistant.max-output-tokens.",
+                    tokenParameter, properties.getMaxOutputTokens());
+        }
+
+        JsonNode message = choice == null ? null : choice.path("message");
         return message == null || message.isMissingNode() ? null : message;
+    }
+
+    private String tokenParameter() {
+        String configured = properties.getMaxTokensParameter();
+        if (MAX_TOKENS.equalsIgnoreCase(configured) || MAX_COMPLETION_TOKENS.equalsIgnoreCase(configured)) {
+            return configured.toLowerCase(java.util.Locale.ROOT);
+        }
+        return negotiatedTokenParameter;
+    }
+
+    /**
+     * The other spelling, when a 400 says the one we used is the problem.
+     *
+     * Only reacts to a rejection that actually names our parameter and reads like a
+     * parameter complaint — a 400 about anything else is rethrown rather than
+     * guessed at. Note the two names do not overlap as substrings, so the check
+     * cannot confuse them.
+     */
+    private static String alternativeTokenParameter(String used, String responseBody) {
+        String body = responseBody == null ? "" : responseBody;
+        String lower = body.toLowerCase(java.util.Locale.ROOT);
+        boolean parameterComplaint = lower.contains("unsupported") || lower.contains("unrecognized")
+                || lower.contains("not supported") || lower.contains("unknown parameter");
+        if (!parameterComplaint || !body.contains(used)) {
+            return null;
+        }
+        return MAX_TOKENS.equals(used) ? MAX_COMPLETION_TOKENS : MAX_TOKENS;
     }
 }
