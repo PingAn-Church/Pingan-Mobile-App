@@ -4,8 +4,8 @@ Add a built-in AI assistant that members summon by `@`-mentioning it inside a gr
 chat. It answers Bible-study questions by quoting **real** scripture, and answers
 "what's on this week / what courses are there" from the app's own data.
 
-**Status: implemented** on `feature/shalombot-assistant`, all six commits below. The
-backend suite is green at 439 tests. What remains is operational, not code — see
+**Status: implemented** on `feature/shalombot-assistant`. The backend suite is green at
+439 tests. What remains is operational, not code — see
 *Before switching it on* at the end.
 
 ## Decisions locked in
@@ -13,7 +13,8 @@ backend suite is green at 439 tests. What remains is operational, not code — s
 | Decision | Choice |
 |---|---|
 | **Provider** | Any OpenAI-compatible endpoint, configured as `ENDPOINT` / `API_KEY` / `MODEL`. **Function/tool calling is available**, so the design uses a normal tool-call loop. |
-| **Where it works** | Group chats only, admin-enabled per group — **including the church-wide app group**. Never private chats (v1). |
+| **Where it works** | Group chats only — **including the church-wide app group**. Never private chats (v1). |
+| **How it is switched on** | Add ShalomBot to a group's members; remove it to switch off. The app-level group, whose roster cannot be edited, gets a toggle in its settings. |
 | **Trigger** | Being `@`-mentioned. Never `@all`. |
 | **Translations** | **KJV** (English) and **和合本 CUV, simplified** (Chinese). Both public domain. |
 | **Corpus** | eBible.org HTML → JSON offline, **committed to the repo**, held in memory at runtime. No table, no deploy step. |
@@ -112,26 +113,36 @@ its mention stripped before the message is even stored** — no error, no log, t
 simply never fires. This is the single most likely way to build the whole feature and
 have it appear to do nothing.
 
-Three places have to agree:
+**Membership is the switch.** Adding the assistant to a group turns it on; removing it
+turns it off. There is no separate step to forget, and no admin has to call an API:
+`addParticipantToGroup` and `removeParticipantFromGroup` set `assistantEnabled`
+themselves. The dangerous state — flagged on, not on the roster — is no longer reachable
+through the app at all.
 
-1. **Enabling `assistantEnabled` on a group adds the bot to
-   `group_conversation_participants`**, and disabling it removes them. The toggle and the
-   roster are one operation; a toggle that only sets a boolean produces a silently dead
-   assistant.
-2. **`UserRepository.findChatEligibleMembers` must keep bots.** Today it selects
-   `isVerifiedUser && active && !deletedAccount`, so the seeded bot matches and
-   `AppGroupChatService.reconcile` adds it to the app group on boot — *by accident*.
-   That same method runs `participants.removeIf(u -> !eligibleIds.contains(u.getId()))`
-   on **every** boot, so the day someone adds `AND u.bot = false` to that query — a
-   natural hygiene edit, and this very plan asks for bots to be hidden from listings —
-   the bot is evicted at the next restart and the feature dies silently. Add a comment
-   to the query saying the assistant depends on it.
-3. **`removeParticipantFromGroup` must refuse the bot** while `assistantEnabled` is
-   true, the way `isAppGroup` already refuses leaving the app-level group. Otherwise an
-   admin tidying a member list breaks the assistant with no feedback.
+Because the assistant is kept out of the user directory (it must not appear in "start a
+new chat" or the admin member lists), the add-participants picker cannot find it by
+search. `ConversationDto` carries its identity instead, and the picker pins it to the top
+of the list — the same trick the @ picker uses.
 
-A startup check that logs a warning for any `assistantEnabled` group whose roster lacks
-the bot is cheap and turns this class of failure from silent into obvious.
+Two things still have to hold:
+
+1. **`UserRepository.findChatEligibleMembers` must keep bots.** It selects
+   `isVerifiedUser && active && !deletedAccount`, so the seeded assistant matches and
+   `AppGroupChatService.reconcile` keeps it on the app-level roster. That method runs
+   `participants.removeIf(u -> !eligibleIds.contains(u.getId()))` on **every** boot, so
+   the day someone adds `AND u.bot = false` there — a natural hygiene edit, and this very
+   plan asks for bots to be hidden from listings — the assistant is evicted at the next
+   restart. The query carries a comment saying so.
+2. **The app-level group needs a switch of its own.** Its roster follows account
+   verification and `rejectAppGroupRosterEdit` refuses hand edits, so nobody can add or
+   remove the assistant there. `PUT /chat/conversation/{id}/assistant` exists for exactly
+   that group, surfaced as a toggle in its settings beside the rename fields, for app
+   admins. It refuses any other group and points at the member list instead.
+
+`AssistantAccountService.reconcileAssistantMembership` runs last at startup and switches
+off any group flagged on without the assistant on its roster — not reachable through the
+app, but a restore or a hand-edited row could produce it, and the symptom would otherwise
+be silent.
 
 ---
 
@@ -980,7 +991,7 @@ Nothing is user-visible until 5 and 6.
 | risk | mitigation |
 |---|---|
 | Fabricated or paraphrased verse | Model emits IR tokens only; backend substitutes real text; verifier as second net (§4) |
-| **Assistant silently never fires** | Bot must be on the group roster; `findChatEligibleMembers` keeps bots; remove-participant refuses it; startup warning (§1) |
+| **Assistant silently never fires** | Membership is the switch, so "on but not a member" is unreachable; `findChatEligibleMembers` keeps bots; startup reconcile heals drift (§1) |
 | Wrong Chinese verse from coordinate drift | Versification spot-check in commit 2; mapping table if parity is imperfect (§4) |
 | Chinese search returning nothing | In-memory bigram index, not Postgres FTS, which cannot segment CJK (§4) |
 | Corrupted verse text from HTML conversion | Delete-vs-unwrap element rules; per-book round-trip test (§4) |
@@ -1022,10 +1033,11 @@ The code is in place and inert. Nothing answers anybody until each of these is d
 | 1. Deploy, then check the boot log for `Creating the in-app assistant account` and `Bible corpora loaded` | Confirms the seed ran and the corpus parsed on the real database |
 | 2. Confirm `LLM_BASE_URL` ends in the provider's version path (e.g. `/v1`) | `/chat/completions` is appended to it; a bare host produces a 404 that reads like a provider outage |
 | 3. Get the §10 system prompt reviewed and signed off | It encodes doctrinal posture; it should not ship on an engineer's say-so |
-| 4. Turn it on for **one** trial group — `PUT /chat/conversation/{id}/assistant` with `{"enabled":true}` | The toggle also puts the assistant on that group's roster; a flag alone leaves it silently mute |
+| 4. Turn it on for **one** trial group by adding ShalomBot to its members | Membership is the switch — it is pinned to the top of the add-participants list |
 | 5. Ask it a Bible question, an events question, and something it cannot know | Checks quoting, app-data grounding, and that it says "I don't know" rather than inventing |
 | 6. Watch that only the asker is pushed | The empty plain-recipient batch is what keeps the church-wide group usable |
-| 7. Only then consider the app-level group | Its roster already contains the assistant, so step 4 is the only change needed |
+| 7. Only then consider the app-level group | Its roster cannot be edited, so use the assistant toggle in its group settings instead |
 
-To turn it off again, set `enabled:false` on the group, or clear `ASSISTANT_ENABLED` /
-the credentials to disable it everywhere at once.
+To turn it off again, remove ShalomBot from the group's members (or use the toggle, in
+the app-level group), or clear `ASSISTANT_ENABLED` / the credentials to disable it
+everywhere at once.
