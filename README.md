@@ -309,6 +309,14 @@ WARN  App update channel 'play' is holding back 1.0.4 (10004): published is 1.0.
 
 ## In-App Update Links
 
+iOS builds check the App Store directly (Apple's iTunes lookup API for app id
+`6774477173`, preferring the device's likely storefront — CN for China devices,
+SG otherwise). The update prompt therefore only ever appears once the App Store
+is actually serving the new version, and "Update Now" opens the store listing —
+no publish step or backend metadata is involved for iOS. Force-update stays
+Android-only: the store exposes no min-supported signal, so iOS prompts are
+always dismissable.
+
 Android builds check the backend for a newer version and open a download link.
 Because Google Play/Drive are blocked in China, the app serves a China mirror to
 China-based devices (detected on-device by region/timezone) and the

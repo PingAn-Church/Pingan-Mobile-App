@@ -11,7 +11,27 @@ const extra = Constants.expoConfig?.extra || Constants.manifest?.extra || {};
 const IGNORED_VERSION_KEY = "appUpdate.ignoredVersionCode";
 const DEFAULT_CHANNEL = "direct";
 
+// The App Store listing (https://apps.apple.com/app/id6774477173). iOS update
+// checks ask Apple's public lookup API about this id, so the prompt can only
+// ever appear once the App Store is actually serving the new version — the
+// same "never point at a store that hasn't got it" guarantee the Android side
+// gets from the backend's published-* gate, with no publish step to run.
+export const APPLE_APP_ID = "6774477173";
+const ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup";
+
 export const isAndroidNative = () => Platform.OS === "android";
+export const isIosNative = () => Platform.OS === "ios";
+export const isSupportedUpdatePlatform = () => isAndroidNative() || isIosNative();
+
+// The Android versionCode scheme (major*10000 + minor*100 + patch), derived
+// from a version name. Used on iOS, where the store lookup only exposes the
+// marketing version string — deriving codes on BOTH sides of the comparison
+// keeps it apples-to-apples.
+export const versionNameToCode = (name) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(String(name || "").trim());
+  if (!match) return 0;
+  return Number(match[1]) * 10000 + Number(match[2]) * 100 + Number(match[3]);
+};
 
 export const getDistributionChannel = () =>
   String(extra.DISTRIBUTION_CHANNEL || DEFAULT_CHANNEL).trim().toLowerCase();
@@ -39,6 +59,57 @@ export const fetchLatestAndroidRelease = async (channel = getDistributionChannel
     params: { platform: "android", channel },
   });
   return response.data?.data || response.data;
+};
+
+export const getCurrentIosVersion = () => {
+  const versionName =
+    Application.nativeApplicationVersion ||
+    Constants.expoConfig?.version ||
+    Constants.manifest?.version ||
+    "0.0.0";
+  return { versionName, versionCode: versionNameToCode(versionName) };
+};
+
+/**
+ * Asks Apple what version the App Store is serving, shaped like the backend's
+ * Android release payload so the rest of the update flow needs no branching.
+ *
+ * Storefronts can lag each other during a phased release, so the device's
+ * likely storefront is asked first (CN for China devices, SG otherwise), then
+ * the others as fallback. Force-update stays Android-only: the store exposes no
+ * min-supported signal, so an iOS prompt is always dismissable.
+ */
+export const fetchLatestIosRelease = async () => {
+  const storefronts = isLikelyChinaRegion() ? ["cn", "sg", ""] : ["sg", "cn", ""];
+  let lastError = null;
+  for (const country of storefronts) {
+    try {
+      const response = await axios.get(ITUNES_LOOKUP_URL, {
+        params: { id: APPLE_APP_ID, ...(country ? { country } : {}) },
+      });
+      // The lookup answers with a text/javascript content type; axios usually
+      // still parses the JSON body, but don't depend on it.
+      const data =
+        typeof response.data === "string" ? JSON.parse(response.data) : response.data;
+      const result = data?.results?.[0];
+      if (result?.version) {
+        const notes = result.releaseNotes || "";
+        return {
+          latestVersionName: result.version,
+          latestVersionCode: versionNameToCode(result.version),
+          minSupportedVersionCode: 0,
+          forceUpdate: false,
+          appStoreUrl: result.trackViewUrl || `https://apps.apple.com/app/id${APPLE_APP_ID}`,
+          // Store notes are single-language (whatever the release uploaded);
+          // serve them for both app languages rather than hiding one.
+          releaseNotes: { en: notes, zh: notes },
+        };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("App Store lookup returned no result.");
 };
 
 export const evaluateAndroidRelease = (current, release) => {
@@ -116,6 +187,12 @@ export const resolveDirectDownload = (release) => {
 
 export const openReleaseTarget = async (release, channel = getDistributionChannel()) => {
   const normalizedChannel = String(channel || DEFAULT_CHANNEL).toLowerCase();
+
+  if (normalizedChannel === "appstore") {
+    const storeUrl = release?.appStoreUrl || `https://apps.apple.com/app/id${APPLE_APP_ID}`;
+    await Linking.openURL(storeUrl);
+    return;
+  }
 
   if (normalizedChannel === "play") {
     const playUrl = release?.playStoreUrl;
