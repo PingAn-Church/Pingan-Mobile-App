@@ -33,6 +33,44 @@ public class AnnouncementService {
     }
 
     public Announcement createAnnouncement(String title, String imageUrl, String announcementLink) {
+        Validated fields = validate(title, imageUrl, announcementLink);
+        Announcement announcement = new Announcement(fields.title(), fields.imageUrl(), fields.link());
+        return announcementRepository.save(announcement);
+    }
+
+    /**
+     * Edits an announcement in place: text, link, and/or picture.
+     *
+     * A replaced picture always arrives under a NEW object key (the client
+     * uploads replacements — including re-crops — as fresh files, which is what
+     * lets CachedImage cache covers by path), so the old object is deleted once
+     * the update commits. deleteAfterCommit still checks references, so an image
+     * shared by another announcement survives.
+     */
+    @Transactional
+    public Announcement updateAnnouncement(Long id, String title, String imageUrl, String announcementLink) {
+        Announcement announcement = announcementRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Announcement not found."));
+
+        Validated fields = validate(title, imageUrl, announcementLink);
+        String previousImageUrl = announcement.getImageUrl();
+
+        announcement.setTitle(fields.title());
+        announcement.setImageUrl(fields.imageUrl());
+        announcement.setAnnouncementLink(fields.link());
+        Announcement saved = announcementRepository.save(announcement);
+
+        if (previousImageUrl != null && !previousImageUrl.equals(fields.imageUrl())) {
+            ossCleanupService.deleteAfterCommit(previousImageUrl);
+        }
+        return saved;
+    }
+
+    /** The create/update field rules, shared so the two paths cannot drift. */
+    private record Validated(String title, String imageUrl, String link) {
+    }
+
+    private Validated validate(String title, String imageUrl, String announcementLink) {
         String normalizedTitle = title == null ? "" : title.trim();
         String normalizedImageUrl = imageUrl == null ? "" : imageUrl.trim();
         String normalizedAnnouncementLink = announcementLink == null ? "" : announcementLink.trim();
@@ -49,8 +87,7 @@ public class AnnouncementService {
             throw new IllegalArgumentException("Announcement link must be a valid http:// or https:// URL.");
         }
 
-        Announcement announcement = new Announcement(normalizedTitle, normalizedImageUrl, normalizedAnnouncementLink);
-        return announcementRepository.save(announcement);
+        return new Validated(normalizedTitle, normalizedImageUrl, normalizedAnnouncementLink);
     }
 
     private boolean isValidHttpUrl(String value) {

@@ -8,18 +8,22 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import {
   getAllAnnouncements,
   createAnnouncement,
+  updateAnnouncement,
   deleteAnnouncement,
 } from "../../service/AnnouncementService";
 import {
   getPresignedUploadUrl,
   uploadFileToOSS,
   deleteOwnUpload,
+  resolvePresignedAssetUrl,
 } from "../../service/OSSService";
+import { getLocalUri as getCachedMedia } from "../../service/MediaCacheService";
 import CachedImage from "../../components/CachedImage";
+import ImageCropModal from "../../components/ImageCropModal";
 import { confirmAction } from "../../utils/confirmAction";
 import { showAlert } from "../../utils/showAlert";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -92,7 +96,16 @@ export default function ManageAnnouncementsPage() {
               style={styles.image}
             />
             <Text style={styles.title}>{item.title}</Text>
-            <TouchableOpacity onPress={() => handleDeleteAnnouncement(item)}>
+            <TouchableOpacity
+              style={styles.rowAction}
+              onPress={() => navigation.navigate("EditAnnouncement", { announcement: item })}
+            >
+              <MaterialIcons name="edit" size={24} color="#007BFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rowAction}
+              onPress={() => handleDeleteAnnouncement(item)}
+            >
               <MaterialIcons name="delete" size={24} color="red" />
             </TouchableOpacity>
           </View>
@@ -266,6 +279,202 @@ export function AddAnnouncementPage() {
   );
 }
 
+/**
+ * Edit an existing announcement: title, link, a brand-new picture, or a re-crop
+ * of the current one. Every picture change uploads under a NEW object key —
+ * that is what lets CachedImage cache covers by path — and the backend deletes
+ * the replaced object once the update commits.
+ */
+export function EditAnnouncementPage() {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const announcement = route.params?.announcement || {};
+
+  const [title, setTitle] = useState(announcement.title || "");
+  const [announcementLink, setAnnouncementLink] = useState(announcement.announcementLink || "");
+  // Local file replacing the current cover; null = keep the stored picture.
+  const [newImage, setNewImage] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [cropSource, setCropSource] = useState(null);
+  const [preparingCrop, setPreparingCrop] = useState(false);
+
+  const normalizeLink = (value) =>
+    value && !value.includes("://") ? `https://${value}` : value;
+
+  const isValidHttpUrl = (value) => {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
+
+  const handleChooseImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [6, 3],
+      quality: 1,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setNewImage(result.assets[0].uri);
+    }
+  };
+
+  const handleRecrop = async () => {
+    if (preparingCrop) return;
+    // A freshly picked local image can be re-cropped directly; the stored cover
+    // is downloaded once through the media cache (the same path CachedImage uses).
+    if (newImage) {
+      setCropSource(newImage);
+      return;
+    }
+    setPreparingCrop(true);
+    try {
+      const local = await getCachedMedia(announcement.imageUrl, (u) =>
+        resolvePresignedAssetUrl(u, "announcement")
+      );
+      if (!local) throw new Error("Could not load the current picture.");
+      setCropSource(local);
+    } catch (error) {
+      showAlert(i18n.t("error"), error?.message || i18n.t("somethingWentWrong"), [
+        { text: i18n.t("ok") },
+      ]);
+    } finally {
+      setPreparingCrop(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (saving) return;
+    const trimmedTitle = title.trim();
+    const normalizedLink = normalizeLink(announcementLink.trim());
+
+    if (!trimmedTitle) {
+      showAlert(i18n.t("error"), i18n.t("fillTitleAndImage"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+    if (trimmedTitle.length > 70) {
+      showAlert(i18n.t("error"), i18n.t("titleLessThan70"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+    if (normalizedLink && !isValidHttpUrl(normalizedLink)) {
+      showAlert(i18n.t("error"), i18n.t("invalidAnnouncementLink"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+
+    setSaving(true);
+    let uploadedImageUrl = null;
+    try {
+      let imageUrl = announcement.imageUrl;
+      if (newImage) {
+        const fileName = `announcement_${Date.now()}.jpeg`;
+        const presignedUrl = await getPresignedUploadUrl(fileName, "announcement");
+        uploadedImageUrl = await uploadFileToOSS(newImage, presignedUrl);
+        imageUrl = uploadedImageUrl;
+      }
+
+      // The backend deletes the replaced picture only after this update commits.
+      await updateAnnouncement(announcement.id, trimmedTitle, imageUrl, normalizedLink);
+
+      showAlert(i18n.t("success"), i18n.t("updateAnnouncementSuccess"), [
+        { text: i18n.t("ok") },
+      ]);
+      navigation.goBack();
+    } catch (error) {
+      if (uploadedImageUrl) {
+        try {
+          await deleteOwnUpload(uploadedImageUrl, "announcement");
+        } catch (cleanupError) {
+          console.warn("Failed to clean up unreferenced announcement upload:", cleanupError);
+        }
+      }
+      const backendMessage =
+        error?.response?.data?.message ||
+        (typeof error?.response?.data === "string" ? error.response.data : "");
+      showAlert(
+        i18n.t("error"),
+        backendMessage || error?.message || i18n.t("updateAnnouncementFailed"),
+        [{ text: i18n.t("ok") }]
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.header}>{i18n.t("editAnnouncement")}</Text>
+      <TextInput
+        style={styles.input}
+        placeholder={i18n.t("enterAnnouncementTitle")}
+        value={title}
+        multiline={true}
+        numberOfLines={2}
+        textAlignVertical="top"
+        onChangeText={setTitle}
+      />
+      <Text style={{ marginBottom: 10, marginLeft: 5 }}>{title.length}/70</Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder={i18n.t("enterAnnoucementLink")}
+        value={announcementLink}
+        multiline={false}
+        numberOfLines={1}
+        textAlignVertical="top"
+        onChangeText={setAnnouncementLink}
+      />
+
+      <View style={styles.imageActionsRow}>
+        <TouchableOpacity style={[styles.imagePicker, styles.imageActionButton]} onPress={handleChooseImage}>
+          <Text style={styles.imagePickerText}>{i18n.t("changeImage")}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.imagePicker, styles.imageActionButton]}
+          onPress={handleRecrop}
+          disabled={preparingCrop}
+        >
+          <Text style={styles.imagePickerText}>
+            {preparingCrop ? i18n.t("uploading") : i18n.t("recropImage")}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {newImage ? (
+        <Image source={{ uri: newImage }} style={styles.previewImage} />
+      ) : (
+        <CachedImage
+          uri={announcement.imageUrl}
+          type="announcement"
+          style={styles.previewImage}
+        />
+      )}
+
+      <TouchableOpacity
+        style={[styles.addButton, saving && styles.addButtonDisabled]}
+        onPress={handleSave}
+        disabled={saving}
+      >
+        <Text style={styles.addButtonText}>
+          {saving ? i18n.t("uploading") : i18n.t("save")}
+        </Text>
+      </TouchableOpacity>
+
+      <ImageCropModal
+        visible={cropSource !== null}
+        imageUri={cropSource}
+        onCancel={() => setCropSource(null)}
+        onCropped={(uri) => {
+          setNewImage(uri);
+          setCropSource(null);
+        }}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -299,6 +508,17 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginRight: 2,
     lineHeight: 24,
+  },
+  rowAction: {
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  imageActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  imageActionButton: {
+    flex: 1,
   },
   addButton: {
     backgroundColor: "#007BFF",

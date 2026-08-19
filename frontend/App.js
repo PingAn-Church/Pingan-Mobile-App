@@ -48,6 +48,7 @@ import ManagePicturesPage, {
 } from "./src/pages/Others/ManagePicturesPage";
 import ManageAnnouncementsPage, {
   AddAnnouncementPage,
+  EditAnnouncementPage,
 } from "./src/pages/Others/ManageAnnouncementsPage";
 import ManageAdminsPage, {
   ManageUsersPage,
@@ -399,6 +400,7 @@ const ROOT_BACK_FALLBACKS = {
   AddPicture: "ManagePictures",
   ManageAnnouncements: "HomeTabs",
   AddAnnouncement: "ManageAnnouncements",
+  EditAnnouncement: "ManageAnnouncements",
   ManageAdmins: "HomeTabs",
   ManageUsers: "HomeTabs",
   ManageInstructors: "HomeTabs",
@@ -640,6 +642,11 @@ export default function App() {
                   <Stack.Screen
                     name="AddAnnouncement"
                     component={AddAnnouncementPage}
+                    options={{ headerTitle: "" }}
+                  />
+                  <Stack.Screen
+                    name="EditAnnouncement"
+                    component={EditAnnouncementPage}
                     options={{ headerTitle: "" }}
                   />
                   <Stack.Screen
