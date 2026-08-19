@@ -58,7 +58,11 @@ public class WebSocketInterceptor implements HandshakeInterceptor {
                     attributes.put("userEmail", email);
                     attributes.put("userId", user.getId());
                     attributes.put("deviceId", deviceId);
-                    redisService.setUserOnline(email, deviceId);
+                    // Presence is deliberately NOT set here. WebSocketEventListener
+                    // marks the device online on the CONNECT event, where it can
+                    // first ask "was this user online at all?" and broadcast only
+                    // the offline->online transition — setting it during the
+                    // handshake made that question always answer "yes".
                     return true;
                 }
             }
