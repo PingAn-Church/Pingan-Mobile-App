@@ -18,7 +18,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,6 +46,10 @@ public class PushNotificationService {
 
     @Autowired
     private AdminAlertService adminAlertService;
+
+    // Only used for the best-effort push-receipt queue; never on the hot path.
+    @Autowired
+    private RedisService redisService;
 
     /**
      * Tags the admin "someone just registered" push. Shares the conversationType
@@ -83,30 +86,42 @@ public class PushNotificationService {
         // Check if the token already exists for this user and deviceId
         Optional<PushToken> existingPushToken = pushTokenRepository.findByUserIdAndTokenAndDeviceId(userId, token, deviceId);
 
-        System.out.println("EXISTS??" + existingPushToken.isPresent());
-
+        PushToken result;
         if (existingPushToken.isPresent()) {
             PushToken pushToken = existingPushToken.get();
             // If the token is inactive, reactivate it
             if (!pushToken.isActive()) {
                 pushToken.setActive(true);
                 pushToken.setDeviceType(deviceType);  // Update device type if needed
-                pushToken.setDeviceId(deviceId);  // Update deviceId if needed
-                return pushTokenRepository.save(pushToken);
+                result = pushTokenRepository.save(pushToken);
+            } else {
+                // If active, simply return the existing token
+                result = pushToken;
             }
-            // If active, simply return the existing token
-            return pushToken;
+        } else {
+            // If the token doesn't exist, create a new PushToken and set it active
+            PushToken pushToken = new PushToken();
+            pushToken.setUser(user);
+            pushToken.setToken(token);
+            pushToken.setDeviceType(deviceType);
+            pushToken.setDeviceId(deviceId);  // Store the deviceId
+            pushToken.setActive(true);  // Active after login
+
+            result = pushTokenRepository.save(pushToken);
         }
 
-        // If the token doesn't exist, create a new PushToken and set it active
-        PushToken pushToken = new PushToken();
-        pushToken.setUser(user);
-        pushToken.setToken(token);
-        pushToken.setDeviceType(deviceType);
-        pushToken.setDeviceId(deviceId);  // Store the deviceId
-        pushToken.setActive(true);  // Active after login
+        // Expo tokens rotate. Whatever other tokens this device registered before
+        // are dead the moment a new one arrives — left active they double-send
+        // until the daily cleanup notices the session is gone (which it never does
+        // while the user stays logged in).
+        for (PushToken other : pushTokenRepository.findByUserIdAndDeviceId(userId, deviceId)) {
+            if (other.isActive() && !other.getToken().equals(token)) {
+                other.setActive(false);
+                pushTokenRepository.save(other);
+            }
+        }
 
-        return pushTokenRepository.save(pushToken);
+        return result;
     }
 
     // Deactivate a push token (e.g., for logging out or user preferences)
@@ -478,26 +493,49 @@ public class PushNotificationService {
         return payload;
     }
 
-    private void sendPushBatch(Collection<Map<String, Object>> payloads) {
+    /** Expo's ticket/receipt error code for "this token belongs to an uninstalled app". */
+    static final String DEVICE_NOT_REGISTERED = "DeviceNotRegistered";
+
+    private void sendPushBatch(List<Map<String, Object>> payloads) {
         if (payloads == null || payloads.isEmpty()) return;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         String response = restTemplate.postForObject(
                 EXPO_PUSH_URL, new HttpEntity<>(payloads, headers), String.class);
-        logBatchDeliveryProblems(response);
+        logBatchDeliveryProblems(response, payloads);
     }
 
-    private void logBatchDeliveryProblems(String response) {
+    /**
+     * Expo returns tickets in request order, so ticket i belongs to payloads[i] —
+     * that positional link is the only way back from a batch ticket to its token.
+     * DeviceNotRegistered retires the token immediately (Expo's policy: keeping
+     * sending to dead tokens risks the whole sender being throttled). Successful
+     * tickets are queued so PushReceiptJob can later catch the failures that only
+     * show up in receipts, not tickets.
+     */
+    private void logBatchDeliveryProblems(String response, List<Map<String, Object>> payloads) {
         if (response == null || response.isBlank()) return;
         try {
             JsonNode root = objectMapper.readTree(response);
             JsonNode data = root.path("data");
             if (!data.isArray()) return;
-            for (JsonNode ticket : data) {
-                if (!"ok".equals(ticket.path("status").asText())) {
-                    System.err.println("❌ Expo batch ticket error: "
-                            + ticket.path("message").asText() + " ("
-                            + ticket.path("details").path("error").asText() + ")");
+            for (int i = 0; i < data.size(); i++) {
+                JsonNode ticket = data.get(i);
+                String token = i < payloads.size()
+                        ? String.valueOf(payloads.get(i).get("to"))
+                        : null;
+                if ("ok".equals(ticket.path("status").asText())) {
+                    String ticketId = ticket.path("id").asText("");
+                    if (!ticketId.isEmpty() && token != null) {
+                        enqueueReceiptQuietly(ticketId, token);
+                    }
+                    continue;
+                }
+                String errorCode = ticket.path("details").path("error").asText();
+                System.err.println("❌ Expo batch ticket error for " + maskToken(token) + ": "
+                        + ticket.path("message").asText() + " (" + errorCode + ")");
+                if (DEVICE_NOT_REGISTERED.equals(errorCode) && token != null) {
+                    deactivateDeadToken(token);
                 }
             }
         } catch (Exception unparseable) {
@@ -520,13 +558,46 @@ public class PushNotificationService {
                 return;
             }
             JsonNode ticket = root.path("data");
-            if (ticket.isObject() && !"ok".equals(ticket.path("status").asText())) {
-                System.err.println("❌ Expo ticket error for " + maskToken(token) + ": "
-                        + ticket.path("message").asText()
-                        + " (" + ticket.path("details").path("error").asText() + ")");
+            if (ticket.isObject()) {
+                if (!"ok".equals(ticket.path("status").asText())) {
+                    String errorCode = ticket.path("details").path("error").asText();
+                    System.err.println("❌ Expo ticket error for " + maskToken(token) + ": "
+                            + ticket.path("message").asText()
+                            + " (" + errorCode + ")");
+                    if (DEVICE_NOT_REGISTERED.equals(errorCode)) {
+                        deactivateDeadToken(token);
+                    }
+                } else {
+                    String ticketId = ticket.path("id").asText("");
+                    if (!ticketId.isEmpty()) {
+                        enqueueReceiptQuietly(ticketId, token);
+                    }
+                }
             }
         } catch (Exception unparseable) {
             System.err.println("⚠️ Unreadable Expo response for " + maskToken(token) + ": " + response);
+        }
+    }
+
+    /** Cleanup must never break a send — a failed deactivation just logs. */
+    private void deactivateDeadToken(String token) {
+        try {
+            int retired = pushTokenRepository.deactivateByToken(token);
+            if (retired > 0) {
+                System.err.println("ℹ️ Retired dead push token " + maskToken(token)
+                        + " (DeviceNotRegistered)");
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Could not deactivate dead push token "
+                    + maskToken(token) + ": " + e.getMessage());
+        }
+    }
+
+    /** Receipt bookkeeping is best-effort — Redis being down must not break a send. */
+    private void enqueueReceiptQuietly(String ticketId, String token) {
+        try {
+            redisService.enqueuePushReceipt(ticketId, token);
+        } catch (Exception ignored) {
         }
     }
 
