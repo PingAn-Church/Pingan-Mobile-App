@@ -92,8 +92,8 @@ android {
         applicationId 'org.pingan.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10106
-        versionName "1.1.6"
+        versionCode 10107
+        versionName "1.1.7"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
