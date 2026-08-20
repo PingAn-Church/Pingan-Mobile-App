@@ -2446,7 +2446,13 @@ export default function ChatPage({ route }) {
           {isSendingText ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.sendButtonText}>{editingMessage ? "Update" : "Send"}</Text>
+            // Icons instead of the old hardcoded English "Send"/"Update":
+            // language-neutral, and the paper plane is the universal send glyph.
+            <Ionicons
+              name={editingMessage ? "checkmark" : "paper-plane"}
+              size={20}
+              color="#FFFFFF"
+            />
           )}
         </TouchableOpacity>
       </View>
@@ -3979,8 +3985,9 @@ const styles = StyleSheet.create({
     color: "#111113",
   },
   sendButton: {
-    minWidth: 74,
-    // minHeight, not height: "Send"/"Update" must survive large accessibility fonts.
+    // Icon-only now, so a compact round-ish pill; minHeight keeps the tap
+    // target at 40dp regardless of font scale.
+    minWidth: 52,
     minHeight: 40,
     borderRadius: 20,
     paddingHorizontal: 14,
@@ -3993,11 +4000,6 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: "#C4C8D0",
-  },
-  sendButtonText: {
-    color: "#FFFFFF",
-    fontSize: webFontSize(15),
-    fontWeight: "700",
   },
   editingBanner: {
     flexDirection: "row",

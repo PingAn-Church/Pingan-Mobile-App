@@ -13,6 +13,7 @@ import {
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -39,6 +40,7 @@ interface RankedGift {
 }
 
 export default function GiftResultsScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useContext(UserContext);
@@ -206,7 +208,8 @@ export default function GiftResultsScreen() {
           )}
         />
 
-        <View style={styles.actions}>
+        {/* Bottom inset keeps these above the system navigation bar (edge-to-edge). */}
+        <View style={[styles.actions, { paddingBottom: insets.bottom }]}>
           <TouchableOpacity style={styles.primaryButton} onPress={copyResult}>
             <Ionicons name="copy-outline" size={18} color="#FFFFFF" />
             <Text style={styles.primaryText}>{i18n.t("copyGiftResults")}</Text>

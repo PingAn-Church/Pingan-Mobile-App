@@ -78,6 +78,7 @@ import CachedImage from "../../components/CachedImage";
 import { Ionicons } from "@expo/vector-icons";
 import { setThreadSubscription } from "../../service/ThreadService";
 import { parseServerDate } from "../../utils/serverDate";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Helper to format a server timestamp to a readable local time. parseServerDate
 // applies the server-UTC rule (zone-less LocalDateTime strings would otherwise
@@ -89,6 +90,7 @@ const formatDateTime = (isoDate) => {
 
 const ThreadHomePage = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [threads, setThreads] = useState([]);
   // const [loading, setLoading] = useState(true);
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -369,12 +371,15 @@ const ThreadHomePage = () => {
         />
       )}
 
-      {/* <Button title="Create New Thread" onPress={handleCreateThread} /> */}
-      <Button
-        title={i18n.t("createNewThread")}
-        onPress={handleCreateThread}
-        disabled={loadingInitial || refreshing}
-      />
+      {/* Lifted above the system navigation bar — edge-to-edge draws the page
+          behind it, and a bottom-flush button was partly covered by 3-button nav. */}
+      <View style={{ paddingBottom: insets.bottom }}>
+        <Button
+          title={i18n.t("createNewThread")}
+          onPress={handleCreateThread}
+          disabled={loadingInitial || refreshing}
+        />
+      </View>
     </View>
   );
 };

@@ -3,6 +3,7 @@ import React, { useContext, useState, useEffect, useRef } from "react";
 import { Text } from "react-native";
 import { Platform } from "react-native";
 import { NavigationContainer, useNavigationContainerRef } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import "text-encoding";
@@ -148,6 +149,7 @@ function HomeTabsNavigator() {
   const { totalUnread } = useContext(ChatContext);
   const { newMemberCount } = useAdminAlerts();
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const sidebar = width >= 768 && width > height;
 
   // react-navigation hides the badge entirely when this is undefined.
@@ -191,9 +193,13 @@ function HomeTabsNavigator() {
               minWidth: 200,
             }
           : {
-              height: 90,            // Increased height for more space
-              paddingBottom: 30,     // Safe padding at the bottom
-              paddingTop: 10,        // Optional: adds spacing above icons
+              // 60dp of bar content plus the REAL bottom inset. The previous
+              // hardcoded 30dp guess left the bar half-covered by the ~48dp
+              // 3-button navigation under edge-to-edge, and oversized it on
+              // gesture-nav devices.
+              height: 60 + insets.bottom,
+              paddingBottom: insets.bottom,
+              paddingTop: 10,
               backgroundColor: "#fff", // Consistent background
               borderTopWidth: 0.5,   // Optional: subtle separator
               borderTopColor: "#ccc",

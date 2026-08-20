@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -34,6 +35,7 @@ const OPTIONS = [
 ];
 
 export default function GiftAssessmentScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { user } = useContext(UserContext);
   const { language } = useContext(LanguageContext);
@@ -223,7 +225,8 @@ export default function GiftAssessmentScreen() {
         </Animated.View>
       </View>
 
-      <View style={[styles.footer, { width: contentWidth }]}>
+      {/* Bottom inset keeps Back/Next above the system navigation bar (edge-to-edge). */}
+      <View style={[styles.footer, { width: contentWidth, paddingBottom: 14 + insets.bottom }]}>
         {currentIndex > 0 ? (
           <TouchableOpacity style={styles.previousButton} onPress={goPrevious} disabled={submitting}>
             <Ionicons name="chevron-back" size={19} color="#344054" />
