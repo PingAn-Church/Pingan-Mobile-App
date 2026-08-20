@@ -49,6 +49,9 @@ class AddAdminToGroupTest {
     @Mock private MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     @Mock private ConversationMuteRepository conversationMuteRepository;
     @Mock private OssCleanupService ossCleanupService;
+    // Group DTOs leaving ConversationService now carry the assistant's identity;
+    // the mock's empty Optional simply leaves those fields null here.
+    @Mock private AssistantAccountService assistantAccountService;
 
     @InjectMocks private ConversationService conversationService;
 

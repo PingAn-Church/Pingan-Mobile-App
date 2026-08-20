@@ -57,6 +57,9 @@ class MentionTest {
     @Mock private OssCleanupService ossCleanupService;
     @Mock private FanoutPublisher fanoutPublisher;
     @Mock private UserBlockService userBlockService;
+    // Mentions now reach the assistant-summons check; the mock's empty Optional
+    // means "no assistant account", which never summons.
+    @Mock private AssistantAccountService assistantAccountService;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
     @Spy private PushMessages pushMessages = PushMessagesFixture.real();
 
