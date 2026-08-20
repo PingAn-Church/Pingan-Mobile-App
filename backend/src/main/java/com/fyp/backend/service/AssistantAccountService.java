@@ -104,19 +104,22 @@ public class AssistantAccountService {
     }
 
     /**
-     * Reconciles the assistant flag against the rosters.
+     * Reconciles the assistant flag against the rosters, in both directions.
      *
      * Membership is the switch: adding the assistant to a group turns it on, and
-     * removing it turns it off. A group left flagged on without the assistant on
-     * its roster is therefore not a state anyone can reach through the app — but if
-     * data drifts into it (a restore, a hand-edited row), the assistant would look
-     * enabled while ChatService silently strips every mention of a non-participant,
-     * which reports nothing at all. Correcting it here makes the invariant hold
-     * rather than merely observing that it does not.
+     * removing it turns it off. Neither drifted state is reachable through the app,
+     * but data can drift into them anyway (a restore, a hand-edited row, an old
+     * build's create-group call) — and each one fails silently: flagged on without
+     * the roster, ChatService strips every mention before answering; on the roster
+     * without the flag, clients offer the assistant as a plain member while every
+     * summons is refused. Correcting both here makes the invariant hold rather
+     * than merely observing that it does not.
      *
-     * Runs last, after AppGroupChatService has reconciled the app-level roster —
-     * the assistant is chat-eligible, so it is always a participant there and this
-     * never fires for the church-wide group.
+     * The app-level group is exempt from the roster-implies-flag direction: its
+     * roster is derived (the assistant, being chat-eligible, is always on it), so
+     * there the flag is a real switch and OFF is a legitimate state.
+     *
+     * Runs last, after AppGroupChatService has reconciled the app-level roster.
      */
     @EventListener(ApplicationReadyEvent.class)
     @Order(Ordered.LOWEST_PRECEDENCE)
@@ -134,6 +137,15 @@ public class AssistantAccountService {
                         + "have it as a participant; switching it off. Add the assistant to "
                         + "the group's members to turn it back on.", group.getId());
                 group.setAssistantEnabled(false);
+                groupConversationRepository.save(group);
+            }
+        }
+        for (GroupConversation group : groupConversationRepository.findByParticipantId(assistantId)) {
+            if (!group.isAppLevel() && !group.isAssistantEnabled()) {
+                log.warn("Group {} has the assistant on its participant list but was not "
+                        + "flagged as enabled; switching it on - membership is the switch.",
+                        group.getId());
+                group.setAssistantEnabled(true);
                 groupConversationRepository.save(group);
             }
         }

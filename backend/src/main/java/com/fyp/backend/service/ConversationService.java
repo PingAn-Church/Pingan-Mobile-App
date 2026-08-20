@@ -371,6 +371,13 @@ public class ConversationService {
         }
 
         groupConversation.setParticipants(participants);
+        // Membership is the assistant's switch (see addParticipantToGroup). A group
+        // born with the assistant on its roster must start switched on, or it lands
+        // in the one state the feature cannot survive: on the roster but flagged
+        // off, where every summons is refused without a trace.
+        if (participants.stream().anyMatch(User::isBot)) {
+            groupConversation.setAssistantEnabled(true);
+        }
         groupConversation.setCreatedAt(now());
         groupConversation.setUpdatedAt(now());
 
@@ -381,14 +388,14 @@ public class ConversationService {
         groupConversationRepository.save(groupConversation);
 
 
-        ConversationDto response = new ConversationDto(groupConversation);
+        ConversationDto response = withAssistantIdentity(new ConversationDto(groupConversation));
 
         // ✅ DEFER NOTIFICATIONS
         GroupConversation finalGroupConversation = groupConversation;
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                ConversationDto dto = new ConversationDto(finalGroupConversation);
+                ConversationDto dto = withAssistantIdentity(new ConversationDto(finalGroupConversation));
                 for (User user : finalGroupConversation.getParticipants()) {
                     messagingTemplate.convertAndSendToUser(
                             user.getId().toString(),
@@ -494,7 +501,7 @@ public class ConversationService {
         conversationReadStateService.markCaughtUp(conversationId, userId);
 
         // ✅ Prepare updated DTO
-        ConversationDto updatedConversation = new ConversationDto(groupConversation);
+        ConversationDto updatedConversation = withAssistantIdentity(new ConversationDto(groupConversation));
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -558,7 +565,7 @@ public class ConversationService {
         conversationReadStateService.forget(conversationId, userId);
 
         // ✅ Build and notify
-        ConversationDto updatedConversation = new ConversationDto(groupConversation);
+        ConversationDto updatedConversation = withAssistantIdentity(new ConversationDto(groupConversation));
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -640,7 +647,7 @@ public class ConversationService {
 
         // Case 2: Others still in the group — update and notify
         groupConversationRepository.save(groupConversation);
-        ConversationDto updatedConversation = new ConversationDto(groupConversation);
+        ConversationDto updatedConversation = withAssistantIdentity(new ConversationDto(groupConversation));
 
         // Defer notifications
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -700,7 +707,7 @@ public class ConversationService {
         groupConversationRepository.save(groupConversation);
 
         // Prepare the updated conversation for response
-        ConversationDto updatedConversation = new ConversationDto(groupConversation);
+        ConversationDto updatedConversation = withAssistantIdentity(new ConversationDto(groupConversation));
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -755,7 +762,7 @@ public class ConversationService {
         groupConversationRepository.save(groupConversation);
 
         // 🛠️ Step 5: Prepare updated DTO
-        ConversationDto updatedConversation = new ConversationDto(groupConversation);
+        ConversationDto updatedConversation = withAssistantIdentity(new ConversationDto(groupConversation));
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -793,7 +800,7 @@ public class ConversationService {
             ossCleanupService.deleteAfterCommit(oldIcon);
         }
 
-        ConversationDto updated = new ConversationDto(groupConversation);
+        ConversationDto updated = withAssistantIdentity(new ConversationDto(groupConversation));
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override

@@ -7,6 +7,8 @@ import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.*;
 import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,12 +23,15 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class ChatService {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private final MessageRepository messageRepository;
     private final GroupConversationRepository groupConversationRepository;
@@ -312,21 +317,76 @@ public class ChatService {
     /**
      * Whether this message asks the assistant to answer.
      *
+     * The primary signal is an id comparison against the mentions the sender
+     * requested. The fallback is the text itself: a client holding a stale copy of
+     * the conversation (group-update broadcasts and mid-session merges can leave
+     * the assistant's identity fields behind) offers no assistant entry in its @
+     * picker, so people type "@平安小助手" or "@ShalomBot" out by hand and the message
+     * arrives with no mention id bound. A summons typed in good faith must not die
+     * over which of the two the client managed.
+     *
      * Deliberately NOT triggered by @all: an admin broadcasting to the whole church
      * is addressing people, not summoning a bot. Also never triggered by the
      * assistant's own messages — sanitiseMentions already strips self-mentions, but
      * this survives that rule changing.
+     *
+     * A recognised summons that is refused (assistant switched off, or flagged on
+     * without being a participant) is logged: a mentioned-but-silent assistant used
+     * to leave no trace at all, which made "the bot did not answer" undiagnosable.
      */
-    private boolean summonsAssistant(Message message, Conversation conversation, User sender) {
+    private boolean summonsAssistant(Message message, Conversation conversation, User sender,
+                                     Set<Long> requestedMentions) {
         if (sender.isBot() || Boolean.TRUE.equals(message.getMentionsEveryone())) {
             return false;
         }
-        if (!(conversation instanceof GroupConversation group) || !group.isAssistantEnabled()) {
+        if (!(conversation instanceof GroupConversation group)) {
             return false;
         }
-        Set<Long> mentioned = message.getMentionedUserIds();
-        return mentioned != null
-                && assistantAccountService.assistantUserId().map(mentioned::contains).orElse(false);
+        // Almost no message mentions anyone; skip the account lookup for those.
+        String content = message.getContent();
+        if (requestedMentions.isEmpty() && (content == null || content.indexOf('@') < 0)) {
+            return false;
+        }
+
+        User assistant = assistantAccountService.findAssistant().orElse(null);
+        if (assistant == null) {
+            return false;
+        }
+        boolean summoned = requestedMentions.contains(assistant.getId())
+                || mentionsAssistantByName(content, assistant);
+        if (!summoned) {
+            return false;
+        }
+
+        if (!group.isAssistantEnabled()) {
+            log.info("Message {} in group {} mentions the assistant, but the assistant is "
+                    + "switched off there; not answering.", message.getId(), group.getId());
+            return false;
+        }
+        if (!groupConversationRepository.isParticipant(group.getId(), assistant.getId())) {
+            log.warn("Group {} has the assistant enabled but not on its participant list; "
+                    + "ignoring a mention of it. The boot-time reconcile will switch the "
+                    + "flag off unless the assistant is re-added.", group.getId());
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * A typed-out summons: the text names the assistant in either language. The
+     * names come off the assistant's own row, so a rename keeps this in step.
+     */
+    private boolean mentionsAssistantByName(String content, User assistant) {
+        if (content == null || content.indexOf('@') < 0) {
+            return false;
+        }
+        String en = assistant.getFirstName();
+        if (en != null && !en.isBlank() && content.toLowerCase(Locale.ROOT)
+                .contains("@" + en.toLowerCase(Locale.ROOT))) {
+            return true;
+        }
+        String zh = assistant.getDisplayNameZh();
+        return zh != null && !zh.isBlank() && content.contains("@" + zh);
     }
 
     /**
@@ -427,6 +487,12 @@ public class ChatService {
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         Message message = new Message(messageDto, conversation, sender, timestamp.toString());
+        // What the sender asked for, kept from before sanitiseMentions trims it: the
+        // assistant summons check reads this so a stripped assistant mention can be
+        // recognised and logged instead of vanishing without a trace.
+        Set<Long> requestedMentions = message.getMentionedUserIds() == null
+                ? Set.of()
+                : new HashSet<>(message.getMentionedUserIds());
         sanitiseMentions(message, conversation, sender, conversationType);
         message = messageRepository.save(message);
 
@@ -452,13 +518,9 @@ public class ChatService {
         LocalizedText mentionedBody = language -> pushMessages.get(
                 language, "push.chat.mentionedYou", senderName.render(language));
 
-        // Whether this message summons the assistant.
-        //
-        // The check is an id comparison against the mentions the server just
-        // validated, not a search of the text: names contain spaces, the assistant
-        // has one in each language, and either could be renamed. @all is excluded
-        // on purpose — an admin addressing the whole church is not asking a bot.
-        boolean assistantSummoned = summonsAssistant(message, conversation, sender);
+        // Whether this message summons the assistant — see summonsAssistant for the
+        // id-first, text-fallback rules and why refusals are logged.
+        boolean assistantSummoned = summonsAssistant(message, conversation, sender, requestedMentions);
         Long triggerMessageId = message.getId();
 
         // Defer messaging and bounded push batches until the message row commits.
