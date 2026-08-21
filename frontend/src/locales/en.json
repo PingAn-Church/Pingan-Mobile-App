@@ -281,6 +281,8 @@
   "cantLoadChat": "Couldn't load updated chats",
   "noMsg": "No messages",
   "chatPreviewYou": "You",
+  "chatPreviewPhoto": "🖼️ Photo",
+  "chatPreviewVoice": "🎤 Voice",
   "searchConversations": "Search Conversations",
   "chat": "Go to Chat",
   "threads": "Go To Threads",

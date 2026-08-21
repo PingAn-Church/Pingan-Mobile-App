@@ -260,9 +260,9 @@ const ChatHomePage = () => {
     // ✅ Replace non-text content previews with user-friendly labels
     const messageType = String(lastMessage.type || "").toLowerCase();
     if (messageType === "image") {
-      lastMessage.previewContent = "🖼️ Photo";
+      lastMessage.previewContent = i18n.t("chatPreviewPhoto");
     } else if (messageType === "voice") {
-      lastMessage.previewContent = "🎤 Voice message";
+      lastMessage.previewContent = i18n.t("chatPreviewVoice");
     } else {
       lastMessage.previewContent = lastMessage.content;
     }
