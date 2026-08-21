@@ -42,6 +42,38 @@ public class AssistantProperties {
     private int maxContextMessages = 10;
 
     /**
+     * Whether photos in the context are shown to the model.
+     *
+     * Sent inline as base64 data URLs, fetched from OSS by the server: the model
+     * never sees a storage URL and the bucket never has to be reachable from the
+     * provider. Switch off for a model without image input — each photo then
+     * becomes a "[photo]" placeholder, as before.
+     */
+    private boolean imageInput = true;
+
+    /**
+     * How many photos one request may carry, newest first; older ones in the
+     * window stay placeholders. Every inlined photo is paid for in input tokens
+     * and request size, and a ten-message window in a lively group can be all
+     * photos.
+     */
+    private int maxImagesPerRequest = 4;
+
+    /**
+     * Largest photo that is inlined, in bytes as stored. Larger ones stay
+     * placeholders: base64 adds a third, and providers cap the request body.
+     */
+    private long maxImageBytes = 5L * 1024 * 1024;
+
+    /**
+     * The provider's {@code detail} hint for photos: {@code auto}, {@code low}
+     * or {@code high}. {@code low} is a fixed, cheap token cost per image but a
+     * 512px downscale that cannot read a poster; {@code auto} lets the provider
+     * choose. Omitted from the request on {@code auto}.
+     */
+    private String imageDetail = "auto";
+
+    /**
      * The output budget.
      *
      * Generous because on a reasoning model this covers the model's invisible

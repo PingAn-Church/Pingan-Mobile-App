@@ -713,8 +713,16 @@ Log the model name and latency; never the key, never the full request body.
   church-wide group.
 - **Skip `reported == true` messages entirely.** They are hidden from most viewers pending
   moderation; feeding them to the model launders them back into visibility through the reply.
-- Replace image/voice bodies with `[photo]` / `[voice message]`. Sending OSS object paths
-  is useless to the model and leaks storage layout.
+- Replace voice bodies with `[voice message]`. Sending OSS object paths is useless to the
+  model and leaks storage layout.
+- Photos are shown to the model (shipped 2026-08-21): the server fetches the object from
+  OSS and inlines it as a base64 `data:` URL next to a `[photo]` text part, so the provider
+  receives pixels and a media type and never a storage URL. Only objects under the
+  conversation's own `conversations/<id>/` folder are read; the newest
+  `assistant.max-images-per-request` photos in the window are attached (one photo message
+  is one picture), anything over that or over `assistant.max-image-bytes`, reported, or
+  unfetchable stays a bare `[photo]`. `assistant.image-input=false` restores placeholders
+  for a model without vision. The prompt forbids identifying or describing people.
 - Never send emails or user ids.
 
 ### Opt-in
@@ -982,7 +990,7 @@ Nothing is user-visible until 5 and 6.
 - Per-reader language rendering of scripture — §4.
 - Native deep links for `[event:42]` substitutions — plain text until a scheme exists.
 - Translations beyond KJV and CUV-simplified.
-- Voice or image input.
+- Voice input. (Image input shipped 2026-08-21 — see §8 Privacy.)
 
 ---
 
