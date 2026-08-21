@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -45,8 +46,10 @@ class AssistantServiceTest {
     private static final long TRIGGER = 900L;
     private static final long ASKER = 3L;
 
+    private AssistantProperties properties;
     private AssistantClient client;
     private AssistantReplyRenderer renderer;
+    private AssistantImageLoader images;
     private AssistantThrottle throttle;
     private AssistantAccountService accounts;
     private ChatService chatService;
@@ -74,10 +77,20 @@ class AssistantServiceTest {
         return message;
     }
 
+    /** A photo message: the stored content is the upload's URL, as the app sends it. */
+    private static Message photo(long id, User sender) {
+        Message message = message(id, sender, "https://bucket.example/conversations/" + CONVERSATION
+                + "/" + id + ".jpg");
+        message.setType("image");
+        return message;
+    }
+
     @BeforeEach
     void setUp() {
+        properties = new AssistantProperties();
         client = mock(AssistantClient.class);
         renderer = mock(AssistantReplyRenderer.class);
+        images = mock(AssistantImageLoader.class);
         throttle = mock(AssistantThrottle.class);
         accounts = mock(AssistantAccountService.class);
         chatService = mock(ChatService.class);
@@ -85,13 +98,16 @@ class AssistantServiceTest {
         groups = mock(GroupConversationRepository.class);
         userRepository = mock(UserRepository.class);
 
-        assistant = new AssistantService(new AssistantProperties(), client,
-                mock(AssistantToolRegistry.class), renderer, throttle, accounts, chatService,
+        assistant = new AssistantService(properties, client,
+                mock(AssistantToolRegistry.class), renderer, images, throttle, accounts, chatService,
                 messageRepository, groups, userRepository);
 
         GroupConversation group = new GroupConversation();
         group.setId(CONVERSATION);
         group.setAssistantEnabled(true);
+
+        // No photo is loadable unless a test says so; the placeholder path is the default.
+        when(images.dataUrl(any())).thenReturn(Optional.empty());
 
         when(client.isAvailable()).thenReturn(true);
         when(throttle.alreadyAnswered(anyLong())).thenReturn(false);
@@ -213,6 +229,121 @@ class AssistantServiceTest {
         assertAll(
                 () -> assertEquals(TRIGGER, before.getValue()),
                 () -> assertTrue(page.getValue().getPageSize() > 0));
+    }
+
+    /** The messages handed to the provider on the last completion call. */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> sentConversation() {
+        ArgumentCaptor<List<Map<String, Object>>> sent = ArgumentCaptor.forClass(List.class);
+        verify(client).complete(sent.capture(), any());
+        return sent.getValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String imageUrlOf(Map<String, Object> turn) {
+        Object content = turn.get("content");
+        if (!(content instanceof List<?> parts)) {
+            return null;
+        }
+        for (Object part : parts) {
+            Map<String, Object> typed = (Map<String, Object>) part;
+            if ("image_url".equals(typed.get("type"))) {
+                return (String) ((Map<String, Object>) typed.get("image_url")).get("url");
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A photo reaches the model as pixels next to its placeholder, never as the
+     * storage URL that is what the row actually holds.
+     */
+    @Test
+    void aPhotoInTheContextIsAttachedInlineAndItsStorageUrlIsNot() {
+        Message picture = photo(890L, user(ASKER, false));
+        when(messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(anyLong(), anyLong(), any()))
+                .thenReturn(List.of(picture));
+        when(images.dataUrl(picture)).thenReturn(Optional.of("data:image/jpeg;base64,AAAA"));
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        List<Map<String, Object>> sent = sentConversation();
+        Map<String, Object> photoTurn = sent.get(1); // after the system prompt
+        assertAll(
+                () -> assertEquals("user", photoTurn.get("role")),
+                () -> assertEquals("data:image/jpeg;base64,AAAA", imageUrlOf(photoTurn)),
+                () -> assertTrue(sent.toString().contains("[photo]")),
+                () -> assertTrue(!sent.toString().contains("bucket.example"), "storage URL leaked"));
+    }
+
+    /**
+     * Several photos are several turns, each with its own picture — and the cap
+     * keeps the ones nearest the question, dropping the oldest to placeholders.
+     */
+    @Test
+    void aRunOfPhotosIsCappedNewestFirst() {
+        properties.setMaxImagesPerRequest(2);
+        Message oldest = photo(801L, user(ASKER, false));
+        Message middle = photo(802L, user(ASKER, false));
+        Message newest = photo(803L, user(ASKER, false));
+        // Repository order is newest first, as the query name says.
+        when(messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(anyLong(), anyLong(), any()))
+                .thenReturn(List.of(newest, middle, oldest));
+        when(images.dataUrl(any())).thenAnswer(call ->
+                Optional.of("data:image/jpeg;base64," + ((Message) call.getArgument(0)).getId()));
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        List<Map<String, Object>> sent = sentConversation();
+        assertAll(
+                () -> assertEquals(null, imageUrlOf(sent.get(1)), "oldest should be a bare placeholder"),
+                () -> assertEquals("[photo]", sent.get(1).get("content")),
+                () -> assertEquals("data:image/jpeg;base64,802", imageUrlOf(sent.get(2))),
+                () -> assertEquals("data:image/jpeg;base64,803", imageUrlOf(sent.get(3))));
+        verify(images, never()).dataUrl(oldest);
+    }
+
+    /** Switched off — for a model without vision — nothing is fetched at all. */
+    @Test
+    void withImageInputOffPhotosStayPlaceholders() {
+        properties.setImageInput(false);
+        Message picture = photo(890L, user(ASKER, false));
+        when(messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(anyLong(), anyLong(), any()))
+                .thenReturn(List.of(picture));
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        assertEquals("[photo]", sentConversation().get(1).get("content"));
+        verify(images, never()).dataUrl(any());
+    }
+
+    /** A photo that cannot be loaded must not cost the group its answer. */
+    @Test
+    void anUnloadablePhotoFallsBackToThePlaceholder() {
+        Message picture = photo(890L, user(ASKER, false));
+        when(messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(anyLong(), anyLong(), any()))
+                .thenReturn(List.of(picture));
+        when(images.dataUrl(picture)).thenReturn(Optional.empty());
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        assertEquals("[photo]", sentConversation().get(1).get("content"));
+        verify(chatService).sendAssistantReply(eq(CONVERSATION), eq(TRIGGER), eq(ASKER), any(),
+                eq("Some answer."));
+    }
+
+    /** Reported photos are hidden pending moderation; the model must not see them either. */
+    @Test
+    void aReportedPhotoIsNeitherFetchedNorMentioned() {
+        Message picture = photo(890L, user(ASKER, false));
+        picture.setReported(true);
+        when(messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(anyLong(), anyLong(), any()))
+                .thenReturn(List.of(picture));
+
+        assistant.answer(CONVERSATION, TRIGGER, ASKER);
+
+        verify(images, never()).dataUrl(any());
+        assertEquals(2, sentConversation().size()); // system prompt + the question
     }
 
     @Test

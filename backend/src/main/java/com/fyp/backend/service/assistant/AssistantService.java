@@ -79,6 +79,13 @@ public class AssistantService {
             - Where believers in good faith hold differing views, say so plainly rather than
               presenting one as settled.
 
+            Photos:
+            - Photos shared in the chat are attached to their turns; "[photo]" marks one that
+              could not be attached. You may describe a photo or answer questions about it.
+            - Never identify, name, or guess at who a person in a photo is, and do not
+              describe people's faces, bodies, or appearance. Talk about the event, the
+              place, the text, the objects.
+
             Boundaries:
             - For grief, crisis, mental health, abuse, or anything pastoral, respond briefly with
               care and direct the person to a pastor or church leader. Do not counsel.
@@ -96,6 +103,7 @@ public class AssistantService {
     private final AssistantClient client;
     private final AssistantToolRegistry tools;
     private final AssistantReplyRenderer renderer;
+    private final AssistantImageLoader images;
     private final AssistantThrottle throttle;
     private final AssistantAccountService assistantAccountService;
     private final ChatService chatService;
@@ -273,6 +281,11 @@ public class AssistantService {
      * receives who-said-what from a church-wide conversation. Reported messages are
      * left out entirely: they are hidden from most members pending moderation, and
      * feeding them to the model would launder them back into view through the reply.
+     *
+     * Photos travel with their turns, newest first up to the configured cap; each
+     * photo message in the app is exactly one picture, so a burst of photos is a
+     * run of turns and the cap bounds the request. Beyond it, and whenever a photo
+     * cannot be fetched, the turn keeps the "[photo]" placeholder.
      */
     private List<Map<String, Object>> context(Message trigger, Long conversationId) {
         List<Message> earlier = messageRepository.findByConversationIdAndIdLessThanOrderByIdDesc(
@@ -281,6 +294,18 @@ public class AssistantService {
         List<Message> ordered = new ArrayList<>(earlier);
         Collections.reverse(ordered);
         ordered.add(trigger);
+
+        // Decided newest-first so the cap keeps the photos closest to the question,
+        // then emitted oldest-first like every other turn.
+        Map<Long, String> attached = new LinkedHashMap<>();
+        if (properties.isImageInput()) {
+            for (int i = ordered.size() - 1; i >= 0 && attached.size() < properties.getMaxImagesPerRequest(); i--) {
+                Message message = ordered.get(i);
+                if (isPhoto(message) && !Boolean.TRUE.equals(message.getReported())) {
+                    images.dataUrl(message).ifPresent(url -> attached.put(message.getId(), url));
+                }
+            }
+        }
 
         List<Map<String, Object>> turns = new ArrayList<>();
         for (Message message : ordered) {
@@ -292,14 +317,21 @@ public class AssistantService {
                 continue;
             }
             boolean fromAssistant = message.getSender() != null && message.getSender().isBot();
-            turns.add(message(fromAssistant ? "assistant" : "user", body));
+            String role = fromAssistant ? "assistant" : "user";
+            String photo = attached.get(message.getId());
+            turns.add(photo == null ? message(role, body) : messageWithPhoto(role, body, photo));
         }
         return turns;
     }
 
+    private static boolean isPhoto(Message message) {
+        return message.getType() != null && "image".equalsIgnoreCase(message.getType());
+    }
+
     /**
      * Media becomes a placeholder. The stored value is an OSS object path, which
-     * means nothing to a model and would leak the storage layout.
+     * means nothing to a model and would leak the storage layout; a photo that is
+     * shown to the model is attached alongside this text, never in place of it.
      */
     private static String readable(Message message) {
         String type = message.getType() == null ? "text" : message.getType().toLowerCase(Locale.ROOT);
@@ -314,6 +346,32 @@ public class AssistantService {
         Map<String, Object> turn = new LinkedHashMap<>();
         turn.put("role", role);
         turn.put("content", content);
+        return turn;
+    }
+
+    /**
+     * A turn in the provider's multi-part form: the text, then the picture as an
+     * inline {@code data:} URL. This is the chat-completions vision shape that
+     * OpenAI and the compatible providers share.
+     */
+    private Map<String, Object> messageWithPhoto(String role, String text, String dataUrl) {
+        Map<String, Object> textPart = new LinkedHashMap<>();
+        textPart.put("type", "text");
+        textPart.put("text", text);
+
+        Map<String, Object> image = new LinkedHashMap<>();
+        image.put("url", dataUrl);
+        String detail = properties.getImageDetail();
+        if (detail != null && !detail.isBlank() && !"auto".equalsIgnoreCase(detail)) {
+            image.put("detail", detail.trim().toLowerCase(Locale.ROOT));
+        }
+        Map<String, Object> imagePart = new LinkedHashMap<>();
+        imagePart.put("type", "image_url");
+        imagePart.put("image_url", image);
+
+        Map<String, Object> turn = new LinkedHashMap<>();
+        turn.put("role", role);
+        turn.put("content", List.of(textPart, imagePart));
         return turn;
     }
 

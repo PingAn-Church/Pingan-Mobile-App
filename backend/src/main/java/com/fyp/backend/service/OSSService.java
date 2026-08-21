@@ -251,6 +251,30 @@ public class OSSService {
     }
 
     /**
+     * The object key behind a stored media reference, or null if it is not ours.
+     *
+     * Clients store the full public URL of an upload; older rows and a few server
+     * paths hold the bare key. Both forms resolve here, and anything outside the
+     * managed folders — an external link, a malformed value — resolves to null so
+     * that no caller ever reads or deletes an object this app does not own.
+     */
+    public static String managedObjectKey(String urlOrKey) {
+        if (urlOrKey == null || urlOrKey.isBlank()) {
+            return null;
+        }
+        String objectKey;
+        try {
+            objectKey = new java.net.URL(urlOrKey).getPath();
+        } catch (Exception e) {
+            objectKey = urlOrKey; // Maybe already a raw object key.
+        }
+        if (objectKey.startsWith("/")) {
+            objectKey = objectKey.substring(1);
+        }
+        return isManagedKey(objectKey) ? objectKey : null;
+    }
+
+    /**
      * Best-effort delete of an OSS object given its stored public URL. No-op for blank
      * input or URLs that don't point at one of our managed folders, and never throws —
      * callers use this for cleanup that must not fail the surrounding operation.
@@ -259,17 +283,8 @@ public class OSSService {
         if (url == null || url.isBlank()) {
             return;
         }
-        String objectKey;
-        try {
-            objectKey = new java.net.URL(url).getPath();
-        } catch (Exception e) {
-            objectKey = url; // Maybe already a raw object key.
-        }
-        if (objectKey.startsWith("/")) {
-            objectKey = objectKey.substring(1);
-        }
-        final String key = objectKey;
-        if (MANAGED_PREFIXES.stream().noneMatch(key::startsWith)) {
+        String key = managedObjectKey(url);
+        if (key == null) {
             logger.info("Skipping delete for unmanaged or external media location.");
             return;
         }
