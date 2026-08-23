@@ -20,7 +20,7 @@ public class JwtUtil {
     // the ERROR below whenever it is in use. Rotating the secret invalidates all
     // outstanding tokens. MediaTokenService shares this constant as its own last
     // fallback; keep the two in lockstep.
-    public static final String DEV_DEFAULT_SECRET = "KxuYGk9vMEwse2p0NFhvNzlRc3ZTcE1PeXNBMjRTdFE=";
+    public static final String DEV_DEFAULT_SECRET = "KxuYGk9vMEwse2p0NFhvNzlRc3ZTcE1PeXNBMjRTdFE="; // gitleaks:allow
 
     // Signing key. Override via the JWT_SECRET env var (base64-encoded, 256-bit).
     private final byte[] SECRET_KEY;

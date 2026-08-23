@@ -13,6 +13,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Credentials reached this repo once already. Two checks guard the tree: one
+  # for credential files, one for secret-shaped strings anywhere else.
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@v4
+
+      # .gitignore is not honoured for a file git already tracks, so a credential
+      # committed once stays committed and every ignore rule added afterwards is
+      # silently inert — which is exactly how backend/.env survived for the life
+      # of the repo. Tracking is the thing to assert on, not the ignore file.
+      - name: No credential file may be tracked
+        run: |
+          tracked=$(git ls-files \
+            | grep -E '(^|/)\.env$|(^|/)\.env\.[^/]*$|(^|/)env\.properties$|(^|/)secrets/' \
+            | grep -vE '\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Credential files are tracked by git:"
+            echo "$tracked"
+            echo "Untrack with 'git rm --cached <file>', then rotate the credential:"
+            echo "removing it from the tip does not remove it from history."
+            exit 1
+          fi
+          echo "No credential files tracked."
+
+      # Installed from the release tarball rather than the marketplace action,
+      # which asks organisations for a licence key.
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # The checkout only, not the history: the credentials already in past
+      # commits were rotated rather than rewritten, so scanning every commit
+      # would fail on every run and this job would end up switched off.
+      # --redact keeps anything it finds out of the public build log.
+      - name: Scan the tree for secrets
+        run: gitleaks dir . --no-banner --redact --config .gitleaks.toml
+
   backend-test:
     name: Backend tests
     runs-on: ubuntu-latest

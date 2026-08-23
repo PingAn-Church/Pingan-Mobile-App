@@ -1,0 +1,29 @@
+# Gitleaks configuration — used by the "Secret scan" job in .github/workflows/ci.yml.
+#
+# The job scans the checked-out tree, not git history. History still contains
+# credentials that were rotated rather than rewritten, so scanning every commit
+# would fail on every run and the job would end up switched off. What this guards
+# is the thing that actually went wrong: a live credential sitting in the tree.
+#
+# Everything below is an exception that is published on purpose. Do not add an
+# entry here to silence a finding you have not understood — rotate the credential
+# and take it out of the tree instead.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Client-side Firebase configuration. It ships inside the Android app, so it is
+public by construction — an app identifier, not an admin credential. The Firebase
+*admin* keys live in frontend/secrets/ and are gitignored. See README.
+"""
+paths = ['''frontend/android/app/google-services\.json''']
+
+[[allowlists]]
+description = """
+App Store Connect issuer id in eas.json. It names which key to use; it is not the
+key. The key file itself lives in frontend/secrets/ and is gitignored.
+"""
+regexTarget = "line"
+regexes = ['''ascApiKeyIssuerId''']
