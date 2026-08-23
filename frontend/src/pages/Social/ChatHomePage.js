@@ -237,29 +237,32 @@ const ChatHomePage = () => {
     // state and must not be mutated during render.
     const lastMessage = { ...source };
 
-    if (conversation.conversationType === "private") {
-      const otherParticipantIndex = conversation.participants.findIndex(
-        (id) => String(id) !== String(user.id)
-      );
-      lastMessage.senderFullName =
-        String(lastMessage.senderId) === String(user.id)
-          ? "You"
-          : conversation.participantNames[otherParticipantIndex] || "Unknown";
-    }
-
+    // Only a group preview names its sender: a private chat has exactly one
+    // other person, and the row title already says who that is. Names follow
+    // the same rules as the bubbles in ChatPage — formatName orders them for
+    // the reader's language, and the assistant is called by its Chinese name
+    // to Chinese readers.
     if (conversation.conversationType === "group") {
-      lastMessage.senderFullName =
-        String(lastMessage.senderId) === String(user.id)
-          ? "You"
-          : `${lastMessage.senderFirstName} ${lastMessage.senderLastName}`;
+      if (String(lastMessage.senderId) === String(user.id)) {
+        lastMessage.senderFullName = i18n.t("chatPreviewYou");
+      } else if (lastMessage.senderBot) {
+        lastMessage.senderFullName =
+          (String(language || "").startsWith("zh") && lastMessage.senderDisplayNameZh) ||
+          lastMessage.senderFirstName ||
+          i18n.t("unknownUser");
+      } else {
+        lastMessage.senderFullName =
+          formatName(lastMessage.senderFirstName, lastMessage.senderLastName, language) ||
+          i18n.t("unknownUser");
+      }
     }
 
     // ✅ Replace non-text content previews with user-friendly labels
     const messageType = String(lastMessage.type || "").toLowerCase();
     if (messageType === "image") {
-      lastMessage.previewContent = "🖼️ Photo";
+      lastMessage.previewContent = i18n.t("chatPreviewPhoto");
     } else if (messageType === "voice") {
-      lastMessage.previewContent = "🎤 Voice message";
+      lastMessage.previewContent = i18n.t("chatPreviewVoice");
     } else {
       lastMessage.previewContent = lastMessage.content;
     }
@@ -434,9 +437,11 @@ const ChatHomePage = () => {
             {item.mentioned && <Text style={styles.mentionMarker}>[@] </Text>}
             {lastMessage ? (
               <>
-                <Text style={styles.participantName}>
-                  {lastMessage.senderFullName}:{" "}
-                </Text>
+                {!!lastMessage.senderFullName && (
+                  <Text style={styles.participantName}>
+                    {lastMessage.senderFullName}:{" "}
+                  </Text>
+                )}
                 {lastMessage.previewContent}{" "}
                 {/* <Text style={styles.deliveryStatus}>({lastMessage.deliveryStatusIcon})</Text> */}
                 {String(lastMessage.senderId) === String(user.id) &&

@@ -292,11 +292,11 @@ const getConversationPreview = (conversation, currentUserId) => {
   const messageType = String(lastMessage?.type || "text").toLowerCase();
   let content = String(lastMessage?.content || "");
 
-  if (messageType === "image") content = "🖼️ Photo";
-  if (messageType === "voice") content = "🎤 Voice message";
+  if (messageType === "image") content = i18n.t("chatPreviewPhoto");
+  if (messageType === "voice") content = i18n.t("chatPreviewVoice");
 
   const isMine = String(lastMessage?.senderId) === String(currentUserId);
-  return isMine ? `You: ${content}` : content;
+  return isMine ? `${i18n.t("chatPreviewYou")}: ${content}` : content;
 };
 
 const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
