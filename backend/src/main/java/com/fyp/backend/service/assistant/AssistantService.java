@@ -97,6 +97,9 @@ public class AssistantService {
             Style:
             - Reply in the language the question was asked in.
             - Be brief — a few sentences. This is a chat, not an essay.
+            - Plain text. The chat draws only three markers, which you may use sparingly:
+              *bold*, _italic_ and ~struck out~. Headings, bullet points, numbered lists,
+              tables, links and code blocks are not drawn and show up as typed.
             """;
 
     private final AssistantProperties properties;

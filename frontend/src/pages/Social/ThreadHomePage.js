@@ -79,6 +79,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { setThreadSubscription } from "../../service/ThreadService";
 import { parseServerDate } from "../../utils/serverDate";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { stripInlineMarkup } from "../../utils/inlineMarkup";
+
+// List rows open with the start of the post as plain text: markers off, then cut.
+const previewOf = (content) => {
+  const plain = stripInlineMarkup(content);
+  return plain.length > 80 ? plain.slice(0, 80) + "..." : plain;
+};
 
 // Helper to format a server timestamp to a readable local time. parseServerDate
 // applies the server-UTC rule (zone-less LocalDateTime strings would otherwise
@@ -277,9 +284,7 @@ const ThreadHomePage = () => {
           >
             <Text style={styles.threadTitle}>{item.title}</Text>
             <Text style={styles.threadContent}>
-              {item.content.length > 80
-                ? item.content.slice(0, 80) + "..."
-                : item.content}
+              {previewOf(item.content)}
             </Text>
             <View style={styles.metaRow}>
               <Text style={styles.threadMeta}>
@@ -334,9 +339,7 @@ const ThreadHomePage = () => {
                     )}
                     <Text style={styles.threadTitle}>{item.title}</Text>
                     <Text style={styles.threadContent}>
-                      {item.content.length > 80
-                        ? item.content.slice(0, 80) + "..."
-                        : item.content}
+                      {previewOf(item.content)}
                     </Text>
                   </>
                 )}

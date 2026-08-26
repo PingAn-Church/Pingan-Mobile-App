@@ -232,6 +232,7 @@ import {
   uploadThreadImage,
 } from "../../utils/threadMedia";
 import { parseServerDate } from "../../utils/serverDate";
+import RichText from "../../components/RichText";
 
 // parseServerDate, not bare new Date(): thread timestamps are zone-less
 // LocalDateTime strings in server UTC — a bare parse read them as device-local
@@ -660,7 +661,7 @@ const ThreadDetailPage = ({ route }) => {
                 )}
 
                 {!threadShadowHidden && (
-                  <Text style={styles.threadContent}>{thread.content}</Text>
+                  <RichText style={styles.threadContent}>{thread.content}</RichText>
                 )}
 
                 <View
@@ -768,7 +769,7 @@ const ThreadDetailPage = ({ route }) => {
               </>
             ) : (
               <>
-                {!!item.content && <Text style={styles.replyText}>{item.content}</Text>}
+                {!!item.content && <RichText style={styles.replyText}>{item.content}</RichText>}
                 {!!item.imageUrl && (
                   <CachedImage
                     uri={item.imageUrl}

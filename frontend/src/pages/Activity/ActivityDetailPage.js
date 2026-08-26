@@ -18,6 +18,7 @@ import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import RichText from "../../components/RichText";
 
 export default function ActivityDetailPage() {
   const route = useRoute();
@@ -171,7 +172,7 @@ export default function ActivityDetailPage() {
 
       <View style={styles.infoContainer}>
         <FontAwesome name="info-circle" size={30} color="#007AFF" />
-        <Text style={styles.description}>{event.description}</Text>
+        <RichText style={styles.description}>{event.description}</RichText>
       </View>
 
       <View style={styles.infoContainer}>

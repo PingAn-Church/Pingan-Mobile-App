@@ -30,6 +30,8 @@ import defaultProfileImage from "../../../assets/user.png";
 // The assistant has no stored avatar; it wears the app's own icon.
 import appIcon from "../../../assets/icon.png";
 import CachedImage from "../../components/CachedImage";
+import { spanStyle } from "../../components/RichText";
+import { parseInlineMarkup, stripInlineMarkup } from "../../utils/inlineMarkup";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -548,7 +550,8 @@ export default function ChatPage({ route }) {
     if (messageType !== "text") return;
 
     const messageIdKey = String(message?.messageId || "");
-    const sourceContent = String(message?.content || "").trim();
+    // Markers would only confuse the translator; the translation shows plain.
+    const sourceContent = stripInlineMarkup(message?.content).trim();
     if (!messageIdKey || !sourceContent) return;
 
     const targetLang = resolveTargetTranslationLanguage(sourceContent, language);
@@ -2630,18 +2633,27 @@ export default function ChatPage({ route }) {
                       isMe ? styles.contentSent : styles.contentReceived,
                     ]}
                   >
-                    {splitOnMentions(item.content, mentionLabelsFor(item)).map((part, partIndex) =>
-                      part.isMention ? (
-                        <Text
-                          key={partIndex}
-                          style={isMe ? styles.mentionInSent : styles.mentionInReceived}
-                        >
-                          {part.text}
+                    {(() => {
+                      // Markup outside, mentions inside: "*see @Name*" is bold
+                      // with the name still highlighted within it.
+                      const labels = mentionLabelsFor(item);
+                      return parseInlineMarkup(item.content).map((span, spanIndex) => (
+                        <Text key={spanIndex} style={spanStyle(span)}>
+                          {splitOnMentions(span.text, labels).map((part, partIndex) =>
+                            part.isMention ? (
+                              <Text
+                                key={partIndex}
+                                style={isMe ? styles.mentionInSent : styles.mentionInReceived}
+                              >
+                                {part.text}
+                              </Text>
+                            ) : (
+                              part.text
+                            )
+                          )}
                         </Text>
-                      ) : (
-                        part.text
-                      )
-                    )}
+                      ));
+                    })()}
                   </Text>
 
                   {showTranslation && (

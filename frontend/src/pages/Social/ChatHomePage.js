@@ -47,6 +47,7 @@ import {
   groupDisplayName,
 } from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
+import { stripInlineMarkup } from "../../utils/inlineMarkup";
 
 const ChatHomePage = () => {
   const { user, loading, userStatus } = useContext(UserContext);
@@ -264,7 +265,7 @@ const ChatHomePage = () => {
     } else if (messageType === "voice") {
       lastMessage.previewContent = i18n.t("chatPreviewVoice");
     } else {
-      lastMessage.previewContent = lastMessage.content;
+      lastMessage.previewContent = stripInlineMarkup(lastMessage.content);
     }
 
     const deliveryStatuses = Object.values(lastMessage.deliveryStatus || {});
