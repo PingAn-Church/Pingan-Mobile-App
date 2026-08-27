@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Image } from "react-native";
 import { resolvePresignedAssetUrl } from "../service/OSSService";
 import {
@@ -37,6 +37,8 @@ const isManaged = (url) =>
  * @param type           OSS file type for presigning ("profile" | "group" | "course" | ...)
  * @param conversationId Required when resolving a group icon.
  * @param fallbackSource RN Image source shown when there's no resolved uri (e.g. a default avatar)
+ * @param onResolved     Called with the URL actually being drawn (local cache file or
+ *                       presigned remote), or null while resolving — for a tap-to-view.
  */
 export default function CachedImage({
   uri,
@@ -44,6 +46,7 @@ export default function CachedImage({
   conversationId = undefined,
   fallbackSource = null,
   style,
+  onResolved = undefined,
   ...rest
 }) {
   const managed = isManaged(uri);
@@ -95,6 +98,15 @@ export default function CachedImage({
 
   const currentKey = uri || null;
   const resolvedUri = resolved.key === currentKey ? resolved.uri : null;
+
+  // Read through a ref so an inline arrow from the parent doesn't re-fire this
+  // on every render; only a change in the URL itself does.
+  const onResolvedRef = useRef(onResolved);
+  onResolvedRef.current = onResolved;
+  useEffect(() => {
+    onResolvedRef.current?.(resolvedUri);
+  }, [resolvedUri]);
+
   const source = resolvedUri ? { uri: resolvedUri } : fallbackSource;
   return <Image source={source} style={style} {...rest} />;
 }

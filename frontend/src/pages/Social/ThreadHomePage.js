@@ -74,7 +74,7 @@ import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
-import CachedImage from "../../components/CachedImage";
+import CroppedCoverImage from "../../components/CroppedCoverImage";
 import { Ionicons } from "@expo/vector-icons";
 import { setThreadSubscription } from "../../service/ThreadService";
 import { parseServerDate } from "../../utils/serverDate";
@@ -330,11 +330,10 @@ const ThreadHomePage = () => {
                 ) : (
                   <>
                     {!!item.coverImage && (
-                      <CachedImage
+                      <CroppedCoverImage
                         uri={item.coverImage}
                         type="thread"
                         style={styles.threadCover}
-                        resizeMode="cover"
                       />
                     )}
                     <Text style={styles.threadTitle}>{item.title}</Text>

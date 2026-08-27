@@ -181,7 +181,7 @@
 
 // export default ThreadDetailPage;
 
-import React, { useEffect, useState, useRef, useContext } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -200,6 +200,8 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 // Keeps the reply bar above the Android system navigation bar (edge-to-edge).
 import StickyInputFooter from "../../components/StickyInputFooter";
+import FittedImage from "../../components/FittedImage";
+import ImageViewer from "../../components/ImageViewer";
 import {
   fetchReplies,
   postReply,
@@ -224,8 +226,12 @@ import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert";
+import {
+  MEDIA_LIBRARY_PERMISSION_DENIED,
+  fileExtensionOf,
+  saveShownImage,
+} from "../../utils/mediaLibrary";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
-import CachedImage from "../../components/CachedImage";
 import {
   discardThreadUpload,
   pickThreadImage,
@@ -251,6 +257,36 @@ const ThreadDetailPage = ({ route }) => {
   const { refreshTopicUnread } = useContext(ChatContext);
   // Local file until the reply is sent; see utils/threadMedia.
   const [replyImageUri, setReplyImageUri] = useState(null);
+
+  // Tap any photo to see it whole; it can be saved from there.
+  const [photoViewer, setPhotoViewer] = useState({ visible: false, uri: null });
+  const openPhoto = useCallback((uri) => setPhotoViewer({ visible: true, uri }), []);
+  const closePhoto = useCallback(() => setPhotoViewer({ visible: false, uri: null }), []);
+  const photoViewerActions = useMemo(
+    () => [
+      {
+        key: "download",
+        icon: "download-outline",
+        label: i18n.t("download"),
+        onPress: async () => {
+          const { uri } = photoViewer;
+          closePhoto();
+          try {
+            await saveShownImage(uri, `thread-photo-${Date.now()}.${fileExtensionOf(uri)}`);
+            showAlert(i18n.t("success"), i18n.t("saveImageSuccess"));
+          } catch (error) {
+            showAlert(
+              i18n.t("error"),
+              error?.message === MEDIA_LIBRARY_PERMISSION_DENIED
+                ? i18n.t("needPhotoAccess")
+                : i18n.t("saveImageFailed")
+            );
+          }
+        },
+      },
+    ],
+    [photoViewer, closePhoto]
+  );
   const [postingReply, setPostingReply] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editingReplyId, setEditingReplyId] = useState(null);
@@ -652,11 +688,12 @@ const ThreadDetailPage = ({ route }) => {
                 </View>
 
                 {!threadShadowHidden && !!thread.coverImage && (
-                  <CachedImage
+                  <FittedImage
                     uri={thread.coverImage}
                     type="thread"
+                    placeholderRatio={16 / 9}
                     style={styles.threadCover}
-                    resizeMode="cover"
+                    onPress={openPhoto}
                   />
                 )}
 
@@ -771,11 +808,12 @@ const ThreadDetailPage = ({ route }) => {
               <>
                 {!!item.content && <RichText style={styles.replyText}>{item.content}</RichText>}
                 {!!item.imageUrl && (
-                  <CachedImage
+                  <FittedImage
                     uri={item.imageUrl}
                     type="thread"
+                    placeholderRatio={4 / 3}
                     style={styles.replyImage}
-                    resizeMode="cover"
+                    onPress={openPhoto}
                   />
                 )}
               </>
@@ -836,6 +874,13 @@ const ThreadDetailPage = ({ route }) => {
           </View>
           );
         }}
+      />
+
+      <ImageViewer
+        visible={photoViewer.visible}
+        uri={photoViewer.uri}
+        actions={photoViewerActions}
+        onClose={closePhoto}
       />
 
       <StickyInputFooter background="#fafafa">{replyComposer}</StickyInputFooter>
@@ -949,16 +994,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   bellButton: { padding: 2 },
+  // FittedImage sets the height from the photo itself.
   threadCover: {
     width: "100%",
-    aspectRatio: 16 / 9,
     borderRadius: 12,
     marginTop: 12,
     backgroundColor: "#eee",
   },
   replyImage: {
     width: "100%",
-    aspectRatio: 4 / 3,
     borderRadius: 10,
     marginTop: 8,
     backgroundColor: "#eee",

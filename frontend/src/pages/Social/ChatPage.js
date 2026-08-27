@@ -82,7 +82,7 @@ import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { setActiveConversation, clearActiveConversation } from "../../utils/activeConversation";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import VoicePlayer from "../../components/Chat/VoicePlayer";
-import ImageViewer from "../../components/Chat/ImageViewer";
+import ImageViewer from "../../components/ImageViewer";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
