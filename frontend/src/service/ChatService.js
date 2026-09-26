@@ -420,6 +420,27 @@ export const setConversationMuteStatus = async (conversationId, conversationType
   }
 };
 
+// Adds (on) or removes the viewer's emoji on a message. Resolves to the message
+// as the viewer should now see it — reactions included, with `mine` filled in.
+export const toggleReaction = async (messageId, emoji, on) => {
+  const token = await getAuthToken();
+  const response = await axios.put(apiUrl(`/chat/reactions`), null, {
+    params: { messageId, emoji, on },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Who reacted to a message with one emoji: [{ id, firstName, lastName, profileImage, bot, displayNameZh }].
+export const getReactionUsers = async (messageId, emoji) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/reactions/users`), {
+    params: { messageId, emoji },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 export const deleteConversationFromDatabase = async (conversationId) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No token found.");

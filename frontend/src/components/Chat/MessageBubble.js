@@ -4,6 +4,7 @@ import {
   Image,
   PanResponder,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,6 +17,7 @@ import appIcon from "../../../assets/icon.png";
 import i18n from "../../../i18n";
 import CachedImage from "../CachedImage";
 import { kindOf, messagePreview } from "../../utils/messageKinds";
+import { displayEmoji } from "../../utils/reactions";
 import {
   formatDeliveryStateLabel,
   formatTime,
@@ -102,6 +104,8 @@ export default function MessageBubble({
   onOpenEvent,
   onReply,
   onQuotePress,
+  onToggleReaction,
+  onShowReactors,
   canReply = true,
   highlighted = false,
 }) {
@@ -329,8 +333,42 @@ export default function MessageBubble({
     </TouchableOpacity>
   );
 
+  // Emoji tallies, drawn as chips tucked under the bubble's edge. Tap one to add
+  // or withdraw your own; hold it to see who is behind the number.
+  const tallies = isShadowHidden
+    ? []
+    : (Array.isArray(item.reactions) ? item.reactions : []).filter((r) => r && Number(r.count) > 0);
+  const chips =
+    tallies.length > 0 ? (
+      <View
+        style={[
+          styles.reactionRow,
+          showsSender ? styles.reactionRowGroup : isMe ? styles.reactionRowSent : styles.reactionRowReceived,
+        ]}
+      >
+        {tallies.map((tally) => (
+          <Pressable
+            key={tally.emoji}
+            onPress={onToggleReaction ? () => onToggleReaction(item, tally.emoji, !tally.mine) : undefined}
+            onLongPress={onShowReactors ? () => onShowReactors(item, tally.emoji) : undefined}
+            delayLongPress={350}
+            style={[styles.reactionChip, tally.mine && styles.reactionChipMine]}
+            accessibilityRole="button"
+            accessibilityLabel={`${displayEmoji(tally.emoji)} ${tally.count}`}
+            accessibilityState={{ selected: !!tally.mine }}
+          >
+            <Text style={styles.reactionEmoji}>{displayEmoji(tally.emoji)}</Text>
+            <Text style={[styles.reactionCount, tally.mine && styles.reactionCountMine]}>{tally.count}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
+
   const row = !showsSender ? (
-    bubble
+    <View>
+      {bubble}
+      {chips}
+    </View>
   ) : (
     <View style={styles.groupMessageRow}>
       {startsRun ? (
@@ -376,6 +414,7 @@ export default function MessageBubble({
             </TouchableOpacity>
           ))}
         {bubble}
+        {chips}
         {isAssistant && (
           // Chrome, not message text. In the body it would ride along in
           // the push notification and stand in for the answer as the
@@ -580,6 +619,58 @@ const styles = StyleSheet.create({
   quoteBodyHidden: {
     fontStyle: "italic",
     opacity: 0.8,
+  },
+  // Reaction chips overlap the bubble's bottom edge slightly, WhatsApp-style.
+  reactionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: -6,
+    marginBottom: 4,
+    zIndex: 1,
+  },
+  reactionRowSent: {
+    alignSelf: "flex-end",
+    marginRight: 18,
+  },
+  reactionRowReceived: {
+    alignSelf: "flex-start",
+    marginLeft: 18,
+  },
+  reactionRowGroup: {
+    alignSelf: "flex-start",
+    marginLeft: 6,
+  },
+  reactionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E1E1E6",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  reactionChipMine: {
+    backgroundColor: "#E5F0FF",
+    borderColor: "#0A84FF",
+  },
+  reactionEmoji: {
+    fontSize: webFontSize(13),
+  },
+  reactionCount: {
+    marginLeft: 3,
+    fontSize: webFontSize(12),
+    fontWeight: "600",
+    color: "#3C3C43",
+  },
+  reactionCountMine: {
+    color: "#0A84FF",
   },
   mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
   mentionInReceived: { fontWeight: "700", color: "#C2410C" },

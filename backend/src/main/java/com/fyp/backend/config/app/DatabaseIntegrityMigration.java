@@ -67,6 +67,14 @@ public class DatabaseIntegrityMigration {
         if (orphanRegistrations > 0) {
             log.warn("Removed {} orphan event registration row(s).", orphanRegistrations);
         }
+        int orphanReactions = jdbc.update("""
+                DELETE FROM message_reactions mr
+                WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = mr.message_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = mr.user_id)
+                """);
+        if (orphanReactions > 0) {
+            log.warn("Removed {} orphan message reaction row(s).", orphanReactions);
+        }
 
         ensureCascadeForeignKey(jdbc, "message_mentions", "message_id",
                 "messages", "id", "fk_message_mentions_message");
@@ -81,6 +89,11 @@ public class DatabaseIntegrityMigration {
                 "events", "id", "fk_event_registrations_event");
         ensureCascadeForeignKey(jdbc, "event_registrations", "user_id",
                 "users", "id", "fk_event_registrations_user");
+        // A reaction lives and dies with its message and its owner.
+        ensureCascadeForeignKey(jdbc, "message_reactions", "message_id",
+                "messages", "id", "fk_message_reactions_message");
+        ensureCascadeForeignKey(jdbc, "message_reactions", "user_id",
+                "users", "id", "fk_message_reactions_user");
 
         jdbc.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_group_conversations_single_app_level

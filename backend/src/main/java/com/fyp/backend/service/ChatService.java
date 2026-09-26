@@ -1,6 +1,7 @@
 package com.fyp.backend.service;
 
 import com.fyp.backend.dto.MessageDto;
+import com.fyp.backend.dto.ReactionSummaryDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.FanoutPublisher;
@@ -47,6 +48,7 @@ public class ChatService {
     private final ConversationReadStateService conversationReadStateService;
     private final AssistantAccountService assistantAccountService;
     private final EventRepository eventRepository;
+    private final MessageReactionService reactionService;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -61,7 +63,8 @@ public class ChatService {
                        PushMessages pushMessages,
                        ConversationReadStateService conversationReadStateService,
                        AssistantAccountService assistantAccountService,
-                       EventRepository eventRepository) {
+                       EventRepository eventRepository,
+                       MessageReactionService reactionService) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -76,6 +79,7 @@ public class ChatService {
         this.conversationReadStateService = conversationReadStateService;
         this.assistantAccountService = assistantAccountService;
         this.eventRepository = eventRepository;
+        this.reactionService = reactionService;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -188,6 +192,12 @@ public class ChatService {
                 .map(message -> new MessageDto(message, viewer))
                 .collect(Collectors.toList());
 
+        // Reaction tallies for the whole page in two grouped queries, with the
+        // viewer's own marked.
+        Map<Long, List<ReactionSummaryDto>> tallies = reactionService.summaries(
+                messages.stream().map(MessageDto::getMessageId).toList(), userId);
+        messages.forEach(dto -> dto.setReactions(tallies.getOrDefault(dto.getMessageId(), List.of())));
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("messages", messages);
         result.put("nextCursor", nextCursor);
@@ -197,26 +207,12 @@ public class ChatService {
 
 
     private List<String> getDestination(String conversationType, MessageDto savedMessage) {
-        List<String> destinations = new ArrayList<>();
-
-        if ("group".equals(conversationType)) {
-            // For group conversations, send to the conversation topic
-            destinations.add("/topic/conversation-" + savedMessage.getConversationId());
-        } else if ("private".equals(conversationType)) {
-            // For private conversations, send to both the sender and each recipient
-            destinations.add("/user/" + savedMessage.getSenderId() + "/queue/messages"); // To the sender
-
-            // To the recipients
-            for (Long recipientId : savedMessage.getRecipientIds()) {
-                destinations.add("/user/" + recipientId + "/queue/messages");
-            }
-        }
-
-        return destinations;
+        return ChatDestinations.forMessage(conversationType, savedMessage);
     }
 
     public void broadcastMessageAfterCommit(Message message) {
         MessageDto dto = new MessageDto(message);
+        dto.setReactions(reactionService.summariesFor(message.getId(), null));
         List<String> destinations = getDestination(message.getConversationType(), dto);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -780,6 +776,9 @@ public class ChatService {
 
         MessageDto updatedMessageDto = new MessageDto(message);
         updatedMessageDto.setEdited(true);
+        // Carried on every re-broadcast, or the client would take an edit as
+        // "no reactions" and wipe the tallies it was showing.
+        updatedMessageDto.setReactions(reactionService.summariesFor(messageId, null));
         List<String> destinations = getDestination(conversationType, updatedMessageDto);
 
         // ✅ Defer broadcasting
@@ -821,6 +820,7 @@ public class ChatService {
                 ? mediaContent.substring(0, metadataSeparator)
                 : mediaContent;
 
+        reactionService.removeAllFor(messageId);
         messageRepository.delete(message);
         List<String> destinations = getDestination(message.getConversationType(), deletedMessageDto);
 

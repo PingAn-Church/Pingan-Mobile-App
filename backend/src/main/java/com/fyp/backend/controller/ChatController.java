@@ -10,6 +10,7 @@ import com.fyp.backend.service.AppGroupChatService;
 import com.fyp.backend.service.ChatService;
 import com.fyp.backend.service.ConversationMuteService;
 import com.fyp.backend.service.ConversationService;
+import com.fyp.backend.service.MessageReactionService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.Pagination;
@@ -38,17 +39,20 @@ public class ChatController {
     private final JwtUtil jwtUtil;
     private final ConversationMuteService conversationMuteService;
     private final AppGroupChatService appGroupChatService;
+    private final MessageReactionService messageReactionService;
 
     @Autowired
     public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil,
                           UserService userService, ConversationMuteService conversationMuteService,
-                          AppGroupChatService appGroupChatService) {
+                          AppGroupChatService appGroupChatService,
+                          MessageReactionService messageReactionService) {
         this.conversationService = conversationService;
         this.chatService = chatService;
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.conversationMuteService = conversationMuteService;
         this.appGroupChatService = appGroupChatService;
+        this.messageReactionService = messageReactionService;
     }
 
     // Fetch user's conversations
@@ -287,6 +291,43 @@ public class ChatController {
         try {
             conversationMuteService.setMuted(userId, conversationId, conversationType, muted);
             return ResponseEntity.ok(Map.of("muted", muted));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /**
+     * Adds (on=true) or withdraws the caller's emoji on a message. Answers the
+     * message as the caller now sees it, tallies included; everyone else in the
+     * conversation gets the same message re-broadcast over the socket.
+     */
+    @PutMapping("/reactions")
+    public ResponseEntity<?> toggleReaction(@RequestParam Long messageId,
+                                            @RequestParam String emoji,
+                                            @RequestParam boolean on,
+                                            HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(messageReactionService.toggle(messageId, userId, emoji, on));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Who reacted to a message with one emoji; participants of the conversation only. */
+    @GetMapping("/reactions/users")
+    public ResponseEntity<?> reactionUsers(@RequestParam Long messageId,
+                                           @RequestParam String emoji,
+                                           HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(messageReactionService.reactors(messageId, emoji, userId));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

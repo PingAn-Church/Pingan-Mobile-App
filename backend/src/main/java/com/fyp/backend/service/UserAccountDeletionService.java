@@ -30,6 +30,7 @@ import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
 import com.fyp.backend.repository.EventRegistrationRepository;
 import com.fyp.backend.repository.EventRepository;
+import com.fyp.backend.repository.MessageReactionRepository;
 import com.fyp.backend.repository.FormApplicationRepository;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.LearningGoalRepository;
@@ -96,6 +97,7 @@ public class UserAccountDeletionService {
     @Autowired private ThreadContentCleanupService threadContentCleanupService;
 
     // Events / forms
+    @Autowired private MessageReactionRepository messageReactionRepository;
     @Autowired private EventRepository eventRepository;
     @Autowired private EventRegistrationRepository eventRegistrationRepository;
     @Autowired private FormApplicationRepository formApplicationRepository;
@@ -203,6 +205,7 @@ public class UserAccountDeletionService {
         messageDeliveryStatusRepository.deleteByUserId(userId);
         conversationReadStateRepository.deleteByUserId(userId);
         messageRepository.deleteMentionReferencesByUserId(userId);
+        messageReactionRepository.deleteByUserId(userId);
 
         // Delete authored topics first because that also removes their replies.
         // Then query again for this user's replies on topics owned by other users.

@@ -55,6 +55,9 @@ public class MessageDto {
     // The quoted message as this reader may see it — server-filled, never sent by
     // a client. Absent on a message that replies to nothing.
     private ReplyPreviewDto replyTo;
+    // Emoji tallies, filled in by MessageReactionService for a page of history
+    // and on every re-broadcast of the message. Empty on a fresh message.
+    private List<ReactionSummaryDto> reactions = new ArrayList<>();
 
     // ✅ Change from Map<Long, String> to Map<String, String> to ensure proper JSON conversion
     private Map<String, String> deliveryStatus;
@@ -124,14 +127,14 @@ public class MessageDto {
         return message.getConversation() instanceof GroupConversation group && group.isAppLevel();
     }
 
-    static String displayFirstName(User user) {
+    public static String displayFirstName(User user) {
         if (user == null) {
             return "Unknown";
         }
         return user.isDeletedAccount() ? "Deleted" : user.getFirstName();
     }
 
-    static String displayLastName(User user) {
+    public static String displayLastName(User user) {
         if (user == null) {
             return "User";
         }

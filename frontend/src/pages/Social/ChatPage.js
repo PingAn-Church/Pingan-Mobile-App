@@ -52,7 +52,10 @@ import {
   getConversationMuteStatus,
   setConversationMuteStatus,
   markConversationRead,
+  toggleReaction,
+  getReactionUsers,
 } from "../../service/ChatService";
+import { REACTION_EMOJIS, applyOwnReaction, displayEmoji } from "../../utils/reactions";
 import {
   getLocalUri as getCachedMedia,
   peekLocalUri as peekCachedMedia,
@@ -1518,6 +1521,50 @@ export default function ChatPage({ route }) {
     );
   };
 
+  const applyReactions = (messageId, reactions) => {
+    updateConversationHistory((history) =>
+      history.map((msg) =>
+        String(msg.messageId) === String(messageId) ? { ...msg, reactions } : msg
+      )
+    );
+  };
+
+  // Adds or withdraws the viewer's emoji. Shown at once and confirmed by the
+  // server's answer; put back the way it was if the server refuses.
+  const handleToggleReaction = async (message, emoji, on) => {
+    if (!message?.messageId || message.pending || isLocalOnlyMessage(message)) return;
+    closeContextMenu();
+    const before = Array.isArray(message.reactions) ? message.reactions : [];
+    applyReactions(message.messageId, applyOwnReaction(before, emoji, on));
+    try {
+      const updated = await toggleReaction(message.messageId, emoji, on);
+      if (Array.isArray(updated?.reactions)) applyReactions(message.messageId, updated.reactions);
+    } catch (error) {
+      applyReactions(message.messageId, before);
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  const showReactors = async (message, emoji) => {
+    if (!message?.messageId || isLocalOnlyMessage(message)) return;
+    try {
+      const people = await getReactionUsers(message.messageId, emoji);
+      const names = people
+        .map((person) =>
+          person.bot
+            ? (String(language || "").startsWith("zh") && person.displayNameZh) || person.firstName
+            : formatName(person.firstName, person.lastName)
+        )
+        .filter(Boolean);
+      showAlert(
+        i18n.t("reactedWith", { emoji: displayEmoji(emoji) }),
+        names.length ? names.join("\n") : i18n.t("noOneYet")
+      );
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
   const resolveImageUrl = useCallback(
     async (objectKey) => {
       if (!objectKey) return null;
@@ -2500,6 +2547,8 @@ export default function ChatPage({ route }) {
               onOpenEvent={(eventId) => navigation.navigate("Events Detail", { eventId })}
               onReply={beginReply}
               onQuotePress={scrollToMessage}
+              onToggleReaction={messagingBlocked ? undefined : handleToggleReaction}
+              onShowReactors={showReactors}
               canReply={!messagingBlocked}
               highlighted={
                 highlightedMessageId != null && String(item.messageId) === highlightedMessageId
@@ -2521,6 +2570,30 @@ export default function ChatPage({ route }) {
               })
             }
           >
+            {/* The fixed emoji set, across the top of the menu. A lit one is
+                already yours; pressing it again withdraws it. */}
+            {contextCanReply && (
+              <View style={styles.reactionPicker}>
+                {REACTION_EMOJIS.map(({ key, display }) => {
+                  const mine = (contextMessage?.reactions || []).some(
+                    (tally) => tally?.emoji === key && tally?.mine
+                  );
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => handleToggleReaction(contextMessage, key, !mine)}
+                      style={[styles.reactionPickerItem, mine && styles.reactionPickerItemMine]}
+                      accessibilityRole="button"
+                      accessibilityLabel={display}
+                      accessibilityState={{ selected: mine }}
+                    >
+                      <Text style={styles.reactionPickerEmoji}>{display}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
             {contextCanReply && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
@@ -3660,6 +3733,28 @@ const styles = StyleSheet.create({
   contextMenuItem: {
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  reactionPicker: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  reactionPickerItem: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reactionPickerItemMine: {
+    backgroundColor: "#E5F0FF",
+  },
+  reactionPickerEmoji: {
+    fontSize: 24,
   },
   contextMenuItemText: {
     fontSize: webFontSize(14),

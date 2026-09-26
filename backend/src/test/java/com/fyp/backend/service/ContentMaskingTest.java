@@ -67,6 +67,8 @@ class ContentMaskingTest {
     @Mock private TopicSubscriptionService topicSubscriptionService;
     @Mock private ThreadContentCleanupService threadContentCleanupService;
     @Mock private PushMessages pushMessages;
+    // Edits re-broadcast with their reaction tallies attached.
+    @Mock private MessageReactionService reactionService;
     @Spy private ContentSanitizer contentSanitizer = new ContentSanitizer();
 
     @InjectMocks private ChatService chatService;

@@ -414,6 +414,8 @@
   "reply": "Reply",
   "replyingTo": "Replying to %{name}",
   "replyOriginalNotLoaded": "The original message isn't in the loaded history.",
+  "reactedWith": "Reacted with %{emoji}",
+  "noOneYet": "No one yet",
   "writeReply": "Write a reply",
   "deleteReply": "Delete Reply",
   "deleteReplyFailed": "Failed to delete reply",

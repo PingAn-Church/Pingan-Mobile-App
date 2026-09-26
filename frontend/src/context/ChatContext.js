@@ -12,6 +12,7 @@ import { getTopicUnreadCount } from "../service/ThreadService";
 import { getOnlineUsers } from "../service/UserService";
 import { getStompClient, subscribeToConversation } from "../service/WebSocketService";
 import { UserContext } from "./UserContext";
+import { mergeReactions } from "../utils/reactions";
 
 export const ChatContext = createContext();
 
@@ -234,7 +235,16 @@ export const ChatProvider = ({ children }) => {
         } else if (exists === -1 && !message.deleted) {
           chatHistory.push({ ...message, deliveryStatus: message.deliveryStatus || {} });
         } else if (!message.deleted) {
-          chatHistory[exists] = { ...chatHistory[exists], ...message, pending: false, failed: false };
+          // A re-broadcast of a message already here (an edit, or new reaction
+          // tallies): take the server's fields, but a broadcast cannot know which
+          // reactions are this device's own, so that part is kept from before.
+          chatHistory[exists] = {
+            ...chatHistory[exists],
+            ...message,
+            reactions: mergeReactions(chatHistory[exists].reactions, message.reactions),
+            pending: false,
+            failed: false,
+          };
         }
 
         chatHistory = dedupeMessagesById(chatHistory);
