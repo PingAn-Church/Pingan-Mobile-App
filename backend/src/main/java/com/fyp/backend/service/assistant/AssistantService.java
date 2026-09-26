@@ -18,6 +18,7 @@ import com.fyp.backend.config.app.AssistantProperties;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
+import com.fyp.backend.model.MessageKind;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageRepository;
@@ -325,25 +326,15 @@ public class AssistantService {
     }
 
     private static boolean isPhoto(Message message) {
-        return message.getType() != null && "image".equalsIgnoreCase(message.getType());
+        return MessageKind.of(message.getType()) == MessageKind.IMAGE;
     }
 
     /**
-     * Media becomes a placeholder. The stored value is an OSS object path, which
-     * means nothing to a model and would leak the storage layout; a photo that is
+     * Media becomes a placeholder (see MessageKind.readable). A photo that is
      * shown to the model is attached alongside this text, never in place of it.
      */
     private static String readable(Message message) {
-        String type = message.getType() == null ? "text" : message.getType().toLowerCase(Locale.ROOT);
-        return switch (type) {
-            case "image" -> "[photo]";
-            case "voice" -> "[voice message]";
-            // The body is the server-written "📅 Title · date time · place" line;
-            // labelled so the model knows it is a shared card, not someone's words.
-            case "event" -> "[shared event] " + (message.getContent() == null ? ""
-                    : message.getContent().replaceFirst("^📅\\s*", ""));
-            default -> message.getContent() == null ? "" : message.getContent();
-        };
+        return MessageKind.of(message.getType()).readable(message.getContent());
     }
 
     private static Map<String, Object> message(String role, String content) {

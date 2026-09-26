@@ -5,6 +5,7 @@ import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
+import com.fyp.backend.model.MessageKind;
 import com.fyp.backend.service.AppGroupChatService;
 import com.fyp.backend.service.ChatService;
 import com.fyp.backend.service.ConversationMuteService;
@@ -217,8 +218,8 @@ public class ChatController {
 //            return ResponseEntity.badRequest().body("Message content cannot be empty.");
 //        }
 
-        // NEW - allow image messages
-        if ((messageDto.getType() == null || messageDto.getType().equals("text")) &&
+        // Only words need a body; media carries a URL and a share carries an id.
+        if (MessageKind.of(messageDto.getType()).requiresContent() &&
                 (messageDto.getContent() == null || messageDto.getContent().trim().isEmpty())) {
             return ResponseEntity.badRequest().body("Message content cannot be empty.");
         }

@@ -255,18 +255,17 @@ public class ChatService {
             return pushMessages.text("push.chat.newMessage");
         }
 
-        String messageType = messageDto.getType() == null ? "" : messageDto.getType().trim().toLowerCase();
-        return switch (messageType) {
-            case "voice" -> pushMessages.text("push.chat.voice");
-            case "image" -> pushMessages.text("push.chat.photo");
-            case EVENT_TYPE -> pushMessages.text("push.chat.event", sharedEventTitle(messageDto));
-            default -> {
-                String content = messageDto.getContent();
-                yield (content == null || content.trim().isEmpty())
-                        ? pushMessages.text("push.chat.newMessage")
-                        : pushMessages.literal(content);
-            }
-        };
+        MessageKind kind = MessageKind.of(messageDto.getType());
+        if (kind == MessageKind.EVENT) {
+            return pushMessages.text(kind.pushBodyKey(), sharedEventTitle(messageDto));
+        }
+        if (kind.pushBodyKey() != null) {
+            return pushMessages.text(kind.pushBodyKey());
+        }
+        String content = messageDto.getContent();
+        return (content == null || content.trim().isEmpty())
+                ? pushMessages.text("push.chat.newMessage")
+                : pushMessages.literal(content);
     }
 
     /** The shared event's title for the push body, read inside the send transaction. */
@@ -472,9 +471,6 @@ public class ChatService {
         return savedMessage;
     }
 
-    /** Message type of a shared event card. */
-    public static final String EVENT_TYPE = "event";
-
     /**
      * Turns an event share request into the message that is stored.
      *
@@ -504,7 +500,7 @@ public class ChatService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("That event no longer exists."));
 
-        messageDto.setType(EVENT_TYPE);
+        messageDto.setType(MessageKind.EVENT.type());
         messageDto.setSharedEventId(event.getId());
         messageDto.setContent(eventShareText(event));
         messageDto.setMentionedUserIds(new ArrayList<>());
@@ -545,15 +541,16 @@ public class ChatService {
             }
         }
 
-        if (EVENT_TYPE.equalsIgnoreCase(messageDto.getType())) {
+        MessageKind kind = MessageKind.of(messageDto.getType());
+        if (kind.serverWritesBody()) {
             // Server-written from the event itself, so there is nothing of the
             // sender's to filter — see prepareEventShare.
             prepareEventShare(messageDto);
         } else {
             // Only an event share may point at an event.
             messageDto.setSharedEventId(null);
-            // Objectionable-word filter — only text bodies; voice/image content is a media URL.
-            if (!"voice".equalsIgnoreCase(messageDto.getType()) && !"image".equalsIgnoreCase(messageDto.getType())) {
+            // Objectionable-word filter — only text bodies; a media body is a URL.
+            if (!kind.hasMediaBody()) {
                 messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
             }
         }
@@ -715,13 +712,10 @@ public class ChatService {
             throw new IllegalArgumentException("You can only edit your own messages.");
         }
 
-        if ("image".equalsIgnoreCase(message.getType())) {
-            throw new IllegalArgumentException("Image messages cannot be edited.");
-        }
-        // The body of a share is server-written; editing it would let the text
-        // claim a different event from the card beside it.
-        if (EVENT_TYPE.equalsIgnoreCase(message.getType())) {
-            throw new IllegalArgumentException("Event shares cannot be edited.");
+        // Media bodies are URLs and a share's body is server-written, so only
+        // words can be edited — see MessageKind.
+        if (!MessageKind.of(message.getType()).isEditable()) {
+            throw new IllegalArgumentException("Only text messages can be edited.");
         }
         if (Boolean.TRUE.equals(message.getReported())) {
             throw new ContentUnderReviewException();
@@ -767,8 +761,7 @@ public class ChatService {
         MessageDto deletedMessageDto = new MessageDto(message);
         deletedMessageDto.setDeleted(true);
 
-        boolean hasManagedMedia = "image".equalsIgnoreCase(message.getType())
-                || "voice".equalsIgnoreCase(message.getType());
+        boolean hasManagedMedia = MessageKind.of(message.getType()).hasMediaBody();
         String mediaContent = message.getContent();
         int metadataSeparator = mediaContent == null ? -1 : mediaContent.indexOf('|');
         String mediaUrl = metadataSeparator >= 0
