@@ -17,6 +17,7 @@ import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { Ionicons } from "@expo/vector-icons";
 import { showAlert } from "../../utils/showAlert";
+import { registrationChipFor } from "../../utils/eventDisplay";
 import {
   MEDIA_LIBRARY_PERMISSION_DENIED,
   downloadImageToLibrary,
@@ -186,19 +187,29 @@ export default function MyActivityPage() {
     </View>
   );
 
-  const renderEvent = ({ item }) => (
+  const renderEvent = ({ item }) => {
+    const chip = activeTab === "Upcoming" ? registrationChipFor(item) : null;
+    return (
     <TouchableOpacity
       style={styles.activityCard}
       onPress={() => navigation.navigate("Events Detail", { eventId: item.id })}
     >
       <View style={styles.activityInfo}>
-        <Text style={styles.activityTitle}>{item.title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.activityTitle, styles.titleText]}>{item.title}</Text>
+          {chip && (
+            <View style={[styles.chip, styles[`chip_${chip.tone}`]]}>
+              <Text style={[styles.chipText, styles[`chipText_${chip.tone}`]]}>{chip.label}</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.activityDetails}>{formatDate(item.date)}</Text>
         <Text style={styles.activityDetails}>{item.startTime + " - " + item.endTime}</Text>
         <Text style={styles.activityDetails}>{item.location}</Text>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   const renderPhoto = ({ item }) => (
     <View
@@ -323,6 +334,29 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  titleText: {
+    flexShrink: 1,
+  },
+  chip: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  chip_open: { backgroundColor: "#E5F0FF" },
+  chip_done: { backgroundColor: "#E3F7E8" },
+  chip_muted: { backgroundColor: "#EEEEF0" },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  chipText_open: { color: "#0A84FF" },
+  chipText_done: { color: "#1F9D44" },
+  chipText_muted: { color: "#8E8E93" },
   activityDetails: {
     fontSize: 18,
     color: "#555",

@@ -81,6 +81,9 @@ import { setActiveConversation, clearActiveConversation } from "../../utils/acti
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import VoicePlayer from "../../components/Chat/VoicePlayer";
 import ImageViewer from "../../components/Chat/ImageViewer";
+import ComposerActionButton from "../../components/Chat/ComposerActionButton";
+import ChatActionSheet from "../../components/Chat/ChatActionSheet";
+import EventShareCard from "../../components/Chat/EventShareCard";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
@@ -513,6 +516,8 @@ export default function ChatPage({ route }) {
   const [participants, setParticipants] = useState([]);
   const [conversationType, setConversationType] = useState("");
   const [isSendingText, setIsSendingText] = useState(false);
+  // The panel behind the composer's "+" (photo, event share).
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
     x: 0,
@@ -1830,6 +1835,83 @@ export default function ChatPage({ route }) {
     }
   };
 
+  const openActionSheet = () => {
+    if (messagingBlocked) return;
+    Keyboard.dismiss();
+    setActionSheetVisible(true);
+  };
+
+  // The picker is a full-screen view of its own; let the sheet finish sliding
+  // away first rather than opening it over a half-dismissed panel.
+  const pickPhotoFromSheet = () => {
+    setActionSheetVisible(false);
+    setTimeout(pickAndSendImage, 250);
+  };
+
+  /**
+   * Sends an event card. The optimistic bubble shows the same one-line text the
+   * server will write, and the card fills in from the live event as soon as it
+   * is on screen. The server checks the event exists and writes the body.
+   */
+  const shareEvent = async (event) => {
+    setActionSheetVisible(false);
+    if (messagingBlocked || !event?.id) return;
+    if (!currentUser?.id || !conversationId || !conversationType) return;
+
+    const localId = `local-event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
+    const fallbackText = ["📅 " + (event.title || ""), [event.date, event.startTime].filter(Boolean).join(" "), event.location]
+      .filter(Boolean)
+      .join(" · ");
+
+    appendOptimisticMessage({
+      localId,
+      clientMessageId: localId,
+      messageId: localId,
+      content: fallbackText,
+      sharedEventId: event.id,
+      conversationId,
+      conversationType,
+      senderId: currentUser.id,
+      recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+      type: "event",
+      deliveryStatus: {},
+      createdAt,
+      timestamp: createdAt,
+      pending: true,
+      failed: false,
+    });
+    setAckTimeout(localId);
+
+    try {
+      const persisted = await sendMessageToDatabase(
+        {
+          content: String(event.id),
+          sharedEventId: event.id,
+          conversationId,
+          conversationType,
+          senderId: currentUser.id,
+          recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+          type: "event",
+          deliveryStatus: {},
+          createdAt,
+          clientMessageId: localId,
+        },
+        conversationType
+      );
+      if (persisted?.messageId) {
+        replaceOptimisticMessage(localId, persisted);
+        clearAckTimeout(localId);
+      }
+    } catch (error) {
+      updateConversationHistory((history) =>
+        history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
+      );
+      clearAckTimeout(localId);
+      showAlert(i18n.t("error"), i18n.t("shareEventFailed"));
+    }
+  };
+
   const handleVoiceRecordingComplete = async (audioUri, duration) => {
     if (messagingBlocked) return;
     if (!currentUser?.id || !conversationId || !conversationType || !audioUri) return;
@@ -2400,15 +2482,7 @@ export default function ChatPage({ route }) {
       )}
 
       <View style={[styles.inputContainer, messagingBlocked && styles.inputContainerBlocked]}>
-        <TouchableOpacity
-          onPress={pickAndSendImage}
-          style={styles.attachButton}
-          activeOpacity={0.82}
-          disabled={messagingBlocked}
-        >
-          <Ionicons name="image" size={23} color={messagingBlocked ? "#B0B0B3" : "#111111"} />
-        </TouchableOpacity>
-
+        {/* Photo moved into the "+" panel on the right; the input gets the width. */}
         <View style={styles.inputPill}>
           <TextInput
             ref={textInputRef}
@@ -2434,28 +2508,28 @@ export default function ChatPage({ route }) {
           </View>
         </View>
 
-        <TouchableOpacity
-          onPress={handleSendOrUpdate}
-          disabled={isSendDisabled}
-          style={[
-            styles.sendButton,
-            isSendDisabled ? styles.sendButtonDisabled : styles.sendButtonActive,
-          ]}
-          activeOpacity={0.86}
-        >
-          {isSendingText ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            // Icons instead of the old hardcoded English "Send"/"Update":
-            // language-neutral, and the paper plane is the universal send glyph.
-            <Ionicons
-              name={editingMessage ? "checkmark" : "paper-plane"}
-              size={20}
-              color="#FFFFFF"
-            />
-          )}
-        </TouchableOpacity>
+        {/* "+" while the box is empty (opens the actions panel), the paper plane
+            once there is text, a check while editing. Icons, not words, so the
+            control needs no translation. */}
+        <ComposerActionButton
+          mode={editingMessage ? "edit" : inputText.trim() ? "send" : "plus"}
+          onPress={editingMessage || inputText.trim() ? handleSendOrUpdate : openActionSheet}
+          disabled={
+            editingMessage || inputText.trim()
+              ? isSendDisabled
+              : messagingBlocked || !conversationId || !conversationType
+          }
+          busy={isSendingText && !editingMessage}
+        />
       </View>
+
+      <ChatActionSheet
+        visible={actionSheetVisible}
+        onClose={() => setActionSheetVisible(false)}
+        onPickPhoto={pickPhotoFromSheet}
+        onShareEvent={shareEvent}
+        language={language}
+      />
     </View>
   );
 
@@ -2538,6 +2612,9 @@ export default function ChatPage({ route }) {
           const messageType = (item.type || "").toLowerCase();
           const isVoice = !isShadowHidden && messageType === "voice";
           const isImage = !isShadowHidden && messageType === "image";
+          // A shared event draws as a card. Without an id (should not happen)
+          // it falls through to the text bubble, which shows the stored line.
+          const isEvent = !isShadowHidden && messageType === "event" && item.sharedEventId != null;
           const messageIdKey = String(item.messageId || "");
           const translationEntry = messageIdKey ? translations[messageIdKey] : null;
           const expectedTargetLanguage = resolveTargetTranslationLanguage(
@@ -2565,7 +2642,7 @@ export default function ChatPage({ route }) {
                   : (event) => openContextMenu(item, event)
               }
               onPress={
-                Platform.OS === "web" && !isImage && !isShadowHidden
+                Platform.OS === "web" && !isImage && !isEvent && !isShadowHidden
                   ? (event) => openContextMenu(item, event)
                   : undefined
               }
@@ -2574,9 +2651,10 @@ export default function ChatPage({ route }) {
                 styles.message,
                 isVoice
                   ? (isMe ? styles.voiceMessageBubbleSent : styles.voiceMessageBubbleReceived)
-                  : isImage
+                  : isImage || isEvent
                     ? (isMe ? styles.imageMessageBubbleSent : styles.imageMessageBubbleReceived)
                     : (isMe ? styles.sentMessage : styles.receivedMessage),
+                isEvent ? styles.eventMessageBubble : null,
                 isVoice ? styles.voiceMessageBubble : null,
                 isFailed ? styles.failedMessage : null,
                 // The avatar gutter replaces the bubble's own left margin.
@@ -2597,6 +2675,16 @@ export default function ChatPage({ route }) {
                   onPress={openImageViewer}
                   onLongPress={
                     Platform.OS === "web" || isShadowHidden ? undefined : openContextMenu
+                  }
+                />
+              ) : isEvent ? (
+                <EventShareCard
+                  eventId={item.sharedEventId}
+                  fallbackText={item.content}
+                  language={language}
+                  onOpen={(eventId) => navigation.navigate("Events Detail", { eventId })}
+                  onLongPress={
+                    Platform.OS === "web" ? undefined : (event) => openContextMenu(item, event)
                   }
                 />
               ) : isVoice ? (
@@ -2663,7 +2751,7 @@ export default function ChatPage({ route }) {
               <Text
                 style={[
                   styles.timestamp,
-                  isImage ? styles.imageTimestamp : (isMe ? styles.timestampSent : styles.timestampReceived),
+                  isImage || isEvent ? styles.imageTimestamp : (isMe ? styles.timestampSent : styles.timestampReceived),
                   isVoice ? styles.voiceTimestamp : null,
                 ]}
               >
@@ -2676,9 +2764,9 @@ export default function ChatPage({ route }) {
                 <Text
                   style={[
                     styles.deliveryStatus,
-                    isImage ? styles.imageTimestamp : styles.timestampSent,
+                    isImage || isEvent ? styles.imageTimestamp : styles.timestampSent,
                     isVoice ? styles.deliveryStatusVoice : null,
-                    !isImage && outgoingDeliveryState === "seen" ? styles.deliveryStatusSeen : null,
+                    !isImage && !isEvent && outgoingDeliveryState === "seen" ? styles.deliveryStatusSeen : null,
                   ]}
                 >
                   {formatDeliveryStateLabel(outgoingDeliveryState)}
@@ -3743,6 +3831,10 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     maxWidth: 230,
   },
+  // The card brings its own frame; the bubble only needs to let it be wider.
+  eventMessageBubble: {
+    maxWidth: 260,
+  },
   chatImage: {
     width: 220,
     height: 220,
@@ -3952,15 +4044,6 @@ const styles = StyleSheet.create({
     elevation: 5,
     zIndex: 10,
   },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E7E7EA",
-    marginRight: 7,
-  },
   inputPill: {
     flex: 1,
     minHeight: 40,
@@ -3983,23 +4066,6 @@ const styles = StyleSheet.create({
     lineHeight: Platform.OS === "web" ? 23 : 20,
     textAlignVertical: "center",
     color: "#111113",
-  },
-  sendButton: {
-    // Icon-only now, so a compact round-ish pill; minHeight keeps the tap
-    // target at 40dp regardless of font scale.
-    minWidth: 52,
-    minHeight: 40,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    marginLeft: 7,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonActive: {
-    backgroundColor: "#0A84FF",
-  },
-  sendButtonDisabled: {
-    backgroundColor: "#C4C8D0",
   },
   editingBanner: {
     flexDirection: "row",

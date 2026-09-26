@@ -113,6 +113,51 @@ export const updateEvent = async (eventId, updatedData) => {
   }
 };
 
+const authHeaders = async () => {
+  const token = await getAuthToken();
+  if (!token) throw new Error("No auth token found");
+  return { Authorization: `Bearer ${token}` };
+};
+
+// The viewer's sign-up state for one event, with the event itself inside
+// (`status.event`), so a chat share card needs only this one request.
+export const getEventRegistration = async (eventId) => {
+  const response = await axios.get(apiUrl(`/api/events/${eventId}/registration`), {
+    headers: await authHeaders(),
+  });
+  return response.data;
+};
+
+// Register / cancel resolve to { ok, status } rather than throwing when the
+// server turns the request down (409: switched off, started or full) — the body
+// is still the current state, and `status.closedReason` says which.
+const writeRegistration = async (method, eventId) => {
+  try {
+    const response = await axios({
+      method,
+      url: apiUrl(`/api/events/${eventId}/registration`),
+      headers: await authHeaders(),
+    });
+    return { ok: true, status: response.data };
+  } catch (error) {
+    if (error?.response?.status === 409 && error.response.data) {
+      return { ok: false, status: error.response.data };
+    }
+    throw error;
+  }
+};
+
+export const registerForEvent = (eventId) => writeRegistration("post", eventId);
+export const cancelEventRegistration = (eventId) => writeRegistration("delete", eventId);
+
+// Who has registered. 403 when the event's visibility setting hides the list.
+export const getEventRegistrants = async (eventId) => {
+  const response = await axios.get(apiUrl(`/api/events/${eventId}/registrations`), {
+    headers: await authHeaders(),
+  });
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 export const deleteEvent = async (eventId) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No auth token found");
