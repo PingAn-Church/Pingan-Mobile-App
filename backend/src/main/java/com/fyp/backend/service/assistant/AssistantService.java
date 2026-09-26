@@ -338,6 +338,10 @@ public class AssistantService {
         return switch (type) {
             case "image" -> "[photo]";
             case "voice" -> "[voice message]";
+            // The body is the server-written "📅 Title · date time · place" line;
+            // labelled so the model knows it is a shared card, not someone's words.
+            case "event" -> "[shared event] " + (message.getContent() == null ? ""
+                    : message.getContent().replaceFirst("^📅\\s*", ""));
             default -> message.getContent() == null ? "" : message.getContent();
         };
     }

@@ -46,6 +46,9 @@ public class MessageDto {
     private boolean edited = false;
     private boolean deleted = false;
     private boolean reported = false;
+    // The event an "event" message shares. Sent by the client to name the event
+    // (the server checks it and writes the body itself); null on everything else.
+    private Long sharedEventId;
 
     // ✅ Change from Map<Long, String> to Map<String, String> to ensure proper JSON conversion
     private Map<String, String> deliveryStatus;
@@ -61,6 +64,7 @@ public class MessageDto {
                 || (message.getSender() != null && viewer.getId().equals(message.getSender().getId()))
                 || viewer.isAdmin();
         this.content = canViewReportedContent ? message.getContent() : null;
+        this.sharedEventId = canViewReportedContent ? message.getSharedEventId() : null;
         this.type = message.getType();
         this.timestamp = message.getTimestamp().toString();
         this.conversationId = message.getConversation().getId();

@@ -38,6 +38,22 @@ public class Event {
     @ElementCollection
     private List<Long> checkedInUserIds = new ArrayList<>(); // List of user IDs who checked in
 
+    // Optional sign-up. All three are nullable wrappers on purpose: ddl-auto adds
+    // them to a table that already has rows, where a NOT NULL column cannot be
+    // added, and every event created before them reads as "no registration".
+
+    /** Whether members can register. Null (every older event) means no. */
+    @Column(name = "registration_enabled")
+    private Boolean registrationEnabled;
+
+    /** Maximum number of registrations; null means unlimited. */
+    @Column(name = "registration_capacity")
+    private Integer registrationCapacity;
+
+    /** A {@link RegistrantVisibility} name; null reads as ADMINS. */
+    @Column(name = "registrant_visibility", length = 32)
+    private String registrantVisibility;
+
     // Constructors
     public Event() {}
 
@@ -86,5 +102,24 @@ public class Event {
     }
 
     public void setCheckedInUserIds(List<Long> checkedInUserIds) { this.checkedInUserIds = checkedInUserIds; }
+
+    public Boolean getRegistrationEnabled() { return registrationEnabled; }
+    public void setRegistrationEnabled(Boolean registrationEnabled) { this.registrationEnabled = registrationEnabled; }
+
+    public Integer getRegistrationCapacity() { return registrationCapacity; }
+    public void setRegistrationCapacity(Integer registrationCapacity) { this.registrationCapacity = registrationCapacity; }
+
+    public String getRegistrantVisibility() { return registrantVisibility; }
+    public void setRegistrantVisibility(String registrantVisibility) { this.registrantVisibility = registrantVisibility; }
+
+    // Not bean-style names, so neither lands in the JSON of GET /api/events/{id}.
+
+    /** Null-safe reading of {@link #registrationEnabled}. */
+    public boolean hasRegistration() { return Boolean.TRUE.equals(registrationEnabled); }
+
+    /** Null-safe reading of {@link #registrantVisibility}. */
+    public RegistrantVisibility registrantVisibilityOrDefault() {
+        return RegistrantVisibility.parse(registrantVisibility);
+    }
 
 }

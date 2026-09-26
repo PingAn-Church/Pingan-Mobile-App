@@ -1,6 +1,7 @@
 package com.fyp.backend.controller;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -23,8 +24,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fyp.backend.dto.EventDto;
+import com.fyp.backend.dto.EventRegistrantDto;
+import com.fyp.backend.dto.EventRegistrationStatusDto;
 import com.fyp.backend.dto.EventSummaryDto;
 import com.fyp.backend.model.Event;
+import com.fyp.backend.service.EventRegistrationService;
 import com.fyp.backend.service.EventService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.Pagination;
@@ -39,6 +43,9 @@ public class EventController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private EventRegistrationService registrationService;
+
     // Fetch paged event summaries (without the per-event check-in id list)
     @GetMapping
     public Map<String, Object> getAllEvents(
@@ -47,13 +54,64 @@ public class EventController {
             @RequestParam(required = false) Instant to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "startAt,asc") String sort) {
+            @RequestParam(defaultValue = "startAt,asc") String sort,
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
+        Long viewerId = authorizationHeader == null ? null : userService.getUserIdFromToken(authorizationHeader);
         Page<EventSummaryDto> result = eventService.getEvents(
                 status,
                 from,
                 to,
-                PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size), parseSort(sort)));
+                PageRequest.of(Pagination.clampPage(page), Pagination.clampSize(size), parseSort(sort)),
+                viewerId);
         return Pagination.envelope(result.getContent(), result);
+    }
+
+    /** The viewer's sign-up state for one event, with the event itself (one request per share card). */
+    @PreAuthorize("hasRole('VERIFIED')")
+    @GetMapping("/{id}/registration")
+    public ResponseEntity<EventRegistrationStatusDto> getRegistration(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long userId = userService.getUserIdFromToken(authorizationHeader);
+        return ResponseEntity.ok(registrationService.status(id, userId));
+    }
+
+    /**
+     * Registers the caller. Idempotent: already registered answers 200. Refused
+     * sign-up (switched off, started, full) answers 409 with the current state,
+     * whose closedReason says which.
+     */
+    @PreAuthorize("hasRole('VERIFIED')")
+    @PostMapping("/{id}/registration")
+    public ResponseEntity<EventRegistrationStatusDto> register(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long userId = userService.getUserIdFromToken(authorizationHeader);
+        EventRegistrationService.Outcome outcome = registrationService.register(id, userId);
+        return ResponseEntity.status(outcome.accepted() ? HttpStatus.OK : HttpStatus.CONFLICT)
+                .body(outcome.status());
+    }
+
+    /** Cancels the caller's registration. Idempotent; 409 once the event has started. */
+    @PreAuthorize("hasRole('VERIFIED')")
+    @DeleteMapping("/{id}/registration")
+    public ResponseEntity<EventRegistrationStatusDto> cancelRegistration(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long userId = userService.getUserIdFromToken(authorizationHeader);
+        EventRegistrationService.Outcome outcome = registrationService.cancel(id, userId);
+        return ResponseEntity.status(outcome.accepted() ? HttpStatus.OK : HttpStatus.CONFLICT)
+                .body(outcome.status());
+    }
+
+    /** Who has registered; 403 unless the event's visibility setting lets the caller see it. */
+    @PreAuthorize("hasRole('VERIFIED')")
+    @GetMapping("/{id}/registrations")
+    public ResponseEntity<List<EventRegistrantDto>> getRegistrants(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authorizationHeader) {
+        Long userId = userService.getUserIdFromToken(authorizationHeader);
+        return ResponseEntity.ok(registrationService.registrants(id, userId));
     }
 
     // Fetch event by ID

@@ -8,6 +8,15 @@ public class EventDto {
     private String endTime;
     private String location;
 
+    // Registration settings. Every one is a wrapper where null means "leave as it
+    // is": builds released before registration existed send none of them, and an
+    // admin editing an event from one must not silently switch its sign-up off.
+    private Boolean registrationEnabled;
+    /** Null leaves it unchanged; zero or less means unlimited. */
+    private Integer registrationCapacity;
+    /** A RegistrantVisibility name; null leaves it unchanged. */
+    private String registrantVisibility;
+
     // Getters and Setters
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -26,5 +35,14 @@ public class EventDto {
 
     public String getLocation() { return location; }
     public void setLocation(String location) { this.location = location; }
+
+    public Boolean getRegistrationEnabled() { return registrationEnabled; }
+    public void setRegistrationEnabled(Boolean registrationEnabled) { this.registrationEnabled = registrationEnabled; }
+
+    public Integer getRegistrationCapacity() { return registrationCapacity; }
+    public void setRegistrationCapacity(Integer registrationCapacity) { this.registrationCapacity = registrationCapacity; }
+
+    public String getRegistrantVisibility() { return registrantVisibility; }
+    public void setRegistrantVisibility(String registrantVisibility) { this.registrantVisibility = registrantVisibility; }
 
 }

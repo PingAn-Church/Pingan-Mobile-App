@@ -28,6 +28,7 @@ import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
+import com.fyp.backend.repository.EventRegistrationRepository;
 import com.fyp.backend.repository.EventRepository;
 import com.fyp.backend.repository.FormApplicationRepository;
 import com.fyp.backend.repository.GroupConversationRepository;
@@ -96,6 +97,7 @@ public class UserAccountDeletionService {
 
     // Events / forms
     @Autowired private EventRepository eventRepository;
+    @Autowired private EventRegistrationRepository eventRegistrationRepository;
     @Autowired private FormApplicationRepository formApplicationRepository;
 
     // E-learning
@@ -221,6 +223,7 @@ public class UserAccountDeletionService {
         userBlockRepository.deleteByBlockerIdOrBlockedId(userId, userId);
         formApplicationRepository.deleteByContactIgnoreCase(email);
         scrubEventCheckins(userId);
+        eventRegistrationRepository.deleteByUserId(userId);
         anonymizeReports(userId);
         detachAuthoredCourses(userId);
         deleteLearningRows(userId);

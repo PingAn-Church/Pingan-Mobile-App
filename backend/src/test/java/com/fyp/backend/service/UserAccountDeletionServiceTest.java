@@ -30,6 +30,7 @@ import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
+import com.fyp.backend.repository.EventRegistrationRepository;
 import com.fyp.backend.repository.EventRepository;
 import com.fyp.backend.repository.FormApplicationRepository;
 import com.fyp.backend.repository.GroupConversationRepository;
@@ -82,6 +83,7 @@ class UserAccountDeletionServiceTest {
     @Mock private ThreadContentCleanupService threadContentCleanupService;
     @Mock private MessageReportRepository messageReportRepository;
     @Mock private EventRepository eventRepository;
+    @Mock private EventRegistrationRepository eventRegistrationRepository;
     @Mock private FormApplicationRepository formApplicationRepository;
     @Mock private CourseRepository courseRepository;
     @Mock private QuizAttemptRepository quizAttemptRepository;

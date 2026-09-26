@@ -106,6 +106,15 @@ public class Message {
     @Column(name = "responds_to_message_id")
     private Long respondsToMessageId;
 
+    /**
+     * The event an "event" message shares; null on every other message.
+     *
+     * A plain id with no foreign key: deleting an event must not delete the
+     * chat messages that once shared it. The card for a deleted event just says
+     * so, and the stored body still reads sensibly on its own.
+     */
+    @Column(name = "shared_event_id")
+    private Long sharedEventId;
 
 
     // ✅ Updated constructor to initialize conversationType
@@ -122,5 +131,7 @@ public class Message {
                 ? new HashSet<>()
                 : new HashSet<>(messageDto.getMentionedUserIds());
         this.mentionsEveryone = messageDto.isMentionsEveryone();
+        // Validated by ChatService.prepareEventShare before it gets here.
+        this.sharedEventId = messageDto.getSharedEventId();
     }
 }

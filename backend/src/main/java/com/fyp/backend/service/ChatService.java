@@ -46,6 +46,7 @@ public class ChatService {
     private final PushMessages pushMessages;
     private final ConversationReadStateService conversationReadStateService;
     private final AssistantAccountService assistantAccountService;
+    private final EventRepository eventRepository;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -59,7 +60,8 @@ public class ChatService {
                        ContentSanitizer contentSanitizer,
                        PushMessages pushMessages,
                        ConversationReadStateService conversationReadStateService,
-                       AssistantAccountService assistantAccountService) {
+                       AssistantAccountService assistantAccountService,
+                       EventRepository eventRepository) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -73,6 +75,7 @@ public class ChatService {
         this.pushMessages = pushMessages;
         this.conversationReadStateService = conversationReadStateService;
         this.assistantAccountService = assistantAccountService;
+        this.eventRepository = eventRepository;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -256,6 +259,7 @@ public class ChatService {
         return switch (messageType) {
             case "voice" -> pushMessages.text("push.chat.voice");
             case "image" -> pushMessages.text("push.chat.photo");
+            case EVENT_TYPE -> pushMessages.text("push.chat.event", sharedEventTitle(messageDto));
             default -> {
                 String content = messageDto.getContent();
                 yield (content == null || content.trim().isEmpty())
@@ -263,6 +267,14 @@ public class ChatService {
                         : pushMessages.literal(content);
             }
         };
+    }
+
+    /** The shared event's title for the push body, read inside the send transaction. */
+    private String sharedEventTitle(MessageDto messageDto) {
+        Long eventId = messageDto.getSharedEventId();
+        String title = eventId == null ? null
+                : eventRepository.findById(eventId).map(Event::getTitle).orElse(null);
+        return title == null ? "" : title.trim();
     }
 
     /**
@@ -460,6 +472,59 @@ public class ChatService {
         return savedMessage;
     }
 
+    /** Message type of a shared event card. */
+    public static final String EVENT_TYPE = "event";
+
+    /**
+     * Turns an event share request into the message that is stored.
+     *
+     * The client names the event; everything else is ours. The id is checked
+     * against a real event, and the body is written here as one language-neutral
+     * line — "📅 Title · 2026-10-04 10:00 AM · Hall" — rather than accepted from
+     * the client. That line is what every reader without the card sees: builds
+     * that predate event shares draw an unknown type as a text bubble, and it is
+     * also the chat-list preview, the copy text and what the assistant reads. The
+     * card itself loads the live event by id, so an edited event never shows the
+     * stale line to anyone who has the card.
+     *
+     * The id may also arrive as the body, for a client that only fills content.
+     */
+    private void prepareEventShare(MessageDto messageDto) {
+        Long eventId = messageDto.getSharedEventId();
+        if (eventId == null && messageDto.getContent() != null) {
+            try {
+                eventId = Long.parseLong(messageDto.getContent().trim());
+            } catch (NumberFormatException ignored) {
+                // falls through to the missing-id error below
+            }
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("An event share must name an event.");
+        }
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("That event no longer exists."));
+
+        messageDto.setType(EVENT_TYPE);
+        messageDto.setSharedEventId(event.getId());
+        messageDto.setContent(eventShareText(event));
+        messageDto.setMentionedUserIds(new ArrayList<>());
+        messageDto.setMentionsEveryone(false);
+    }
+
+    static String eventShareText(Event event) {
+        StringBuilder text = new StringBuilder("📅 ");
+        text.append(event.getTitle() == null ? "" : event.getTitle().trim());
+        String when = ((event.getDate() == null ? "" : event.getDate().trim()) + " "
+                + (event.getStartTime() == null ? "" : event.getStartTime().trim())).trim();
+        if (!when.isEmpty()) {
+            text.append(" · ").append(when);
+        }
+        if (event.getLocation() != null && !event.getLocation().isBlank()) {
+            text.append(" · ").append(event.getLocation().trim());
+        }
+        return text.toString();
+    }
+
     @Transactional
     public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
@@ -480,9 +545,17 @@ public class ChatService {
             }
         }
 
-        // Objectionable-word filter — only text bodies; voice/image content is a media URL.
-        if (!"voice".equalsIgnoreCase(messageDto.getType()) && !"image".equalsIgnoreCase(messageDto.getType())) {
-            messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
+        if (EVENT_TYPE.equalsIgnoreCase(messageDto.getType())) {
+            // Server-written from the event itself, so there is nothing of the
+            // sender's to filter — see prepareEventShare.
+            prepareEventShare(messageDto);
+        } else {
+            // Only an event share may point at an event.
+            messageDto.setSharedEventId(null);
+            // Objectionable-word filter — only text bodies; voice/image content is a media URL.
+            if (!"voice".equalsIgnoreCase(messageDto.getType()) && !"image".equalsIgnoreCase(messageDto.getType())) {
+                messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
+            }
         }
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
@@ -644,6 +717,11 @@ public class ChatService {
 
         if ("image".equalsIgnoreCase(message.getType())) {
             throw new IllegalArgumentException("Image messages cannot be edited.");
+        }
+        // The body of a share is server-written; editing it would let the text
+        // claim a different event from the card beside it.
+        if (EVENT_TYPE.equalsIgnoreCase(message.getType())) {
+            throw new IllegalArgumentException("Event shares cannot be edited.");
         }
         if (Boolean.TRUE.equals(message.getReported())) {
             throw new ContentUnderReviewException();

@@ -59,6 +59,14 @@ public class DatabaseIntegrityMigration {
             log.warn("Removed {} orphan mention row(s) and {} orphan topic subscription row(s).",
                     orphanMentions, orphanSubscriptions);
         }
+        int orphanRegistrations = jdbc.update("""
+                DELETE FROM event_registrations er
+                WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.id = er.event_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = er.user_id)
+                """);
+        if (orphanRegistrations > 0) {
+            log.warn("Removed {} orphan event registration row(s).", orphanRegistrations);
+        }
 
         ensureCascadeForeignKey(jdbc, "message_mentions", "message_id",
                 "messages", "id", "fk_message_mentions_message");
@@ -68,6 +76,11 @@ public class DatabaseIntegrityMigration {
                 "threads", "id", "fk_thread_subscriptions_thread");
         ensureCascadeForeignKey(jdbc, "thread_subscriptions", "user_id",
                 "users", "id", "fk_thread_subscriptions_user");
+        // Deleting an event, or an account, takes its sign-ups with it.
+        ensureCascadeForeignKey(jdbc, "event_registrations", "event_id",
+                "events", "id", "fk_event_registrations_event");
+        ensureCascadeForeignKey(jdbc, "event_registrations", "user_id",
+                "users", "id", "fk_event_registrations_user");
 
         jdbc.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_group_conversations_single_app_level
