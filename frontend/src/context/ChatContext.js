@@ -567,6 +567,20 @@ export const ChatProvider = ({ children }) => {
     );
   };
 
+  // A group admin pinned or removed the group notice. Arrives on the group
+  // topic (one send reaches the whole church-wide group), routed here by
+  // eventType like moderation events are.
+  const handleGroupNoticeUpdate = (payload) => {
+    if (payload?.conversationId == null) return;
+    setConversations((prev) =>
+      prev.map((conv) =>
+        String(conv.conversationId) === String(payload.conversationId)
+          ? { ...conv, notice: payload.notice || null }
+          : conv
+      )
+    );
+  };
+
   const handleGroupIconUpdate = (msg) => {
     setConversations((prev) =>
       prev.map((conv) =>
@@ -598,6 +612,7 @@ export const ChatProvider = ({ children }) => {
         handleParticipantUpdate,
         handleGroupAdminUpdate,
         handleGroupIconUpdate,
+        handleGroupNoticeUpdate,
         handleModerationEvent,
       }}
     >

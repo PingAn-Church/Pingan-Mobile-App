@@ -46,6 +46,15 @@ export const MESSAGE_KINDS = {
     canTranslate: false,
     canEdit: false,
   },
+  // The "📌 …" line an admin's pin posts. Server-written; quotes the pinned message.
+  notice: {
+    bubble: "notice",
+    preview: previewContent,
+    canCopy: true,
+    canDownload: false,
+    canTranslate: false,
+    canEdit: false,
+  },
 };
 
 /** The kind for a message or a bare type string; unknown and missing types read as text. */

@@ -33,7 +33,15 @@ const CLOSE_MS = 200;
  *
  * New actions go in ACTIONS below; the sticker panel is expected to join them.
  */
-export default function ChatActionSheet({ visible, onClose, onPickPhoto, onShareEvent, language }) {
+export default function ChatActionSheet({
+  visible,
+  onClose,
+  onPickPhoto,
+  onShareEvent,
+  canPostNotice = false,
+  onComposeNotice,
+  language,
+}) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const listHeight = Math.min(460, Math.round(screenHeight * 0.6));
@@ -42,7 +50,8 @@ export default function ChatActionSheet({ visible, onClose, onPickPhoto, onShare
   const [page, setPage] = useState("grid");
   const sheet = useRef(new Animated.Value(0)).current; // 0 hidden → 1 shown
   const pageProgress = useRef(new Animated.Value(0)).current; // 0 grid → 1 events
-  const tiles = useRef([new Animated.Value(0), new Animated.Value(0)]).current;
+  // One per possible tile; extras simply animate nothing.
+  const tiles = useRef(Array.from({ length: 4 }, () => new Animated.Value(0))).current;
 
   const [events, setEvents] = useState([]);
   const [eventsPage, setEventsPage] = useState(0);
@@ -131,6 +140,10 @@ export default function ChatActionSheet({ visible, onClose, onPickPhoto, onShare
   const actions = [
     { key: "photo", icon: "image", tint: "#34C759", label: i18n.t("chatActionPhoto"), onPress: () => onPickPhoto?.() },
     { key: "event", icon: "calendar", tint: "#FF9500", label: i18n.t("chatActionEvent"), onPress: () => goTo("events") },
+    // Group admins only: the next message they send is pinned as the notice.
+    ...(canPostNotice
+      ? [{ key: "notice", icon: "pin", tint: "#B26A00", label: i18n.t("chatActionNotice"), onPress: () => onComposeNotice?.() }]
+      : []),
   ];
 
   if (!rendered) return null;

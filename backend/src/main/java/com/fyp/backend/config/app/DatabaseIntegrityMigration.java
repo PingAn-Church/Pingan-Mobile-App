@@ -138,6 +138,12 @@ public class DatabaseIntegrityMigration {
         // this mapped column every boot; the steady-state churn is documented above.
         ensureForeignKey(jdbc, "messages", "reply_to_message_id",
                 "messages", "id", "fk_messages_reply_to", "SET NULL");
+        // A group's pinned message and its "📌" announcement are pointers: deleting
+        // either message clears the pointer rather than refusing the delete.
+        ensureForeignKey(jdbc, "group_conversations", "pinned_message_id",
+                "messages", "id", "fk_group_conversations_pinned_message", "SET NULL");
+        ensureForeignKey(jdbc, "group_conversations", "pinned_notice_message_id",
+                "messages", "id", "fk_group_conversations_pinned_notice", "SET NULL");
 
         // One private conversation per pair of users. Duplicates created before this
         // guard existed are merged into the oldest conversation FIRST — the unique

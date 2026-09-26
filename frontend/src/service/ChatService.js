@@ -431,6 +431,34 @@ export const toggleReaction = async (messageId, emoji, on) => {
   return response.data;
 };
 
+// Group notice: one pinned message per group, admins only. Each resolves to the
+// conversation with its `notice` attached (null after unpinning).
+export const pinGroupNotice = async (conversationId, messageId) => {
+  const token = await getAuthToken();
+  const response = await axios.put(apiUrl(`/chat/groups/${conversationId}/notice`), null, {
+    params: { messageId },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const unpinGroupNotice = async (conversationId) => {
+  const token = await getAuthToken();
+  const response = await axios.delete(apiUrl(`/chat/groups/${conversationId}/notice`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// { read, total } — how many members have read up to the notice.
+export const getGroupNoticeReaders = async (conversationId) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/groups/${conversationId}/notice/readers`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
 // Who reacted to a message with one emoji: [{ id, firstName, lastName, profileImage, bot, displayNameZh }].
 export const getReactionUsers = async (messageId, emoji) => {
   const token = await getAuthToken();

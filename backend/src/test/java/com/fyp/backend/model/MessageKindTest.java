@@ -57,6 +57,21 @@ class MessageKindTest {
     }
 
     @Test
+    void aGroupNoticeIsServerWrittenAndCannotBeSentByAClient() {
+        assertEquals(MessageKind.NOTICE, MessageKind.of("notice"));
+        assertTrue(MessageKind.NOTICE.serverWritesBody());
+        assertFalse(MessageKind.NOTICE.clientMaySend());
+        assertFalse(MessageKind.NOTICE.isEditable());
+        assertFalse(MessageKind.NOTICE.requiresContent());
+        assertEquals("push.chat.notice", MessageKind.NOTICE.pushBodyKey());
+        // Everything a person types may be sent.
+        assertTrue(MessageKind.TEXT.clientMaySend());
+        assertTrue(MessageKind.IMAGE.clientMaySend());
+        assertTrue(MessageKind.VOICE.clientMaySend());
+        assertTrue(MessageKind.EVENT.clientMaySend());
+    }
+
+    @Test
     void theAssistantReadsMediaAsPlaceholdersAndSharesAsLabelledCards() {
         assertEquals("hello", MessageKind.TEXT.readable("hello"));
         assertEquals("", MessageKind.TEXT.readable(null));
@@ -64,5 +79,7 @@ class MessageKindTest {
         assertEquals("[voice message]", MessageKind.VOICE.readable("https://bucket/x.m4a|12"));
         assertEquals("[shared event] Sunday Service · 2026-10-04 10:00 AM · Hall",
                 MessageKind.EVENT.readable("📅 Sunday Service · 2026-10-04 10:00 AM · Hall"));
+        assertEquals("[group notice] Service moves to 10:00 this week",
+                MessageKind.NOTICE.readable("📌 Service moves to 10:00 this week"));
     }
 }

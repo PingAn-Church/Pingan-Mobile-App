@@ -2,6 +2,7 @@ package com.fyp.backend.service;
 
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.dto.ReactionSummaryDto;
+import com.fyp.backend.dto.ReplyPreviewDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.FanoutPublisher;
@@ -293,6 +294,10 @@ public class ChatService {
         if (quoted == null || quoted.getSender() == null) {
             return null;
         }
+        // A pin quotes the message it pins; that is an announcement, not an answer.
+        if (MessageKind.of(message.getType()) == MessageKind.NOTICE) {
+            return null;
+        }
         User author = quoted.getSender();
         if (author.getId().equals(sender.getId()) || author.isBot()) {
             return null;
@@ -560,6 +565,29 @@ public class ChatService {
         return text.toString();
     }
 
+    /**
+     * Posts the "📌" line that announces a pinned message, as a message from the
+     * admin who pinned it. Server-written and quoting the pinned message, so a
+     * build without the banner still sees what was pinned; pushed as "Group
+     * notice" by the ordinary fan-out. The body is language-neutral: an excerpt
+     * of the pinned words, or the media placeholder for a pinned photo or voice.
+     */
+    public MessageDto postGroupNotice(Long conversationId, User admin, Message pinned) {
+        MessageKind pinnedKind = MessageKind.of(pinned.getType());
+        String body = pinnedKind == MessageKind.TEXT
+                ? ReplyPreviewDto.excerpt(pinned.getContent())
+                : pinnedKind.readable(pinned.getContent());
+
+        MessageDto notice = new MessageDto();
+        notice.setConversationId(conversationId);
+        notice.setSenderId(admin.getId());
+        notice.setConversationType("group");
+        notice.setType(MessageKind.NOTICE.type());
+        notice.setReplyToMessageId(pinned.getId());
+        notice.setContent("📌 " + (body == null ? "" : body));
+        return sendMessageAndBroadcast(notice, "group");
+    }
+
     @Transactional
     public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
@@ -581,15 +609,16 @@ public class ChatService {
         }
 
         MessageKind kind = MessageKind.of(messageDto.getType());
-        if (kind.serverWritesBody()) {
+        if (kind == MessageKind.EVENT) {
             // Server-written from the event itself, so there is nothing of the
             // sender's to filter — see prepareEventShare.
             prepareEventShare(messageDto);
         } else {
             // Only an event share may point at an event.
             messageDto.setSharedEventId(null);
-            // Objectionable-word filter — only text bodies; a media body is a URL.
-            if (!kind.hasMediaBody()) {
+            // Objectionable-word filter — only the sender's own words. A media body
+            // is a URL, and a notice was written by the server (postGroupNotice).
+            if (!kind.hasMediaBody() && !kind.serverWritesBody()) {
                 messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
             }
         }

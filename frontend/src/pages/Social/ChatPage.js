@@ -54,7 +54,11 @@ import {
   markConversationRead,
   toggleReaction,
   getReactionUsers,
+  pinGroupNotice,
+  unpinGroupNotice,
+  getGroupNoticeReaders,
 } from "../../service/ChatService";
+import GroupNoticeBanner from "../../components/Chat/GroupNoticeBanner";
 import { REACTION_EMOJIS, applyOwnReaction, displayEmoji } from "../../utils/reactions";
 import {
   getLocalUri as getCachedMedia,
@@ -692,6 +696,10 @@ export default function ChatPage({ route }) {
   const canMentionEveryone =
     conversationType === "group" &&
     (conversation?.adminIds || []).some((id) => String(id) === String(currentUser?.id));
+  // The same standing decides who may pin the group notice.
+  const isGroupAdmin = canMentionEveryone;
+  // Set from the "+" panel: the next text sent is pinned as the group notice.
+  const [noticeMode, setNoticeMode] = useState(false);
 
   const handleInputTextChange = useCallback(
     (text) => {
@@ -1386,6 +1394,9 @@ export default function ChatPage({ route }) {
     const createdAt = new Date().toISOString();
     const mentions = resolveOutgoingMentions(trimmed);
     const quoted = replyingTo;
+    // Composing a group notice: pin this message once the server has it.
+    const pinAfterSend = noticeMode && isGroupAdmin;
+    setNoticeMode(false);
 
     const optimisticMessage = {
       ...mentions,
@@ -1435,6 +1446,15 @@ export default function ChatPage({ route }) {
       if (persisted?.messageId) {
         replaceOptimisticMessage(localId, persisted);
         clearAckTimeout(localId);
+        if (pinAfterSend) {
+          // The message is sent either way; only the pin can still fail.
+          try {
+            const updated = await pinGroupNotice(conversationId, persisted.messageId);
+            applyConversationNotice(updated?.notice);
+          } catch (pinError) {
+            showAlert(i18n.t("error"), pinError?.response?.data || i18n.t("eventActionFailed"));
+          }
+        }
       }
     } catch (error) {
       updateConversationHistory((history) =>
@@ -1519,6 +1539,83 @@ export default function ChatPage({ route }) {
       () => setHighlightedMessageId((current) => (current === key ? null : current)),
       1800
     );
+  };
+
+  // --- group notice ------------------------------------------------------------
+  const applyConversationNotice = (notice) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        String(conv.conversationId) === String(conversationId) ? { ...conv, notice: notice || null } : conv
+      )
+    );
+  };
+
+  const handlePinMessage = async (message) => {
+    closeContextMenu();
+    if (!message?.messageId || isLocalOnlyMessage(message) || message.pending) return;
+    try {
+      const updated = await pinGroupNotice(conversationId, message.messageId);
+      applyConversationNotice(updated?.notice);
+    } catch (error) {
+      showAlert(i18n.t("error"), error?.response?.data || i18n.t("eventActionFailed"));
+    }
+  };
+
+  const handleUnpin = async () => {
+    const confirmed = await confirmAction({
+      title: i18n.t("unpinMessage"),
+      message: i18n.t("unpinConfirm"),
+      confirmText: i18n.t("unpinMessage"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await unpinGroupNotice(conversationId);
+      applyConversationNotice(null);
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  const showNoticeReaders = async () => {
+    try {
+      const { read, total } = await getGroupNoticeReaders(conversationId);
+      showAlert(i18n.t("noticeReadersTitle"), i18n.t("noticeReaders", { read, total }));
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  // Admin holds the banner: remove it, or see how many have read it.
+  const manageNotice = () => {
+    Alert.alert(i18n.t("groupNotice"), undefined, [
+      { text: i18n.t("noticeReadersTitle"), onPress: showNoticeReaders },
+      { text: i18n.t("unpinMessage"), style: "destructive", onPress: handleUnpin },
+      { text: i18n.t("cancel"), style: "cancel" },
+    ]);
+  };
+
+  // The pinned message first (that is what people want to read); the "📌" line
+  // it posted is newer and more likely still loaded, so it is the fallback.
+  const jumpToNotice = (notice) => {
+    const loaded = (id) =>
+      id != null && messages.some((it) => it.type !== "date" && String(it.messageId) === String(id));
+    if (loaded(notice?.messageId)) return scrollToMessage(notice.messageId);
+    if (loaded(notice?.noticeMessageId)) return scrollToMessage(notice.noticeMessageId);
+    return scrollToMessage(notice?.messageId);
+  };
+
+  const beginNotice = () => {
+    setActionSheetVisible(false);
+    if (!isGroupAdmin || messagingBlocked) return;
+    setReplyingTo(null);
+    if (editingMessage) {
+      setEditingMessage(null);
+      setInputText("");
+    }
+    setNoticeMode(true);
+    setTimeout(() => textInputRef.current?.focus(), 250);
   };
 
   const applyReactions = (messageId, reactions) => {
@@ -1958,6 +2055,8 @@ export default function ChatPage({ route }) {
     !contextMessage.pending &&
     !contextMessage.failed &&
     !isLocalOnlyMessage(contextMessage);
+  // Group admins pin any real message as the notice — except a "📌" line itself.
+  const contextCanPin = contextCanReply && isGroupAdmin && contextKind.bubble !== "notice";
 
   // Actions offered along the bottom of the full-screen photo. Same operations the
   // context menu exposes for an image, minus edit and translate, which are text-only.
@@ -2362,6 +2461,29 @@ export default function ChatPage({ route }) {
         </View>
       )}
 
+      {/* Composing the group notice: the next text sent is pinned. */}
+      {noticeMode && !editingMessage && (
+        <View style={styles.replyBar}>
+          <View style={[styles.replyBarStripe, { backgroundColor: "#B26A00" }]} />
+          <View style={styles.replyBarText}>
+            <Text style={[styles.replyBarName, { color: "#B26A00" }]} numberOfLines={1}>
+              {i18n.t("groupNotice")}
+            </Text>
+            <Text style={styles.replyBarPreview} numberOfLines={1}>
+              {i18n.t("composeNoticeHint")}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setNoticeMode(false)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("cancel")}
+          >
+            <Ionicons name="close-circle" size={22} color="#8E8E93" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* What the next send will quote. Sits where the editing banner does;
           the two never show together (beginReply / beginEditMessage). */}
       {replyingTo && !editingMessage && (
@@ -2477,6 +2599,8 @@ export default function ChatPage({ route }) {
         onClose={() => setActionSheetVisible(false)}
         onPickPhoto={pickPhotoFromSheet}
         onShareEvent={shareEvent}
+        canPostNotice={isGroupAdmin}
+        onComposeNotice={beginNotice}
         language={language}
       />
     </View>
@@ -2491,6 +2615,15 @@ export default function ChatPage({ route }) {
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
+      {conversationType === "group" && conversation?.notice && (
+        <GroupNoticeBanner
+          notice={conversation.notice}
+          language={language}
+          canManage={isGroupAdmin}
+          onOpen={jumpToNotice}
+          onManage={manageNotice}
+        />
+      )}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -2600,6 +2733,15 @@ export default function ChatPage({ route }) {
                 onPress={() => beginReply(contextMenu.message)}
               >
                 <Text style={styles.contextMenuItemText}>{i18n.t("reply")}</Text>
+              </TouchableOpacity>
+            )}
+
+            {contextCanPin && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => handlePinMessage(contextMenu.message)}
+              >
+                <Text style={styles.contextMenuItemText}>{i18n.t("pinMessage")}</Text>
               </TouchableOpacity>
             )}
 

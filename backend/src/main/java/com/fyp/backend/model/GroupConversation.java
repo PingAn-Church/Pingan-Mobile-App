@@ -47,6 +47,25 @@ public class GroupConversation extends Conversation {
     @Column(nullable = false)
     private boolean assistantEnabled = false;
 
+    /**
+     * The group notice: one pinned message, drawn as a banner above the chat.
+     * All null when nothing is pinned. Scalar ids with ON DELETE SET NULL keys
+     * installed by DatabaseIntegrityMigration, so deleting the message clears
+     * the pin rather than blocking the delete.
+     */
+    @Column(name = "pinned_message_id")
+    private Long pinnedMessageId;
+
+    /** The "📌" line posted when it was pinned; "read" counts are taken against it. */
+    @Column(name = "pinned_notice_message_id")
+    private Long pinnedNoticeMessageId;
+
+    @Column(name = "pinned_at")
+    private java.sql.Timestamp pinnedAt;
+
+    @Column(name = "pinned_by_id")
+    private Long pinnedById;
+
     @ManyToMany
     @JoinTable(
             name = "group_conversation_participants",

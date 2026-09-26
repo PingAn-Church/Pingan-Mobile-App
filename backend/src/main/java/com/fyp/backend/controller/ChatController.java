@@ -223,9 +223,14 @@ public class ChatController {
 //        }
 
         // Only words need a body; media carries a URL and a share carries an id.
-        if (MessageKind.of(messageDto.getType()).requiresContent() &&
+        MessageKind kind = MessageKind.of(messageDto.getType());
+        if (kind.requiresContent() &&
                 (messageDto.getContent() == null || messageDto.getContent().trim().isEmpty())) {
             return ResponseEntity.badRequest().body("Message content cannot be empty.");
+        }
+        // A group notice is posted by the pin action, never typed.
+        if (!kind.clientMaySend()) {
+            return ResponseEntity.badRequest().body("This kind of message cannot be sent directly.");
         }
 
         try {
@@ -328,6 +333,57 @@ public class ChatController {
         }
         try {
             return ResponseEntity.ok(messageReactionService.reactors(messageId, emoji, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // --- Group notice (one pinned message per group; admins only) -----------------
+
+    /** Pins a message as the group notice; answers the conversation with its notice attached. */
+    @PutMapping("/groups/{conversationId}/notice")
+    public ResponseEntity<?> pinGroupNotice(@PathVariable Long conversationId,
+                                            @RequestParam Long messageId,
+                                            HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(conversationService.pinMessage(conversationId, messageId, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/groups/{conversationId}/notice")
+    public ResponseEntity<?> unpinGroupNotice(@PathVariable Long conversationId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(conversationService.unpinMessage(conversationId, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** {@code {read, total}}: how many members have read up to the notice. Admins only. */
+    @GetMapping("/groups/{conversationId}/notice/readers")
+    public ResponseEntity<?> groupNoticeReaders(@PathVariable Long conversationId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(conversationService.noticeReaders(conversationId, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

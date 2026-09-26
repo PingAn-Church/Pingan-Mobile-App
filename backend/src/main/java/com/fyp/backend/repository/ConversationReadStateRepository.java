@@ -18,6 +18,9 @@ public interface ConversationReadStateRepository extends JpaRepository<Conversat
 
     long countByUserId(Long userId);
 
+    /** Members whose read watermark has passed a message — how many have seen the group notice. */
+    long countByConversationIdAndLastReadMessageIdGreaterThanEqual(Long conversationId, Long messageId);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM ConversationReadState r WHERE r.conversationId = :conversationId AND r.userId = :userId")
     void deleteByConversationIdAndUserId(@Param("conversationId") Long conversationId,

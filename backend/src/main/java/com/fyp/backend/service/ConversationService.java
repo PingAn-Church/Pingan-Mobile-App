@@ -41,6 +41,8 @@ public class ConversationService {
     private final OssCleanupService ossCleanupService;
     private final ConversationReadStateService conversationReadStateService;
     private final AssistantAccountService assistantAccountService;
+    private final ChatService chatService;
+    private final com.fyp.backend.repository.ConversationReadStateRepository conversationReadStateRepository;
 
     @Autowired
     public ConversationService(GroupConversationRepository groupConversationRepository,
@@ -53,7 +55,9 @@ public class ConversationService {
                                ConversationMuteRepository conversationMuteRepository,
                                OssCleanupService ossCleanupService,
                                ConversationReadStateService conversationReadStateService,
-                               AssistantAccountService assistantAccountService) {
+                               AssistantAccountService assistantAccountService,
+                               ChatService chatService,
+                               com.fyp.backend.repository.ConversationReadStateRepository conversationReadStateRepository) {
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
         this.userRepository = userRepository;
@@ -65,6 +69,8 @@ public class ConversationService {
         this.ossCleanupService = ossCleanupService;
         this.conversationReadStateService = conversationReadStateService;
         this.assistantAccountService = assistantAccountService;
+        this.chatService = chatService;
+        this.conversationReadStateRepository = conversationReadStateRepository;
     }
 
     /**
@@ -125,6 +131,149 @@ public class ConversationService {
         return withAssistantIdentity(new ConversationDto(group));
     }
 
+    // --- Group notice -------------------------------------------------------------
+
+    /**
+     * Pins one message as the group notice. Admins only.
+     *
+     * Two things happen, in this order: a "📌" line quoting the message is posted
+     * into the chat as the admin (so it is pushed like any message, shows in
+     * history, and a build without the banner still sees what was pinned), then
+     * the pin is recorded and every open chat is told over the group topic — one
+     * send, which is what the church-wide group needs.
+     */
+    @Transactional
+    public ConversationDto pinMessage(Long conversationId, Long messageId, Long currentUserId) {
+        GroupConversation group = requireGroupAdmin(conversationId, currentUserId,
+                "Only group admins can pin a message.");
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        if (message.getConversation() == null || !message.getConversation().getId().equals(conversationId)) {
+            throw new IllegalArgumentException("That message is not in this group.");
+        }
+        if (Boolean.TRUE.equals(message.getReported())) {
+            throw new IllegalArgumentException("This message is under review.");
+        }
+        if (com.fyp.backend.model.MessageKind.of(message.getType()) == com.fyp.backend.model.MessageKind.NOTICE) {
+            throw new IllegalArgumentException("Pin the message itself, not its announcement.");
+        }
+        User admin = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Current user not found"));
+
+        com.fyp.backend.dto.MessageDto announcement = chatService.postGroupNotice(conversationId, admin, message);
+
+        Timestamp now = now();
+        group.setPinnedMessageId(message.getId());
+        group.setPinnedNoticeMessageId(announcement.getMessageId());
+        group.setPinnedAt(now);
+        group.setPinnedById(currentUserId);
+        group.setUpdatedAt(now);
+        groupConversationRepository.save(group);
+
+        ConversationDto dto = groupDto(group, admin);
+        broadcastNotice(conversationId, dto.getNotice());
+        return dto;
+    }
+
+    /** Removes the group notice. Admins only. The "📌" line stays in history as a record. */
+    @Transactional
+    public ConversationDto unpinMessage(Long conversationId, Long currentUserId) {
+        GroupConversation group = requireGroupAdmin(conversationId, currentUserId,
+                "Only group admins can remove the notice.");
+        group.setPinnedMessageId(null);
+        group.setPinnedNoticeMessageId(null);
+        group.setPinnedAt(null);
+        group.setPinnedById(null);
+        group.setUpdatedAt(now());
+        groupConversationRepository.save(group);
+
+        ConversationDto dto = groupDto(group, null);
+        broadcastNotice(conversationId, null);
+        return dto;
+    }
+
+    /**
+     * {@code {read, total}}: how many members have read up to the notice. Admins
+     * only. Read means the member's watermark has passed the "📌" line — the
+     * pinned message itself may be days older than the pin.
+     */
+    @Transactional
+    public Map<String, Object> noticeReaders(Long conversationId, Long currentUserId) {
+        GroupConversation group = requireGroupAdmin(conversationId, currentUserId,
+                "Only group admins can see who has read the notice.");
+        long total = groupConversationRepository.countParticipants(conversationId);
+        Long marker = group.getPinnedNoticeMessageId() != null
+                ? group.getPinnedNoticeMessageId()
+                : group.getPinnedMessageId();
+        long read = marker == null
+                ? 0
+                : conversationReadStateRepository
+                        .countByConversationIdAndLastReadMessageIdGreaterThanEqual(conversationId, marker);
+        return Map.of("read", Math.min(read, total), "total", total);
+    }
+
+    private GroupConversation requireGroupAdmin(Long conversationId, Long currentUserId, String denial) {
+        GroupConversation group = groupConversationRepository.findById(conversationId)
+                .orElseThrow(() -> new IllegalArgumentException("Group conversation not found"));
+        if (group.getAdmins() == null || group.getAdmins().stream()
+                .noneMatch(admin -> admin.getId().equals(currentUserId))) {
+            throw new AccessDeniedException(denial);
+        }
+        return group;
+    }
+
+    /** A group's DTO with everything a client needs stamped on: assistant identity, size, notice. */
+    private ConversationDto groupDto(GroupConversation group, User viewer) {
+        ConversationDto dto = withAssistantIdentity(new ConversationDto(group));
+        if (dto.isAppLevel()) {
+            dto.setParticipantCount(groupConversationRepository.countParticipants(group.getId()));
+        }
+        withNotice(dto, group, viewer);
+        return dto;
+    }
+
+    /**
+     * Attaches the pinned message, drawn for this viewer — a reported original is
+     * hidden the way a quote is; a null viewer gets the cautious view.
+     */
+    private void withNotice(ConversationDto dto, GroupConversation group, User viewer) {
+        if (dto == null || group == null || group.getPinnedMessageId() == null) {
+            return;
+        }
+        Message pinned = messageRepository.findById(group.getPinnedMessageId()).orElse(null);
+        if (pinned == null) {
+            return;
+        }
+        User pinnedBy = group.getPinnedById() == null
+                ? null
+                : userRepository.findById(group.getPinnedById()).orElse(null);
+        dto.setNotice(new com.fyp.backend.dto.GroupNoticeDto(
+                pinned.getId(),
+                group.getPinnedNoticeMessageId(),
+                com.fyp.backend.dto.ReplyPreviewDto.of(pinned, viewer),
+                group.getPinnedAt() == null ? null : group.getPinnedAt().getTime(),
+                group.getPinnedById(),
+                com.fyp.backend.dto.MessageDto.displayFirstName(pinnedBy),
+                com.fyp.backend.dto.MessageDto.displayLastName(pinnedBy)));
+    }
+
+    /**
+     * Tells every open chat the notice changed, on the group topic. The client
+     * routes on eventType, the same way moderation events already travel there.
+     */
+    private void broadcastNotice(Long conversationId, com.fyp.backend.dto.GroupNoticeDto notice) {
+        Map<String, Object> event = new java.util.LinkedHashMap<>();
+        event.put("eventType", "GROUP_NOTICE");
+        event.put("conversationId", conversationId);
+        event.put("notice", notice);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messagingTemplate.convertAndSend("/topic/conversation-" + conversationId, event);
+            }
+        });
+    }
+
     /**
      * The app-level group's roster and admin list are derived from who is verified
      * and who is an app admin (see AppGroupChatService), so hand-editing either
@@ -173,9 +322,14 @@ public class ConversationService {
     public List<ConversationDto> getConversationsByUserId(Long userId) {
         List<ConversationDto> conversations = new ArrayList<>();
 
-        // ✅ Fetch group conversations using the correct method
+        // ✅ Fetch group conversations using the correct method. The entities are
+        // kept by id so the pinned notice can be attached below.
+        Map<Long, GroupConversation> groupsById = new java.util.HashMap<>();
         groupConversationRepository.findByParticipantId(userId)
-                .forEach(gc -> conversations.add(new ConversationDto(gc)));
+                .forEach(gc -> {
+                    groupsById.put(gc.getId(), gc);
+                    conversations.add(new ConversationDto(gc));
+                });
 
         // ✅ Fetch private conversations using the correct method
         privateConversationRepository.findByUserId(userId)
@@ -257,6 +411,7 @@ public class ConversationService {
                 c.setParticipantCount(groupConversationRepository.countParticipants(c.getConversationId()));
             }
             withAssistantIdentity(c);
+            withNotice(c, groupsById.get(c.getConversationId()), viewer);
         }
 
         return conversations;
@@ -265,11 +420,8 @@ public class ConversationService {
     public ConversationDto getConversationById(Long conversationId) {
         Optional<GroupConversation> groupConversationOpt = groupConversationRepository.findById(conversationId);
         if (groupConversationOpt.isPresent()) {
-            ConversationDto dto = withAssistantIdentity(new ConversationDto(groupConversationOpt.get()));
-            if (dto.isAppLevel()) {
-                dto.setParticipantCount(groupConversationRepository.countParticipants(conversationId));
-            }
-            return dto;
+            // No viewer here, so a reported pinned message is shown hidden.
+            return groupDto(groupConversationOpt.get(), null);
         }
         Optional<PrivateConversation> privateConversationOpt = privateConversationRepository.findById(conversationId);
         if (privateConversationOpt.isPresent()) {

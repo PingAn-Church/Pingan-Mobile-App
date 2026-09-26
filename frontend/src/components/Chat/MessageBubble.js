@@ -110,10 +110,16 @@ export default function MessageBubble({
   highlighted = false,
 }) {
   const isMe = item.senderId === currentUserId;
+  const kind = kindOf(item);
+  // Reported messages are shadow-hidden: everyone except the sender sees
+  // a muted placeholder until an admin resolves the report.
+  const isShadowHidden = !!item.reported && !isMe;
+  // A pinned-notice line is the group speaking, centred and unsigned.
+  const isNotice = !isShadowHidden && kind.bubble === "notice";
   // In a group there is no other way to tell who is speaking, so incoming
   // messages carry the sender's face and name. Your own don't — you know
   // who you are — and a private chat has exactly one other person.
-  const showsSender = conversationType === "group" && !isMe;
+  const showsSender = conversationType === "group" && !isMe && !isNotice;
   // Only the first message of a run is labelled; repeating the avatar and name
   // down a burst of five replies is just noise.
   const startsRun =
@@ -130,10 +136,6 @@ export default function MessageBubble({
   const senderName = senderDisplayName(item, language);
   const isFailed = item.failed;
   const isPending = item.pending;
-  // Reported messages are shadow-hidden: everyone except the sender sees
-  // a muted placeholder until an admin resolves the report.
-  const isShadowHidden = !!item.reported && !isMe;
-  const kind = kindOf(item);
   const isVoice = !isShadowHidden && kind.bubble === "voice";
   const isImage = !isShadowHidden && kind.bubble === "image";
   // A shared event draws as a card. Without an id (should not happen)
@@ -150,7 +152,7 @@ export default function MessageBubble({
     translation?.targetLang === expectedTargetLanguage &&
     translation?.sourceContent === String(item.content || "").trim();
   const quote = isShadowHidden ? null : item.replyTo || null;
-  const quoteTone = isImage || isEvent ? "plain" : isMe ? "sent" : "received";
+  const quoteTone = isImage || isEvent || isNotice ? "plain" : isMe ? "sent" : "received";
 
   const longPress = onLongPress ? (event) => onLongPress(item, event) : undefined;
 
@@ -209,11 +211,13 @@ export default function MessageBubble({
       activeOpacity={0.7}
       style={[
         styles.message,
-        isVoice
-          ? (isMe ? styles.voiceMessageBubbleSent : styles.voiceMessageBubbleReceived)
-          : isImage || isEvent
-            ? (isMe ? styles.imageMessageBubbleSent : styles.imageMessageBubbleReceived)
-            : (isMe ? styles.sentMessage : styles.receivedMessage),
+        isNotice
+          ? styles.noticeMessage
+          : isVoice
+            ? (isMe ? styles.voiceMessageBubbleSent : styles.voiceMessageBubbleReceived)
+            : isImage || isEvent
+              ? (isMe ? styles.imageMessageBubbleSent : styles.imageMessageBubbleReceived)
+              : (isMe ? styles.sentMessage : styles.receivedMessage),
         isEvent ? styles.eventMessageBubble : null,
         isVoice ? styles.voiceMessageBubble : null,
         isFailed ? styles.failedMessage : null,
@@ -221,6 +225,13 @@ export default function MessageBubble({
         showsSender ? styles.groupMessageBubble : null,
       ]}
     >
+      {isNotice && (
+        <View style={styles.noticeHeader}>
+          <Ionicons name="pin" size={13} color="#B26A00" />
+          <Text style={styles.noticeHeaderText}>{i18n.t("groupNotice")}</Text>
+        </View>
+      )}
+
       <QuoteBlock quote={quote} tone={quoteTone} language={language} onPress={onQuotePress} />
 
       {isShadowHidden ? (
@@ -267,6 +278,12 @@ export default function MessageBubble({
             </View>
           );
         })()
+      ) : isNotice ? (
+        <View style={styles.messageContentContainer}>
+          <Text selectable style={[styles.content, styles.noticeContent]}>
+            {String(item.content || "").replace(/^📌\s*/, "")}
+          </Text>
+        </View>
       ) : (
         <View style={styles.messageContentContainer}>
           <Text
@@ -309,7 +326,11 @@ export default function MessageBubble({
       <Text
         style={[
           styles.timestamp,
-          isImage || isEvent ? styles.imageTimestamp : (isMe ? styles.timestampSent : styles.timestampReceived),
+          isImage || isEvent
+            ? styles.imageTimestamp
+            : isMe && !isNotice
+              ? styles.timestampSent
+              : styles.timestampReceived,
           isVoice ? styles.voiceTimestamp : null,
         ]}
       >
@@ -510,6 +531,28 @@ const styles = StyleSheet.create({
   // The card brings its own frame; the bubble only needs to let it be wider.
   eventMessageBubble: {
     maxWidth: 260,
+  },
+  // A pinned-notice line: centred, cream, the group's voice rather than a person's.
+  noticeMessage: {
+    alignSelf: "center",
+    maxWidth: "88%",
+    backgroundColor: "#FFF8E1",
+    borderWidth: 1,
+    borderColor: "#F1DFA3",
+  },
+  noticeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 6,
+  },
+  noticeHeaderText: {
+    fontSize: webFontSize(12),
+    fontWeight: "700",
+    color: "#B26A00",
+  },
+  noticeContent: {
+    color: "#3C3C43",
   },
   failedMessage: {
     borderWidth: 1,
