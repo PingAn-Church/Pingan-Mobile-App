@@ -39,6 +39,7 @@
   "endTimeRequired": "请选择结束时间",
   "locationRequired": "请输入活动地点",
   "enterValidEmail": "请输入有效的电子邮箱地址",
+  "changeEmailContactAdmin": "如果需要更换邮箱绑定请联系管理员",
   "passwordCheck": "密码长度必须至少为 8 个字符",
   "ok": "好的",
   "unknown": "未知",

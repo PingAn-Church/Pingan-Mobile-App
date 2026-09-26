@@ -39,6 +39,7 @@
   "endTimeRequired": "Please select an end time.",
   "locationRequired": "Please enter the event location.",
   "enterValidEmail": "Please enter a valid email address.",
+  "changeEmailContactAdmin": "To change the email linked to your account, please contact an administrator.",
   "passwordCheck": "Password must be at least 8 characters long.",
   "ok": "OK",
   "unknown": "Unknown",
