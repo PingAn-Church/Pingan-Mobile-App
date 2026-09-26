@@ -13,6 +13,10 @@ import java.util.Set;
 @Entity
 @Data
 @NoArgsConstructor
+// Lazy Message proxies (a page of replies' quoted originals) load in batches of
+// 30 rather than one query each. Hibernate 6 only accepts this on the entity,
+// not on the @ManyToOne that points at it.
+@org.hibernate.annotations.BatchSize(size = 30)
 @Table(name = "messages", indexes = {
         // Backs keyset pagination of chat history (newest-first within a conversation).
         @Index(name = "idx_messages_conversation_id_id", columnList = "conversation_id, id"),
@@ -123,18 +127,17 @@ public class Message {
      * and by the assistant on its answers so each sits under its question.
      *
      * An association rather than a bare id so a DTO can draw the quote wherever
-     * it is built; @BatchSize keeps a page of history to one extra query for all
-     * its quotes instead of one each. On the database side the key is ON DELETE
-     * SET NULL, installed by DatabaseIntegrityMigration — the key Hibernate
-     * generates on its own would refuse to delete a message anyone has replied
-     * to. The reply stays; only its quote disappears.
+     * it is built; the class-level @BatchSize on Message keeps a page of history
+     * to one extra query for all its quotes instead of one each. On the database
+     * side the key is ON DELETE SET NULL, installed by DatabaseIntegrityMigration
+     * — the key Hibernate generates on its own would refuse to delete a message
+     * anyone has replied to. The reply stays; only its quote disappears.
      *
      * Excluded from equals/hashCode/toString: a self-reference in Lombok's
      * generated methods would force the lazy load, or worse, chase the chain.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reply_to_message_id")
-    @org.hibernate.annotations.BatchSize(size = 30)
     @lombok.ToString.Exclude
     @lombok.EqualsAndHashCode.Exclude
     private Message replyTo;
