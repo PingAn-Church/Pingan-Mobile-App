@@ -42,6 +42,7 @@ import defaultProfileImage from "../../../assets/user.png";
 import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
+import { messagePreview } from "../../utils/messageKinds";
 import {
   compareConversations,
   groupDisplayName,
@@ -257,15 +258,9 @@ const ChatHomePage = () => {
       }
     }
 
-    // ✅ Replace non-text content previews with user-friendly labels
-    const messageType = String(lastMessage.type || "").toLowerCase();
-    if (messageType === "image") {
-      lastMessage.previewContent = i18n.t("chatPreviewPhoto");
-    } else if (messageType === "voice") {
-      lastMessage.previewContent = i18n.t("chatPreviewVoice");
-    } else {
-      lastMessage.previewContent = lastMessage.content;
-    }
+    // Non-text kinds preview as a label ("🖼️ Photo"), text as itself — see
+    // utils/messageKinds, which every screen showing a message consults.
+    lastMessage.previewContent = messagePreview(lastMessage);
 
     const deliveryStatuses = Object.values(lastMessage.deliveryStatus || {});
 

@@ -79,27 +79,22 @@ import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../.
 import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { setActiveConversation, clearActiveConversation } from "../../utils/activeConversation";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
-import VoicePlayer from "../../components/Chat/VoicePlayer";
 import ImageViewer from "../../components/Chat/ImageViewer";
 import ComposerActionButton from "../../components/Chat/ComposerActionButton";
 import ChatActionSheet from "../../components/Chat/ChatActionSheet";
-import EventShareCard from "../../components/Chat/EventShareCard";
+import MessageBubble from "../../components/Chat/MessageBubble";
+import { kindOf, messagePreview } from "../../utils/messageKinds";
+import {
+  getMessageDate,
+  resolveTargetTranslationLanguage,
+  webFontSize,
+} from "../../utils/chatMessageDisplay";
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
 import { reportMessage } from "../../service/ReportService";
 import { getBlockStatus, getBlockedIds } from "../../service/BlockService";
 import { parseServerDate } from "../../utils/serverDate";
-
-// Shared server-UTC normalization — the local variant this replaces only
-// covered the space-separated shape; see utils/serverDate for the full contract.
-const getMessageDate = (msg) =>
-  parseServerDate(msg?.timestamp) || parseServerDate(msg?.createdAt) || new Date(0);
-
-const formatTime = (msg) => {
-  const date = getMessageDate(msg);
-  return new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" }).format(date);
-};
 
 const sortByTimeAscending = (a, b) => getMessageDate(a) - getMessageDate(b);
 const dedupeHistoryByMessageId = (history = []) => {
@@ -135,14 +130,6 @@ const dedupeHistoryByMessageId = (history = []) => {
 };
 const isLocalOnlyMessage = (message) =>
   typeof message?.messageId === "string" && message.messageId.startsWith("local-");
-const parseVoiceContent = (content) => {
-  if (!content) return { audioUrl: "", duration: 0 };
-  const [audioUrl, durationPart] = String(content).split("|");
-  return {
-    audioUrl: audioUrl || "",
-    duration: Number.parseInt(durationPart, 10) || 0,
-  };
-};
 const getVoiceUploadConfig = (audioUri) => {
   const cleanUri = String(audioUri || "").split("?")[0].split("#")[0];
   const extension = cleanUri.includes(".")
@@ -189,55 +176,6 @@ const blobToDataUrl = (blob) =>
     reader.readAsDataURL(blob);
   });
 
-const normalizeTranslationLanguage = (languageCode) => {
-  const raw = String(languageCode || "en").trim().toLowerCase();
-  const base = raw.split("-")[0];
-  return base === "zh" ? "zh" : "en";
-};
-
-const containsChineseChars = (value) => /[\u3400-\u9FFF\uF900-\uFAFF]/.test(String(value || ""));
-const containsLatinChars = (value) => /[A-Za-z]/.test(String(value || ""));
-
-const resolveTargetTranslationLanguage = (content, appLanguage) => {
-  if (containsChineseChars(content)) {
-    return "en";
-  }
-
-  if (containsLatinChars(content)) {
-    return "zh";
-  }
-
-  return normalizeTranslationLanguage(appLanguage);
-};
-
-const normalizeDeliveryState = (value) => {
-  const raw = String(value || "").toUpperCase();
-  if (raw === "READ") return "seen";
-  if (raw === "DELIVERED") return "delivered";
-  if (raw === "SENT") return "sent";
-  return null;
-};
-
-const resolveOutgoingDeliveryState = (deliveryStatusMap, currentUserId) => {
-  const recipientStates = Object.entries(deliveryStatusMap || {})
-    .filter(([recipientId]) => String(recipientId) !== String(currentUserId))
-    .map(([, status]) => normalizeDeliveryState(status))
-    .filter(Boolean);
-
-  if (!recipientStates.length) return null;
-  if (recipientStates.includes("seen")) return "seen";
-  if (recipientStates.includes("delivered")) return "delivered";
-  if (recipientStates.includes("sent")) return "sent";
-  return null;
-};
-
-const formatDeliveryStateLabel = (state) => {
-  if (state === "seen") return "Seen";
-  if (state === "delivered") return "Delivered";
-  if (state === "sent") return "Sent";
-  return "";
-};
-
 /**
  * The @token being typed, or null when the picker should stay shut.
  *
@@ -260,163 +198,15 @@ const applyMentionToText = (text, label) =>
     return `${lead}@${label} `;
   });
 
-const escapeForRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
- * Splits message text so the names it calls out can be drawn differently from
- * the rest. Falls back to plain text when a mentioned name can't be resolved —
- * a missing highlight is better than a crash or a mangled message.
- */
-const splitOnMentions = (content, labels) => {
-  const text = String(content ?? "");
-  const usable = (labels || []).filter(Boolean).map(escapeForRegex);
-  if (!usable.length) return [{ text, isMention: false }];
-
-  const pattern = new RegExp(`@(?:${usable.join("|")})`, "g");
-  const parts = [];
-  let cursor = 0;
-  let match;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      parts.push({ text: text.slice(cursor, match.index), isMention: false });
-    }
-    parts.push({ text: match[0], isMention: true });
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < text.length) parts.push({ text: text.slice(cursor), isMention: false });
-  return parts.length ? parts : [{ text, isMention: false }];
-};
-
 const getConversationPreview = (conversation, currentUserId) => {
   const history = conversation?.chatHistory || [];
   const lastMessage = history[history.length - 1];
   if (!lastMessage) return i18n.t("chat");
 
-  const messageType = String(lastMessage?.type || "text").toLowerCase();
-  let content = String(lastMessage?.content || "");
-
-  if (messageType === "image") content = i18n.t("chatPreviewPhoto");
-  if (messageType === "voice") content = i18n.t("chatPreviewVoice");
-
+  const content = messagePreview(lastMessage);
   const isMine = String(lastMessage?.senderId) === String(currentUserId);
   return isMine ? `${i18n.t("chatPreviewYou")}: ${content}` : content;
 };
-
-const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
-
-// Bounds a chat photo is drawn inside. Wide enough to read, short enough that one
-// tall screenshot doesn't push the rest of the conversation off screen.
-const IMAGE_BUBBLE_MAX_WIDTH = 240;
-const IMAGE_BUBBLE_MAX_HEIGHT = 320;
-
-/**
- * Largest box with the photo's own proportions that fits the bounds above, so
- * nothing is cropped. Replaces the fixed square, which cut the sides off
- * panoramas and the top and bottom off tall shots.
- */
-const fitImageWithinBubble = (naturalWidth, naturalHeight) => {
-  const ratio = naturalWidth / naturalHeight;
-  let width = IMAGE_BUBBLE_MAX_WIDTH;
-  let height = width / ratio;
-
-  if (height > IMAGE_BUBBLE_MAX_HEIGHT) {
-    height = IMAGE_BUBBLE_MAX_HEIGHT;
-    width = height * ratio;
-  }
-
-  return { width: Math.round(width), height: Math.round(height) };
-};
-
-// Defined at module scope (NOT inside ChatPage) on purpose: a component declared
-// inside another component is a brand-new type on every parent render, so React
-// unmounts and remounts it each time — which makes every chat <Image> reload from
-// the network (the "flashing" in conversation history). At module scope the type is
-// stable, so loaded images survive the chat's frequent re-renders. React.memo skips
-// re-rendering rows whose props are unchanged.
-const ChatImage = React.memo(function ChatImage({
-  message,
-  isMe,
-  resolveUri,
-  onPress,
-  onLongPress,
-}) {
-  // Source priority: the local file (sender's own freshly-sent image — instant and
-  // survives the optimistic -> persisted swap), then the on-device media cache, then
-  // the remote presigned URL. peekCachedMedia seeds the first render synchronously so
-  // an already-cached image never flashes through a spinner.
-  const [uri, setUri] = useState(
-    () => message.localPreviewUri || peekCachedMedia(message.content) || null
-  );
-  const [displaySize, setDisplaySize] = useState(null);
-
-  useEffect(() => {
-    let active = true;
-    if (message.localPreviewUri) {
-      setUri(message.localPreviewUri);
-      return () => {
-        active = false;
-      };
-    }
-    // Serve from the local cache (downloads once on a miss); fall back to the remote
-    // presigned URL only if it couldn't be cached.
-    getCachedMedia(message.content, resolveUri).then(async (local) => {
-      if (!active) return;
-      setUri(local || (await resolveUri(message.content)));
-    });
-    return () => {
-      active = false;
-    };
-  }, [message.content, message.localPreviewUri, resolveUri]);
-
-  // Sized from the photo's own proportions rather than a fixed square, so a tall
-  // or panoramic shot is shown whole instead of centre-cropped. Until getSize
-  // answers, styles.chatImage's square stands in.
-  useEffect(() => {
-    if (!uri) return undefined;
-    let active = true;
-    Image.getSize(
-      uri,
-      (width, height) => {
-        if (active && width > 0 && height > 0) setDisplaySize(fitImageWithinBubble(width, height));
-      },
-      // Unreadable dimensions just keep the fallback box.
-      () => {}
-    );
-    return () => {
-      active = false;
-    };
-  }, [uri]);
-
-  if (!uri) {
-    return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
-  }
-
-  return (
-    // The long press lives here rather than on the surrounding bubble: this
-    // Touchable claims the touch first, so a handler on the parent would never
-    // fire for a press that lands on the photo.
-    <TouchableOpacity
-      activeOpacity={0.92}
-      onPress={() => onPress(message, uri)}
-      onLongPress={onLongPress ? (event) => onLongPress(message, event) : undefined}
-      delayLongPress={300}
-    >
-      <Image
-        source={{ uri }}
-        style={[
-          styles.chatImage,
-          displaySize,
-          isMe ? styles.chatImageSent : styles.chatImageReceived,
-        ]}
-      />
-      {message.pending ? (
-        <View style={styles.imageUploadOverlay}>
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        </View>
-      ) : null}
-    </TouchableOpacity>
-  );
-});
 
 const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
   iconUri,
@@ -2005,11 +1795,14 @@ export default function ChatPage({ route }) {
     (!editingMessage && isSendingText);
 
   const contextMessage = contextMenu.message;
+  // What the long-press menu may offer is decided by the message's kind — see
+  // utils/messageKinds, the client twin of the server's MessageKind.
+  const contextKind = kindOf(contextMessage);
   const contextMessageType = String(contextMessage?.type || "").toLowerCase();
   const contextMessageIdKey = String(contextMessage?.messageId || "");
   const contextSourceContent = String(contextMessage?.content || "").trim();
-  const contextCanCopy = contextMessageType === "text" || contextMessageType === "image";
-  const contextCanDownload = contextMessageType === "image";
+  const contextCanCopy = contextKind.canCopy;
+  const contextCanDownload = contextKind.canDownload;
   const contextTargetLanguage = resolveTargetTranslationLanguage(
     contextSourceContent,
     language
@@ -2017,7 +1810,7 @@ export default function ChatPage({ route }) {
   const contextTranslation = contextMessageIdKey ? translations[contextMessageIdKey] : null;
   const contextCanTranslate =
     isTranslationEnabled &&
-    contextMessageType === "text" &&
+    contextKind.canTranslate &&
     !!contextMessageIdKey &&
     !!contextSourceContent;
   const contextHasVisibleTranslation =
@@ -2578,260 +2371,25 @@ export default function ChatPage({ route }) {
             );
           }
 
-          const isMe = item.senderId === currentUser?.id;
-          // In a group there is no other way to tell who is speaking, so incoming
-          // messages carry the sender's face and name. Your own don't — you know
-          // who you are — and a private chat has exactly one other person.
-          const showsSender = conversationType === "group" && !isMe;
-          // The list is inverted, so the message drawn ABOVE this one is the next
-          // index. Only the first message of a run is labelled; repeating the
-          // avatar and name down a burst of five replies is just noise.
-          const above = messages[index + 1];
-          const startsRun =
-            !above ||
-            above.type === "date" ||
-            String(above.senderId) !== String(item.senderId);
-          // The message carries the sender's avatar path itself, so this still works
-          // in the app-level group, whose roster is deliberately not sent to clients.
-          // The directory is the fallback for messages stored before that field existed.
-          const senderAvatarPath =
-            item.senderProfileImage || userDirectory[String(item.senderId)]?.profileImage || null;
-          // The assistant is named in both languages and carries no stored avatar,
-          // so it is drawn from the app icon and named for whoever is reading.
-          const isAssistant = !!item.senderBot;
-          const senderName = isAssistant
-            ? (String(language || "").startsWith("zh") && item.senderDisplayNameZh) ||
-              item.senderFirstName ||
-              i18n.t("unknownUser")
-            : formatName(item.senderFirstName, item.senderLastName) || i18n.t("unknownUser");
-          const isFailed = item.failed;
-          const isPending = item.pending;
-          // Reported messages are shadow-hidden: everyone except the sender sees
-          // a muted placeholder until an admin resolves the report.
-          const isShadowHidden = !!item.reported && !isMe;
-          const messageType = (item.type || "").toLowerCase();
-          const isVoice = !isShadowHidden && messageType === "voice";
-          const isImage = !isShadowHidden && messageType === "image";
-          // A shared event draws as a card. Without an id (should not happen)
-          // it falls through to the text bubble, which shows the stored line.
-          const isEvent = !isShadowHidden && messageType === "event" && item.sharedEventId != null;
-          const messageIdKey = String(item.messageId || "");
-          const translationEntry = messageIdKey ? translations[messageIdKey] : null;
-          const expectedTargetLanguage = resolveTargetTranslationLanguage(
-            item.content,
-            language
-          );
-          const outgoingDeliveryState = isMe
-            ? resolveOutgoingDeliveryState(item.deliveryStatus, currentUser?.id)
-            : null;
-          const showOutgoingDeliveryState =
-            isMe && !isPending && !isFailed && !!outgoingDeliveryState;
-          const showTranslation =
-            !!translationEntry?.visible &&
-            translationEntry?.targetLang === expectedTargetLanguage &&
-            translationEntry?.sourceContent === String(item.content || "").trim();
-
-          const bubble = (
-            <TouchableOpacity
-              // Images handle their own long press inside <ChatImage>, but the
-              // bubble has padding around the photo — catching it here too means a
-              // press on the margin still opens the menu.
-              onLongPress={
-                Platform.OS === "web" || isShadowHidden
-                  ? undefined
-                  : (event) => openContextMenu(item, event)
-              }
-              onPress={
-                Platform.OS === "web" && !isImage && !isEvent && !isShadowHidden
-                  ? (event) => openContextMenu(item, event)
-                  : undefined
-              }
-              activeOpacity={0.7}
-              style={[
-                styles.message,
-                isVoice
-                  ? (isMe ? styles.voiceMessageBubbleSent : styles.voiceMessageBubbleReceived)
-                  : isImage || isEvent
-                    ? (isMe ? styles.imageMessageBubbleSent : styles.imageMessageBubbleReceived)
-                    : (isMe ? styles.sentMessage : styles.receivedMessage),
-                isEvent ? styles.eventMessageBubble : null,
-                isVoice ? styles.voiceMessageBubble : null,
-                isFailed ? styles.failedMessage : null,
-                // The avatar gutter replaces the bubble's own left margin.
-                showsSender ? styles.groupMessageBubble : null,
-              ]}
-            >
-              {isShadowHidden ? (
-                <View style={styles.messageContentContainer}>
-                  <Text style={styles.reportedPlaceholder}>
-                    {i18n.t("reportedPendingReview")}
-                  </Text>
-                </View>
-              ) : isImage ? (
-                <ChatImage
-                  message={item}
-                  isMe={isMe}
-                  resolveUri={resolveImageUrl}
-                  onPress={openImageViewer}
-                  onLongPress={
-                    Platform.OS === "web" || isShadowHidden ? undefined : openContextMenu
-                  }
-                />
-              ) : isEvent ? (
-                <EventShareCard
-                  eventId={item.sharedEventId}
-                  fallbackText={item.content}
-                  language={language}
-                  onOpen={(eventId) => navigation.navigate("Events Detail", { eventId })}
-                  onLongPress={
-                    Platform.OS === "web" ? undefined : (event) => openContextMenu(item, event)
-                  }
-                />
-              ) : isVoice ? (
-                (() => {
-                  const { audioUrl, duration } = parseVoiceContent(item.content);
-
-                  return (
-                    <View style={styles.voiceWrapper}>
-                      <View
-                        style={[
-                          styles.voiceCard,
-                          isMe ? styles.voiceCardSent : styles.voiceCardReceived,
-                        ]}
-                      >
-                        <VoicePlayer
-                          audioUrl={audioUrl}
-                          duration={duration}
-                          conversationId={conversationId}
-                          isMe={isMe}
-                        />
-                      </View>
-                    </View>
-                  );
-                })()
-              ) : (
-                <View style={styles.messageContentContainer}>
-                  <Text
-                    selectable
-                    style={[
-                      styles.content,
-                      isMe ? styles.contentSent : styles.contentReceived,
-                    ]}
-                  >
-                    {splitOnMentions(item.content, mentionLabelsFor(item)).map((part, partIndex) =>
-                      part.isMention ? (
-                        <Text
-                          key={partIndex}
-                          style={isMe ? styles.mentionInSent : styles.mentionInReceived}
-                        >
-                          {part.text}
-                        </Text>
-                      ) : (
-                        part.text
-                      )
-                    )}
-                  </Text>
-
-                  {showTranslation && (
-                    <View style={styles.translationContainer}>
-                      <View style={styles.translationDivider} />
-                      <Text
-                        style={[
-                          styles.translatedText,
-                          isMe ? styles.contentSent : styles.contentReceived,
-                        ]}
-                      >
-                        {translationEntry.text}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              <Text
-                style={[
-                  styles.timestamp,
-                  isImage || isEvent ? styles.imageTimestamp : (isMe ? styles.timestampSent : styles.timestampReceived),
-                  isVoice ? styles.voiceTimestamp : null,
-                ]}
-              >
-                {formatTime(item)}
-                {isMe && item.isEdited ? " • Edited" : ""}
-                {isPending ? " • Sending..." : ""}
-                {isFailed ? " • Failed" : ""}
-              </Text>
-              {showOutgoingDeliveryState && (
-                <Text
-                  style={[
-                    styles.deliveryStatus,
-                    isImage || isEvent ? styles.imageTimestamp : styles.timestampSent,
-                    isVoice ? styles.deliveryStatusVoice : null,
-                    !isImage && !isEvent && outgoingDeliveryState === "seen" ? styles.deliveryStatusSeen : null,
-                  ]}
-                >
-                  {formatDeliveryStateLabel(outgoingDeliveryState)}
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-
-          if (!showsSender) return bubble;
-
+          // The list is inverted, so the message drawn ABOVE this one is the
+          // next index; the bubble uses it to decide whether it starts a run.
           return (
-            <View style={styles.groupMessageRow}>
-              {startsRun ? (
-                isAssistant ? (
-                  // No profile to open, and no stored avatar to fetch: the
-                  // assistant wears the app icon straight from the bundle.
-                  <Image source={appIcon} style={styles.groupMessageAvatar} />
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
-                    accessibilityRole="button"
-                    accessibilityLabel={senderName}
-                  >
-                    <CachedImage
-                      uri={senderAvatarPath}
-                      type="profile"
-                      fallbackSource={defaultProfileImage}
-                      style={styles.groupMessageAvatar}
-                    />
-                  </TouchableOpacity>
-                )
-              ) : (
-                // Holds the gutter open so every bubble in a run stays on the
-                // same left edge as the one carrying the avatar.
-                <View style={styles.groupMessageAvatarSpacer} />
-              )}
-              <View style={styles.groupMessageColumn}>
-                {startsRun &&
-                  (isAssistant ? (
-                    <View style={styles.assistantNameRow}>
-                      <Text style={styles.groupSenderName} numberOfLines={1}>
-                        {senderName}
-                      </Text>
-                      <View style={styles.assistantBadge}>
-                        <Text style={styles.assistantBadgeText}>{i18n.t("aiBadge")}</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
-                    >
-                      <Text style={styles.groupSenderName} numberOfLines={1}>
-                        {senderName}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                {bubble}
-                {isAssistant && (
-                  // Chrome, not message text. In the body it would ride along in
-                  // the push notification and stand in for the answer as the
-                  // conversation-list preview, and cost tokens on every reply.
-                  <Text style={styles.assistantDisclaimer}>{i18n.t("assistantDisclaimer")}</Text>
-                )}
-              </View>
-            </View>
+            <MessageBubble
+              item={item}
+              previous={messages[index + 1]}
+              currentUserId={currentUser?.id}
+              conversationType={conversationType}
+              conversationId={conversationId}
+              language={language}
+              fallbackAvatarPath={userDirectory[String(item.senderId)]?.profileImage || null}
+              mentionLabels={mentionLabelsFor(item)}
+              translation={translations[String(item.messageId || "")] || null}
+              resolveImageUrl={resolveImageUrl}
+              onOpenImage={openImageViewer}
+              onLongPress={openContextMenu}
+              onOpenProfile={(userId) => navigation.navigate("UserProfile", { userId })}
+              onOpenEvent={(eventId) => navigation.navigate("Events Detail", { eventId })}
+            />
           );
         }}
       />
@@ -2917,7 +2475,7 @@ export default function ChatPage({ route }) {
             )}
 
             {contextMenu.message?.senderId === currentUser?.id &&
-              (contextMenu.message?.type || "").toLowerCase() === "text" &&
+              contextKind.canEdit &&
               !contextMenu.message?.pending &&
               !isLocalOnlyMessage(contextMenu.message) && (
                 <TouchableOpacity
@@ -3790,134 +3348,6 @@ const styles = StyleSheet.create({
   nativeHeaderChevron: {
     marginLeft: 4,
   },
-  message: {
-    marginVertical: 3,
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    maxWidth: "82%",
-  },
-  // The tightened corner is the bubble's tail, so it sits at the TOP on the
-  // sender's side — pointing up at their avatar, which is drawn at the head of
-  // the group rather than the foot of it.
-  sentMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#0A84FF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  receivedMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  imageMessageBubbleSent: {
-    alignSelf: "flex-end",
-    padding: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: 230,
-  },
-  imageMessageBubbleReceived: {
-    alignSelf: "flex-start",
-    padding: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: 230,
-  },
-  // The card brings its own frame; the bubble only needs to let it be wider.
-  eventMessageBubble: {
-    maxWidth: 260,
-  },
-  chatImage: {
-    width: 220,
-    height: 220,
-    borderRadius: 18,
-  },
-  chatImageSent: {
-    borderWidth: 2,
-    borderColor: "rgba(10,132,255,0.25)",
-  },
-  chatImageReceived: {
-    borderWidth: 1,
-    borderColor: "#D7D7DB",
-  },
-  // Dim + spinner shown over a photo while it is still uploading.
-  imageUploadOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 18,
-  },
-  failedMessage: {
-    borderWidth: 1,
-    borderColor: "#E35D5D",
-  },
-  // Group chats only: an incoming message is drawn as [avatar][name over bubble],
-  // so you can tell who is speaking without opening the participant list.
-  groupMessageRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingLeft: 12,
-    paddingRight: 12,
-  },
-  groupMessageAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-    marginTop: 4,
-    backgroundColor: "#E9E9EB",
-  },
-  groupMessageAvatarSpacer: {
-    width: 32,
-    marginRight: 8,
-  },
-  groupMessageColumn: {
-    flex: 1,
-    alignItems: "flex-start",
-  },
-  assistantNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  assistantBadge: {
-    backgroundColor: "#E7E3FF",
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  assistantBadgeText: {
-    fontSize: webFontSize(10),
-    fontWeight: "700",
-    color: "#5B4BD6",
-    letterSpacing: 0.4,
-  },
-  assistantDisclaimer: {
-    fontSize: webFontSize(11),
-    color: "#8E8E93",
-    marginTop: 2,
-    marginLeft: 4,
-    maxWidth: "82%",
-  },
-  groupSenderName: {
-    fontSize: webFontSize(12),
-    fontWeight: "600",
-    color: "#6B7280",
-    marginLeft: 4,
-    marginBottom: 2,
-  },
-  groupMessageBubble: {
-    marginHorizontal: 0,
-  },
   sidebarTopicsAvatar: {
     backgroundColor: "#0F766E",
     alignItems: "center",
@@ -3957,40 +3387,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   mentionName: { fontSize: webFontSize(15), color: "#1F1F22", flex: 1 },
-  mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
-  mentionInReceived: { fontWeight: "700", color: "#C2410C" },
-  content: {
-    fontSize: webFontSize(16),
-    lineHeight: Platform.OS === "web" ? 24 : 21,
-  },
-  contentSent: {
-    color: "#FFFFFF",
-  },
-  contentReceived: {
-    color: "#111113",
-  },
-  reportedPlaceholder: {
-    fontSize: webFontSize(15),
-    lineHeight: Platform.OS === "web" ? 22 : 20,
-    fontStyle: "italic",
-    color: "#8A8A8E",
-  },
-  timestamp: {
-    fontSize: webFontSize(10),
-    alignSelf: "flex-end",
-    marginTop: 4,
-    letterSpacing: 0.1,
-  },
-  timestampSent: {
-    color: "rgba(255,255,255,0.82)",
-  },
-  timestampReceived: {
-    color: "rgba(60,60,67,0.62)",
-  },
-  imageTimestamp: {
-    color: "rgba(60,60,67,0.62)",
-    marginTop: 6,
-  },
   composerWrap: {
     position: "relative",
     overflow: "visible",
@@ -4088,67 +3484,6 @@ const styles = StyleSheet.create({
     marginLeft: 3,
     alignSelf: "center",
   },
-  voiceMessageBubble: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderWidth: 0,
-  },
-  // Tail at the top, matching sentMessage / receivedMessage above.
-  voiceMessageBubbleSent: {
-    alignSelf: "flex-end",
-    backgroundColor: "#0A84FF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  voiceMessageBubbleReceived: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  voiceWrapper: {
-    width: "100%",
-    alignItems: "stretch",
-    justifyContent: "center",
-  },
-  voiceCard: {
-    width: "100%",
-    minWidth: 228,
-    maxWidth: 320,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-  },
-  voiceCardSent: {
-    backgroundColor: "rgba(255, 255, 255, 0.14)",
-    borderColor: "rgba(255,255,255,0.24)",
-  },
-  voiceCardReceived: {
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderColor: "rgba(141,141,147,0.2)",
-  },
-  voiceTimestamp: {
-    alignSelf: "flex-end",
-    marginTop: 6,
-  },
-  deliveryStatus: {
-    fontSize: webFontSize(11),
-    alignSelf: "flex-end",
-    marginTop: 1,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-  deliveryStatusSeen: {
-    color: "rgba(255,255,255,0.98)",
-  },
-  deliveryStatusVoice: {
-    marginTop: 2,
-  },
   menuOverlay: {
     ...StyleSheet.absoluteFill,
   },
@@ -4209,22 +3544,5 @@ const styles = StyleSheet.create({
     fontSize: webFontSize(14),
     color: "#111827",
     fontWeight: "500",
-  },
-  messageContentContainer: {
-    width: "100%",
-    minWidth: 80,
-  },
-  translationContainer: {
-    marginTop: 8,
-  },
-  translationDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.1)",
-    marginVertical: 4,
-    width: '100%',
-  },
-  translatedText: {
-    fontSize: webFontSize(15),
-    fontStyle: "italic",
   },
 });
