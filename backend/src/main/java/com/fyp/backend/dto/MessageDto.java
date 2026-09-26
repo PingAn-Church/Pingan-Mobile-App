@@ -58,6 +58,10 @@ public class MessageDto {
     // Emoji tallies, filled in by MessageReactionService for a page of history
     // and on every re-broadcast of the message. Empty on a fresh message.
     private List<ReactionSummaryDto> reactions = new ArrayList<>();
+    // The poll a "poll" message carries, filled in by PollService for a page of
+    // history and on every re-broadcast; null on every other message. On the way
+    // in it names a freshly created poll for ChatService.createPoll to bind.
+    private PollDto poll;
 
     // ✅ Change from Map<Long, String> to Map<String, String> to ensure proper JSON conversion
     private Map<String, String> deliveryStatus;

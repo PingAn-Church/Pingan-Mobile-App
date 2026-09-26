@@ -57,6 +57,11 @@ import {
   pinGroupNotice,
   unpinGroupNotice,
   getGroupNoticeReaders,
+  votePoll,
+  addPollEntry,
+  removePollEntry,
+  closePoll,
+  getPollVoters,
 } from "../../service/ChatService";
 import GroupNoticeBanner from "../../components/Chat/GroupNoticeBanner";
 import { REACTION_EMOJIS, applyOwnReaction, displayEmoji } from "../../utils/reactions";
@@ -1618,6 +1623,68 @@ export default function ChatPage({ route }) {
     setTimeout(() => textInputRef.current?.focus(), 250);
   };
 
+  // --- polls -------------------------------------------------------------------
+  const startPoll = (mode) => {
+    setActionSheetVisible(false);
+    if (messagingBlocked || conversationType !== "group") return;
+    setTimeout(
+      () => navigation.navigate("PollComposer", { conversationId, conversationType, mode }),
+      200
+    );
+  };
+
+  // Every poll call answers with the poll's message as this reader now sees it
+  // (their own choices and reactions filled in); it simply replaces the row.
+  const applyMessage = (dto) => {
+    if (!dto?.messageId) return;
+    updateConversationHistory((history) =>
+      history.map((msg) => (String(msg.messageId) === String(dto.messageId) ? { ...msg, ...dto } : msg))
+    );
+  };
+
+  const pollAction = async (action) => {
+    try {
+      applyMessage(await action());
+    } catch (error) {
+      showAlert(
+        i18n.t("error"),
+        typeof error?.response?.data === "string" ? error.response.data : i18n.t("eventActionFailed")
+      );
+    }
+  };
+
+  const handleVote = (poll, optionIds) => pollAction(() => votePoll(poll.id, optionIds));
+  const handleSignUp = (poll, note) => pollAction(() => addPollEntry(poll.id, note));
+  const handleLeaveSignUp = (poll) => pollAction(() => removePollEntry(poll.id));
+  const handleClosePoll = async (poll) => {
+    const confirmed = await confirmAction({
+      title: i18n.t("closePoll"),
+      message: i18n.t("closePollConfirm"),
+      confirmText: i18n.t("closePoll"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (confirmed) pollAction(() => closePoll(poll.id));
+  };
+  const handleShowVoters = async (poll, option) => {
+    try {
+      const people = await getPollVoters(poll.id, option.id);
+      const names = people
+        .map((person) =>
+          person.bot
+            ? (String(language || "").startsWith("zh") && person.displayNameZh) || person.firstName
+            : formatName(person.firstName, person.lastName)
+        )
+        .filter(Boolean);
+      showAlert(
+        i18n.t("whoChose", { option: option.text || "" }),
+        names.length ? names.join("\n") : i18n.t("noOneYet")
+      );
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
   const applyReactions = (messageId, reactions) => {
     updateConversationHistory((history) =>
       history.map((msg) =>
@@ -2601,6 +2668,8 @@ export default function ChatPage({ route }) {
         onShareEvent={shareEvent}
         canPostNotice={isGroupAdmin}
         onComposeNotice={beginNotice}
+        canCreatePoll={conversationType === "group"}
+        onCreatePoll={startPoll}
         language={language}
       />
     </View>
@@ -2682,6 +2751,12 @@ export default function ChatPage({ route }) {
               onQuotePress={scrollToMessage}
               onToggleReaction={messagingBlocked ? undefined : handleToggleReaction}
               onShowReactors={showReactors}
+              onVote={messagingBlocked ? undefined : handleVote}
+              onSignUp={messagingBlocked ? undefined : handleSignUp}
+              onLeaveSignUp={messagingBlocked ? undefined : handleLeaveSignUp}
+              onClosePoll={handleClosePoll}
+              onShowVoters={handleShowVoters}
+              isGroupAdmin={isGroupAdmin}
               canReply={!messagingBlocked}
               highlighted={
                 highlightedMessageId != null && String(item.messageId) === highlightedMessageId

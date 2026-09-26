@@ -40,6 +40,8 @@ export default function ChatActionSheet({
   onShareEvent,
   canPostNotice = false,
   onComposeNotice,
+  canCreatePoll = false,
+  onCreatePoll,
   language,
 }) {
   const insets = useSafeAreaInsets();
@@ -51,7 +53,10 @@ export default function ChatActionSheet({
   const sheet = useRef(new Animated.Value(0)).current; // 0 hidden → 1 shown
   const pageProgress = useRef(new Animated.Value(0)).current; // 0 grid → 1 events
   // One per possible tile; extras simply animate nothing.
-  const tiles = useRef(Array.from({ length: 4 }, () => new Animated.Value(0))).current;
+  const tiles = useRef(Array.from({ length: 6 }, () => new Animated.Value(0))).current;
+  // The grid wraps once it holds more than a row; its measured height is what
+  // the sheet's body is sized to while the grid page is showing.
+  const [gridHeight, setGridHeight] = useState(GRID_HEIGHT);
 
   const [events, setEvents] = useState([]);
   const [eventsPage, setEventsPage] = useState(0);
@@ -140,6 +145,13 @@ export default function ChatActionSheet({
   const actions = [
     { key: "photo", icon: "image", tint: "#34C759", label: i18n.t("chatActionPhoto"), onPress: () => onPickPhoto?.() },
     { key: "event", icon: "calendar", tint: "#FF9500", label: i18n.t("chatActionEvent"), onPress: () => goTo("events") },
+    // Groups only: a poll, or a sign-up sheet (the same thing in "add yourself" mode).
+    ...(canCreatePoll
+      ? [
+          { key: "poll", icon: "stats-chart", tint: "#5856D6", label: i18n.t("chatActionPoll"), onPress: () => onCreatePoll?.("poll") },
+          { key: "signup", icon: "list", tint: "#AF52DE", label: i18n.t("chatActionSignup"), onPress: () => onCreatePoll?.("signup") },
+        ]
+      : []),
     // Group admins only: the next message they send is pinned as the notice.
     ...(canPostNotice
       ? [{ key: "notice", icon: "pin", tint: "#B26A00", label: i18n.t("chatActionNotice"), onPress: () => onComposeNotice?.() }]
@@ -149,7 +161,7 @@ export default function ChatActionSheet({
   if (!rendered) return null;
 
   const sheetTranslate = sheet.interpolate({ inputRange: [0, 1], outputRange: [listHeight + 80, 0] });
-  const bodyHeight = pageProgress.interpolate({ inputRange: [0, 1], outputRange: [GRID_HEIGHT, listHeight] });
+  const bodyHeight = pageProgress.interpolate({ inputRange: [0, 1], outputRange: [gridHeight, listHeight] });
   const gridStyle = {
     opacity: pageProgress.interpolate({ inputRange: [0, 0.6], outputRange: [1, 0], extrapolate: "clamp" }),
     transform: [{ translateX: pageProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) }],
@@ -216,7 +228,12 @@ export default function ChatActionSheet({
             style={[styles.page, gridStyle]}
             pointerEvents={page === "grid" ? "auto" : "none"}
           >
-            <View style={styles.grid}>
+            <View
+              style={styles.grid}
+              onLayout={(event) =>
+                setGridHeight(Math.max(GRID_HEIGHT, Math.round(event.nativeEvent.layout.height) + 20))
+              }
+            >
               {actions.map((action, index) => (
                 <Animated.View
                   key={action.key}
@@ -337,9 +354,11 @@ const styles = StyleSheet.create({
   },
   grid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 20,
     paddingTop: 14,
-    gap: 22,
+    columnGap: 16,
+    rowGap: 12,
   },
   tile: {
     alignItems: "center",

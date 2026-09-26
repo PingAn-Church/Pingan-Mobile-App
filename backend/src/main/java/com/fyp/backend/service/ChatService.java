@@ -1,6 +1,8 @@
 package com.fyp.backend.service;
 
+import com.fyp.backend.dto.CreatePollRequest;
 import com.fyp.backend.dto.MessageDto;
+import com.fyp.backend.dto.PollDto;
 import com.fyp.backend.dto.ReactionSummaryDto;
 import com.fyp.backend.dto.ReplyPreviewDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
@@ -50,6 +52,7 @@ public class ChatService {
     private final AssistantAccountService assistantAccountService;
     private final EventRepository eventRepository;
     private final MessageReactionService reactionService;
+    private final PollService pollService;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -65,7 +68,8 @@ public class ChatService {
                        ConversationReadStateService conversationReadStateService,
                        AssistantAccountService assistantAccountService,
                        EventRepository eventRepository,
-                       MessageReactionService reactionService) {
+                       MessageReactionService reactionService,
+                       PollService pollService) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -81,6 +85,7 @@ public class ChatService {
         this.assistantAccountService = assistantAccountService;
         this.eventRepository = eventRepository;
         this.reactionService = reactionService;
+        this.pollService = pollService;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -195,9 +200,12 @@ public class ChatService {
 
         // Reaction tallies for the whole page in two grouped queries, with the
         // viewer's own marked.
-        Map<Long, List<ReactionSummaryDto>> tallies = reactionService.summaries(
-                messages.stream().map(MessageDto::getMessageId).toList(), userId);
+        List<Long> messageIds = messages.stream().map(MessageDto::getMessageId).toList();
+        Map<Long, List<ReactionSummaryDto>> tallies = reactionService.summaries(messageIds, userId);
         messages.forEach(dto -> dto.setReactions(tallies.getOrDefault(dto.getMessageId(), List.of())));
+        // Likewise the polls behind any "poll" messages on the page.
+        Map<Long, PollDto> polls = pollService.summaries(messageIds, userId);
+        messages.forEach(dto -> dto.setPoll(polls.get(dto.getMessageId())));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("messages", messages);
@@ -573,10 +581,12 @@ public class ChatService {
      * of the pinned words, or the media placeholder for a pinned photo or voice.
      */
     public MessageDto postGroupNotice(Long conversationId, User admin, Message pinned) {
+        // Words (and the server-written lines of a share or a poll) are quoted as
+        // they stand; a photo or voice note becomes its placeholder.
         MessageKind pinnedKind = MessageKind.of(pinned.getType());
-        String body = pinnedKind == MessageKind.TEXT
-                ? ReplyPreviewDto.excerpt(pinned.getContent())
-                : pinnedKind.readable(pinned.getContent());
+        String body = pinnedKind.hasMediaBody()
+                ? pinnedKind.readable(pinned.getContent())
+                : ReplyPreviewDto.excerpt(pinned.getContent());
 
         MessageDto notice = new MessageDto();
         notice.setConversationId(conversationId);
@@ -586,6 +596,42 @@ public class ChatService {
         notice.setReplyToMessageId(pinned.getId());
         notice.setContent("📌 " + (body == null ? "" : body));
         return sendMessageAndBroadcast(notice, "group");
+    }
+
+    /**
+     * Creates a poll (or sign-up sheet) and posts the message that carries it.
+     *
+     * The poll row is stored first, then the message goes out through the
+     * ordinary send path — same participant check, same fan-out and push — with
+     * a server-written body ("📊 question", "📝 question" for a sign-up sheet)
+     * that a build without the card shows as text. Once the message has an id
+     * the two are bound, and the outgoing copy carries the poll.
+     *
+     * Groups only: two people voting in a private chat is a conversation.
+     */
+    @Transactional
+    public MessageDto createPoll(String conversationType, Long creatorId, CreatePollRequest request) {
+        if (request == null || request.getConversationId() == null) {
+            throw new IllegalArgumentException("Which conversation?");
+        }
+        Conversation conversation = getConversationByTypeAndId(request.getConversationId(), conversationType);
+        if (!(conversation instanceof GroupConversation)) {
+            throw new IllegalArgumentException("Polls can only be created in a group.");
+        }
+        checkUserIsParticipant(conversation, creatorId);
+
+        Poll poll = pollService.create(conversation.getId(), creatorId, request);
+
+        MessageDto outgoing = new MessageDto();
+        outgoing.setConversationId(conversation.getId());
+        outgoing.setSenderId(creatorId);
+        outgoing.setConversationType(conversationType);
+        outgoing.setType(MessageKind.POLL.type());
+        outgoing.setContent((poll.isSignup() ? "📝 " : "📊 ") + poll.getQuestion());
+        PollDto handle = new PollDto();
+        handle.setId(poll.getId());
+        outgoing.setPoll(handle);
+        return sendMessageAndBroadcast(outgoing, conversationType);
     }
 
     @Transactional
@@ -638,6 +684,14 @@ public class ChatService {
         createDeliveryStatuses(conversation, sender, message, timestamp);
 
         MessageDto savedMessage = buildResponseDto(message, conversation);
+        // A poll created through createPoll rode in on the DTO; now that the
+        // message has an id, bind them and put the poll on the outgoing copy.
+        if (kind == MessageKind.POLL) {
+            if (messageDto.getPoll() != null && messageDto.getPoll().getId() != null) {
+                pollService.attachMessage(messageDto.getPoll().getId(), message.getId());
+            }
+            savedMessage.setPoll(pollService.summaryForMessage(message.getId(), null));
+        }
         LocalizedText notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
         LocalizedText notificationBody = getPushNotificationBody(savedMessage);
         LocalizedText senderName = pushMessages.personName(sender.getFirstName(), sender.getLastName());
@@ -850,6 +904,7 @@ public class ChatService {
                 : mediaContent;
 
         reactionService.removeAllFor(messageId);
+        pollService.removeForMessage(messageId);
         messageRepository.delete(message);
         List<String> destinations = getDestination(message.getConversationType(), deletedMessageDto);
 

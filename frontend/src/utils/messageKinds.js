@@ -55,6 +55,15 @@ export const MESSAGE_KINDS = {
     canTranslate: false,
     canEdit: false,
   },
+  // A poll or sign-up sheet; the body is "📊 question" / "📝 question".
+  poll: {
+    bubble: "poll",
+    preview: previewContent,
+    canCopy: true,
+    canDownload: false,
+    canTranslate: false,
+    canEdit: false,
+  },
 };
 
 /** The kind for a message or a bare type string; unknown and missing types read as text. */

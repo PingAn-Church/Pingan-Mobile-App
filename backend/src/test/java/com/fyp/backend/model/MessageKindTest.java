@@ -81,5 +81,11 @@ class MessageKindTest {
                 MessageKind.EVENT.readable("📅 Sunday Service · 2026-10-04 10:00 AM · Hall"));
         assertEquals("[group notice] Service moves to 10:00 this week",
                 MessageKind.NOTICE.readable("📌 Service moves to 10:00 this week"));
+        assertEquals("[poll] Where shall we meet?", MessageKind.POLL.readable("📊 Where shall we meet?"));
+        assertEquals("[poll] Potluck sign-up", MessageKind.POLL.readable("📝 Potluck sign-up"));
+        // Created through its own endpoint, never typed; its body is pushed as it stands.
+        assertFalse(MessageKind.POLL.clientMaySend());
+        assertTrue(MessageKind.POLL.serverWritesBody());
+        assertNull(MessageKind.POLL.pushBodyKey());
     }
 }

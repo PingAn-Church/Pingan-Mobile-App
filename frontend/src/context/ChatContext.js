@@ -13,6 +13,7 @@ import { getOnlineUsers } from "../service/UserService";
 import { getStompClient, subscribeToConversation } from "../service/WebSocketService";
 import { UserContext } from "./UserContext";
 import { mergeReactions } from "../utils/reactions";
+import { mergePoll } from "../utils/polls";
 
 export const ChatContext = createContext();
 
@@ -242,6 +243,7 @@ export const ChatProvider = ({ children }) => {
             ...chatHistory[exists],
             ...message,
             reactions: mergeReactions(chatHistory[exists].reactions, message.reactions),
+            poll: mergePoll(chatHistory[exists].poll, message.poll),
             pending: false,
             failed: false,
           };

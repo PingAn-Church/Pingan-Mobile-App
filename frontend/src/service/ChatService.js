@@ -431,6 +431,62 @@ export const toggleReaction = async (messageId, emoji, on) => {
   return response.data;
 };
 
+// Polls and sign-up sheets. Creating one posts the message that carries it and
+// resolves to that message; every other call resolves to the poll's message as
+// the caller now sees it (their own choices filled in), which the chat replaces.
+export const createPoll = async (conversationType, payload) => {
+  const token = await getAuthToken();
+  const response = await axios.post(apiUrl(`/chat/polls`), payload, {
+    params: { conversationType },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const votePoll = async (pollId, optionIds) => {
+  const token = await getAuthToken();
+  const response = await axios.put(
+    apiUrl(`/chat/polls/${pollId}/votes`),
+    { optionIds },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
+export const addPollEntry = async (pollId, note) => {
+  const token = await getAuthToken();
+  const response = await axios.post(
+    apiUrl(`/chat/polls/${pollId}/entries`),
+    { note: note || null },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
+export const removePollEntry = async (pollId) => {
+  const token = await getAuthToken();
+  const response = await axios.delete(apiUrl(`/chat/polls/${pollId}/entries`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const closePoll = async (pollId) => {
+  const token = await getAuthToken();
+  const response = await axios.post(apiUrl(`/chat/polls/${pollId}/close`), null, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const getPollVoters = async (pollId, optionId) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/polls/${pollId}/options/${optionId}/voters`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 // Group notice: one pinned message per group, admins only. Each resolves to the
 // conversation with its `notice` attached (null after unpinning).
 export const pinGroupNotice = async (conversationId, messageId) => {

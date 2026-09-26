@@ -30,6 +30,7 @@ import {
 } from "../../utils/chatMessageDisplay";
 import ChatImage from "./ChatImage";
 import EventShareCard from "./EventShareCard";
+import PollCard from "./PollCard";
 import VoicePlayer from "./VoicePlayer";
 
 // Dragging a message this far to the right starts a reply to it.
@@ -106,6 +107,12 @@ export default function MessageBubble({
   onQuotePress,
   onToggleReaction,
   onShowReactors,
+  onVote,
+  onSignUp,
+  onLeaveSignUp,
+  onClosePoll,
+  onShowVoters,
+  isGroupAdmin = false,
   canReply = true,
   highlighted = false,
 }) {
@@ -141,6 +148,10 @@ export default function MessageBubble({
   // A shared event draws as a card. Without an id (should not happen)
   // it falls through to the text bubble, which shows the stored line.
   const isEvent = !isShadowHidden && kind.bubble === "event" && item.sharedEventId != null;
+  // A poll draws as a card; without its data (should not happen) the stored
+  // "📊 question" line shows as text instead.
+  const isPoll = !isShadowHidden && kind.bubble === "poll" && !!item.poll;
+  const isCard = isImage || isEvent || isPoll;
   const expectedTargetLanguage = resolveTargetTranslationLanguage(item.content, language);
   const outgoingDeliveryState = isMe
     ? resolveOutgoingDeliveryState(item.deliveryStatus, currentUserId)
@@ -152,7 +163,7 @@ export default function MessageBubble({
     translation?.targetLang === expectedTargetLanguage &&
     translation?.sourceContent === String(item.content || "").trim();
   const quote = isShadowHidden ? null : item.replyTo || null;
-  const quoteTone = isImage || isEvent || isNotice ? "plain" : isMe ? "sent" : "received";
+  const quoteTone = isCard || isNotice ? "plain" : isMe ? "sent" : "received";
 
   const longPress = onLongPress ? (event) => onLongPress(item, event) : undefined;
 
@@ -205,9 +216,7 @@ export default function MessageBubble({
       // bubble has padding around the photo — catching it here too means a
       // press on the margin still opens the menu.
       onLongPress={Platform.OS === "web" || isShadowHidden ? undefined : longPress}
-      onPress={
-        Platform.OS === "web" && !isImage && !isEvent && !isShadowHidden ? longPress : undefined
-      }
+      onPress={Platform.OS === "web" && !isCard && !isShadowHidden ? longPress : undefined}
       activeOpacity={0.7}
       style={[
         styles.message,
@@ -215,10 +224,11 @@ export default function MessageBubble({
           ? styles.noticeMessage
           : isVoice
             ? (isMe ? styles.voiceMessageBubbleSent : styles.voiceMessageBubbleReceived)
-            : isImage || isEvent
+            : isCard
               ? (isMe ? styles.imageMessageBubbleSent : styles.imageMessageBubbleReceived)
               : (isMe ? styles.sentMessage : styles.receivedMessage),
         isEvent ? styles.eventMessageBubble : null,
+        isPoll ? styles.pollMessageBubble : null,
         isVoice ? styles.voiceMessageBubble : null,
         isFailed ? styles.failedMessage : null,
         // The avatar gutter replaces the bubble's own left margin.
@@ -255,6 +265,18 @@ export default function MessageBubble({
           language={language}
           onOpen={onOpenEvent}
           onLongPress={Platform.OS === "web" ? undefined : longPress}
+        />
+      ) : isPoll ? (
+        <PollCard
+          poll={item.poll}
+          currentUserId={currentUserId}
+          isGroupAdmin={isGroupAdmin}
+          language={language}
+          onVote={onVote}
+          onSignUp={onSignUp}
+          onLeave={onLeaveSignUp}
+          onClose={onClosePoll}
+          onShowVoters={onShowVoters}
         />
       ) : isVoice ? (
         (() => {
@@ -326,7 +348,7 @@ export default function MessageBubble({
       <Text
         style={[
           styles.timestamp,
-          isImage || isEvent
+          isCard
             ? styles.imageTimestamp
             : isMe && !isNotice
               ? styles.timestampSent
@@ -343,9 +365,9 @@ export default function MessageBubble({
         <Text
           style={[
             styles.deliveryStatus,
-            isImage || isEvent ? styles.imageTimestamp : styles.timestampSent,
+            isCard ? styles.imageTimestamp : styles.timestampSent,
             isVoice ? styles.deliveryStatusVoice : null,
-            !isImage && !isEvent && outgoingDeliveryState === "seen" ? styles.deliveryStatusSeen : null,
+            !isCard && outgoingDeliveryState === "seen" ? styles.deliveryStatusSeen : null,
           ]}
         >
           {formatDeliveryStateLabel(outgoingDeliveryState)}
@@ -531,6 +553,9 @@ const styles = StyleSheet.create({
   // The card brings its own frame; the bubble only needs to let it be wider.
   eventMessageBubble: {
     maxWidth: 260,
+  },
+  pollMessageBubble: {
+    maxWidth: 300,
   },
   // A pinned-notice line: centred, cream, the group's voice rather than a person's.
   noticeMessage: {

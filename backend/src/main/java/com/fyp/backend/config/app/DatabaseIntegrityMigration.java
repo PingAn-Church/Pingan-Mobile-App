@@ -75,6 +75,27 @@ public class DatabaseIntegrityMigration {
         if (orphanReactions > 0) {
             log.warn("Removed {} orphan message reaction row(s).", orphanReactions);
         }
+        // Polls whose message is gone, then options and votes whose parent is gone
+        // — children first would leave the parents' own orphans behind.
+        int orphanPolls = jdbc.update("""
+                DELETE FROM polls p
+                WHERE p.message_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = p.message_id)
+                """);
+        int orphanPollOptions = jdbc.update("""
+                DELETE FROM poll_options o
+                WHERE NOT EXISTS (SELECT 1 FROM polls p WHERE p.id = o.poll_id)
+                """);
+        int orphanPollVotes = jdbc.update("""
+                DELETE FROM poll_votes v
+                WHERE NOT EXISTS (SELECT 1 FROM polls p WHERE p.id = v.poll_id)
+                   OR NOT EXISTS (SELECT 1 FROM poll_options o WHERE o.id = v.option_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = v.user_id)
+                """);
+        if (orphanPolls + orphanPollOptions + orphanPollVotes > 0) {
+            log.warn("Removed {} orphan poll(s), {} option row(s) and {} vote row(s).",
+                    orphanPolls, orphanPollOptions, orphanPollVotes);
+        }
 
         ensureCascadeForeignKey(jdbc, "message_mentions", "message_id",
                 "messages", "id", "fk_message_mentions_message");
@@ -94,6 +115,16 @@ public class DatabaseIntegrityMigration {
                 "messages", "id", "fk_message_reactions_message");
         ensureCascadeForeignKey(jdbc, "message_reactions", "user_id",
                 "users", "id", "fk_message_reactions_user");
+        // A poll goes with its message; its options and votes go with it; a vote
+        // goes with its voter. Who created what is a pointer that outlives them.
+        ensureCascadeForeignKey(jdbc, "polls", "message_id", "messages", "id", "fk_polls_message");
+        ensureForeignKey(jdbc, "polls", "creator_id", "users", "id", "fk_polls_creator", "SET NULL");
+        ensureCascadeForeignKey(jdbc, "poll_options", "poll_id", "polls", "id", "fk_poll_options_poll");
+        ensureForeignKey(jdbc, "poll_options", "created_by_id", "users", "id",
+                "fk_poll_options_created_by", "SET NULL");
+        ensureCascadeForeignKey(jdbc, "poll_votes", "poll_id", "polls", "id", "fk_poll_votes_poll");
+        ensureCascadeForeignKey(jdbc, "poll_votes", "option_id", "poll_options", "id", "fk_poll_votes_option");
+        ensureCascadeForeignKey(jdbc, "poll_votes", "user_id", "users", "id", "fk_poll_votes_user");
 
         jdbc.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_group_conversations_single_app_level

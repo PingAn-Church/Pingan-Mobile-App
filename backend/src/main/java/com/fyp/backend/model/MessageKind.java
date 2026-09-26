@@ -39,7 +39,14 @@ public enum MessageKind {
      * notice. Written by the server (ChatService.postGroupNotice) and quoting
      * the pinned message; a client cannot send one directly — it pins instead.
      */
-    NOTICE("notice", false, false, true, false, false, "push.chat.notice", "[group notice] ");
+    NOTICE("notice", false, false, true, false, false, "push.chat.notice", "[group notice] "),
+
+    /**
+     * A poll or sign-up sheet. Created through ChatService.createPoll, which
+     * writes the body ("📊 question" / "📝 question") and binds the poll row; the
+     * push carries that body as it stands, since it is language-neutral already.
+     */
+    POLL("poll", false, false, true, false, false, null, "[poll] ");
 
     private final String type;
     private final boolean mediaBody;
@@ -130,6 +137,7 @@ public enum MessageKind {
             case IMAGE, VOICE -> assistantPlaceholder;
             case EVENT -> assistantPlaceholder + body.replaceFirst("^📅\\s*", "");
             case NOTICE -> assistantPlaceholder + body.replaceFirst("^📌\\s*", "");
+            case POLL -> assistantPlaceholder + body.replaceFirst("^[📊📝]\\s*", "");
         };
     }
 }

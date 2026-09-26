@@ -1,6 +1,7 @@
 package com.fyp.backend.controller;
 
 import com.fyp.backend.dto.ConversationDto;
+import com.fyp.backend.dto.CreatePollRequest;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.GroupConversation;
@@ -11,6 +12,7 @@ import com.fyp.backend.service.ChatService;
 import com.fyp.backend.service.ConversationMuteService;
 import com.fyp.backend.service.ConversationService;
 import com.fyp.backend.service.MessageReactionService;
+import com.fyp.backend.service.PollService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.Pagination;
@@ -40,12 +42,14 @@ public class ChatController {
     private final ConversationMuteService conversationMuteService;
     private final AppGroupChatService appGroupChatService;
     private final MessageReactionService messageReactionService;
+    private final PollService pollService;
 
     @Autowired
     public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil,
                           UserService userService, ConversationMuteService conversationMuteService,
                           AppGroupChatService appGroupChatService,
-                          MessageReactionService messageReactionService) {
+                          MessageReactionService messageReactionService,
+                          PollService pollService) {
         this.conversationService = conversationService;
         this.chatService = chatService;
         this.userService = userService;
@@ -53,6 +57,7 @@ public class ChatController {
         this.conversationMuteService = conversationMuteService;
         this.appGroupChatService = appGroupChatService;
         this.messageReactionService = messageReactionService;
+        this.pollService = pollService;
     }
 
     // Fetch user's conversations
@@ -333,6 +338,103 @@ public class ChatController {
         }
         try {
             return ResponseEntity.ok(messageReactionService.reactors(messageId, emoji, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // --- Polls and sign-up sheets -------------------------------------------------
+
+    /** Creates a poll and posts the message carrying it; answers that message. */
+    @PostMapping("/polls")
+    public ResponseEntity<?> createPoll(@RequestParam String conversationType,
+                                        @RequestBody CreatePollRequest body,
+                                        HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(chatService.createPoll(conversationType, userId, body));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Sets the caller's choices to exactly {@code optionIds} (empty to withdraw). Answers the poll's message. */
+    @PutMapping("/polls/{pollId}/votes")
+    public ResponseEntity<?> vote(@PathVariable Long pollId,
+                                  @RequestBody Map<String, List<Long>> body,
+                                  HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            List<Long> optionIds = body == null ? List.of() : body.getOrDefault("optionIds", List.of());
+            return ResponseEntity.ok(pollService.vote(pollId, userId, optionIds));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Adds the caller to a sign-up sheet; body may carry {@code text} and {@code note}. */
+    @PostMapping("/polls/{pollId}/entries")
+    public ResponseEntity<?> addEntry(@PathVariable Long pollId,
+                                      @RequestBody(required = false) Map<String, String> body,
+                                      HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            String text = body == null ? null : body.get("text");
+            String note = body == null ? null : body.get("note");
+            return ResponseEntity.ok(pollService.addEntry(pollId, userId, text, note));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Takes the caller off a sign-up sheet. */
+    @DeleteMapping("/polls/{pollId}/entries")
+    public ResponseEntity<?> removeEntry(@PathVariable Long pollId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(pollService.removeEntry(pollId, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Ends the poll early; the creator or a group admin. */
+    @PostMapping("/polls/{pollId}/close")
+    public ResponseEntity<?> closePoll(@PathVariable Long pollId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(pollService.close(pollId, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Who chose an option; not on anonymous polls. */
+    @GetMapping("/polls/{pollId}/options/{optionId}/voters")
+    public ResponseEntity<?> pollVoters(@PathVariable Long pollId,
+                                        @PathVariable Long optionId,
+                                        HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(pollService.voters(pollId, optionId, userId));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
