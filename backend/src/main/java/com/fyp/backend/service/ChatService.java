@@ -268,6 +268,44 @@ public class ChatService {
                 : pushMessages.literal(content);
     }
 
+    /**
+     * The message a reply quotes. Checked here because the id comes from the
+     * client: it must exist and sit in this same conversation, or a message
+     * could quote something from a chat its sender was never part of.
+     */
+    private Message resolveReplyTarget(Long replyToMessageId, Conversation conversation) {
+        if (replyToMessageId == null) {
+            return null;
+        }
+        Message quoted = messageRepository.findById(replyToMessageId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "The message you are replying to no longer exists."));
+        if (quoted.getConversation() == null
+                || !quoted.getConversation().getId().equals(conversation.getId())) {
+            throw new IllegalArgumentException("You can only reply to a message in this conversation.");
+        }
+        return quoted;
+    }
+
+    /**
+     * The quoted message's author as a push recipient, or null when there is
+     * nobody to tell: replying to yourself, or to the assistant, or to somebody
+     * who has since left the conversation.
+     */
+    private Long replyRecipient(Message message, Conversation conversation, User sender) {
+        Message quoted = message.getReplyTo();
+        if (quoted == null || quoted.getSender() == null) {
+            return null;
+        }
+        User author = quoted.getSender();
+        if (author.getId().equals(sender.getId()) || author.isBot()) {
+            return null;
+        }
+        boolean participant = conversation.getParticipants().stream()
+                .anyMatch(u -> u.getId().equals(author.getId()));
+        return participant ? author.getId() : null;
+    }
+
     /** The shared event's title for the push body, read inside the send transaction. */
     private String sharedEventTitle(MessageDto messageDto) {
         Long eventId = messageDto.getSharedEventId();
@@ -439,6 +477,11 @@ public class ChatService {
         Message message = new Message(outgoing, conversation, assistant, timestamp.toString());
         message.setConversationType("group");
         message.setRespondsToMessageId(triggerMessageId);
+        // The answer also quotes the question, so in a busy group it sits under
+        // what it answers. The mention above still carries the push.
+        if (triggerMessageId != null) {
+            message.setReplyTo(messageRepository.findById(triggerMessageId).orElse(null));
+        }
         sanitiseMentions(message, conversation, assistant, "group");
 
         // Not wrapped in a try/catch: a violation here means two workers raced past
@@ -557,6 +600,7 @@ public class ChatService {
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         Message message = new Message(messageDto, conversation, sender, timestamp.toString());
+        message.setReplyTo(resolveReplyTarget(messageDto.getReplyToMessageId(), conversation));
         // What the sender asked for, kept from before sanitiseMentions trims it: the
         // assistant summons check reads this so a stripped assistant mention can be
         // recognised and logged instead of vanishing without a trace.
@@ -576,7 +620,15 @@ public class ChatService {
         // Mentioned people get their own push — one that names who called them and
         // is not silenced by a mute — so they are split out of the ordinary fan-out
         // rather than being notified twice.
-        List<Long> mentionedRecipients = resolveMentionedRecipients(message, conversation, sender);
+        List<Long> mentionedRecipients = new ArrayList<>(resolveMentionedRecipients(message, conversation, sender));
+        // The person being replied to is told the same way: named, and past a
+        // mute. When nobody else was called out the push is worded as a reply; a
+        // message that also @-mentions people keeps the mention wording for all.
+        Long repliedTo = replyRecipient(message, conversation, sender);
+        final boolean wordedAsReply = repliedTo != null && mentionedRecipients.isEmpty();
+        if (repliedTo != null && !mentionedRecipients.contains(repliedTo)) {
+            mentionedRecipients.add(repliedTo);
+        }
         List<Long> allRecipients = conversation.getParticipants().stream()
                 .map(User::getId)
                 .filter(id -> !id.equals(sender.getId()))
@@ -586,7 +638,8 @@ public class ChatService {
                 .filter(id -> !mentionedRecipientIds.contains(id))
                 .collect(Collectors.toList());
         LocalizedText mentionedBody = language -> pushMessages.get(
-                language, "push.chat.mentionedYou", senderName.render(language));
+                language, wordedAsReply ? "push.chat.repliedToYou" : "push.chat.mentionedYou",
+                senderName.render(language));
 
         // Whether this message summons the assistant — see summonsAssistant for the
         // id-first, text-fallback rules and why refusals are logged.

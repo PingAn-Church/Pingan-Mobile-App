@@ -1,4 +1,6 @@
 import { Platform } from "react-native";
+import i18n from "../../i18n";
+import { formatName } from "./formatName";
 import { parseServerDate } from "./serverDate";
 
 // Pure helpers for drawing a chat message, shared by ChatPage and MessageBubble.
@@ -100,3 +102,20 @@ export const splitOnMentions = (content, labels) => {
 };
 
 export const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
+
+/**
+ * Who sent a message (or a quoted one), as the reader should see it: the
+ * assistant is named in the reader's language and carries no surname; people
+ * go through formatName so a Chinese reader sees family name first.
+ */
+export const senderDisplayName = (message, language) => {
+  if (!message) return "";
+  if (message.senderBot) {
+    return (
+      (String(language || "").startsWith("zh") && message.senderDisplayNameZh) ||
+      message.senderFirstName ||
+      i18n.t("unknownUser")
+    );
+  }
+  return formatName(message.senderFirstName, message.senderLastName) || i18n.t("unknownUser");
+};

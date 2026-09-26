@@ -412,6 +412,8 @@
   "deleteThreadFailed": "删除帖子失败",
   "replies": "回复",
   "reply": "回复",
+  "replyingTo": "回复 %{name}",
+  "replyOriginalNotLoaded": "原消息不在当前已加载的聊天记录中",
   "writeReply": "输入回复",
   "deleteReply": "删除回复",
   "deleteReplyFailed": "删除回复失败",

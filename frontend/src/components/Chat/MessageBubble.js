@@ -1,24 +1,73 @@
-import React from "react";
-import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useRef } from "react";
+import {
+  Animated,
+  Image,
+  PanResponder,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import defaultProfileImage from "../../../assets/user.png";
 // The assistant has no stored avatar; it wears the app's own icon.
 import appIcon from "../../../assets/icon.png";
 import i18n from "../../../i18n";
 import CachedImage from "../CachedImage";
-import { formatName } from "../../utils/formatName";
-import { kindOf } from "../../utils/messageKinds";
+import { kindOf, messagePreview } from "../../utils/messageKinds";
 import {
   formatDeliveryStateLabel,
   formatTime,
   parseVoiceContent,
   resolveOutgoingDeliveryState,
   resolveTargetTranslationLanguage,
+  senderDisplayName,
   splitOnMentions,
   webFontSize,
 } from "../../utils/chatMessageDisplay";
 import ChatImage from "./ChatImage";
 import EventShareCard from "./EventShareCard";
 import VoicePlayer from "./VoicePlayer";
+
+// Dragging a message this far to the right starts a reply to it.
+const SWIPE_REPLY_THRESHOLD = 60;
+const SWIPE_MAX = 72;
+
+const isLocalOnly = (message) =>
+  typeof message?.messageId === "string" && message.messageId.startsWith("local-");
+
+/**
+ * The quoted message at the top of a reply. Tapping it jumps to the original.
+ * `tone` follows the bubble it sits in: on the sender's blue, on the grey of a
+ * received message, or framed on its own above a photo or card.
+ */
+function QuoteBlock({ quote, tone, language, onPress }) {
+  if (!quote) return null;
+  const body = quote.hidden ? i18n.t("reportedPendingReview") : messagePreview(quote);
+  return (
+    <TouchableOpacity
+      onPress={onPress ? () => onPress(quote.messageId) : undefined}
+      activeOpacity={0.7}
+      style={[styles.quote, styles[`quote_${tone}`]]}
+      accessibilityRole="button"
+      accessibilityLabel={`${senderDisplayName(quote, language)}: ${body}`}
+    >
+      <View style={[styles.quoteBar, styles[`quoteBar_${tone}`]]} />
+      <View style={styles.quoteText}>
+        <Text style={[styles.quoteName, styles[`quoteName_${tone}`]]} numberOfLines={1}>
+          {senderDisplayName(quote, language)}
+        </Text>
+        <Text
+          style={[styles.quoteBody, styles[`quoteBody_${tone}`], quote.hidden && styles.quoteBodyHidden]}
+          numberOfLines={2}
+        >
+          {body}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 /**
  * One message in the conversation: the bubble itself and, in a group, the
@@ -30,6 +79,11 @@ import VoicePlayer from "./VoicePlayer";
  *
  * `previous` is the message drawn ABOVE this one — in an inverted list that is
  * the next index — and decides whether this row starts a run and shows the name.
+ *
+ * Replying: a drag to the right (PanResponder, not gesture-handler — the app
+ * mounts no GestureHandlerRootView, see ImageViewer) or the long-press menu
+ * calls `onReply`. A quoted message is drawn by QuoteBlock; `highlighted`
+ * flashes the row after a jump to it.
  */
 export default function MessageBubble({
   item,
@@ -46,6 +100,10 @@ export default function MessageBubble({
   onLongPress,
   onOpenProfile,
   onOpenEvent,
+  onReply,
+  onQuotePress,
+  canReply = true,
+  highlighted = false,
 }) {
   const isMe = item.senderId === currentUserId;
   // In a group there is no other way to tell who is speaking, so incoming
@@ -65,11 +123,7 @@ export default function MessageBubble({
   // The assistant is named in both languages and carries no stored avatar,
   // so it is drawn from the app icon and named for whoever is reading.
   const isAssistant = !!item.senderBot;
-  const senderName = isAssistant
-    ? (String(language || "").startsWith("zh") && item.senderDisplayNameZh) ||
-      item.senderFirstName ||
-      i18n.t("unknownUser")
-    : formatName(item.senderFirstName, item.senderLastName) || i18n.t("unknownUser");
+  const senderName = senderDisplayName(item, language);
   const isFailed = item.failed;
   const isPending = item.pending;
   // Reported messages are shadow-hidden: everyone except the sender sees
@@ -91,8 +145,53 @@ export default function MessageBubble({
     !!translation?.visible &&
     translation?.targetLang === expectedTargetLanguage &&
     translation?.sourceContent === String(item.content || "").trim();
+  const quote = isShadowHidden ? null : item.replyTo || null;
+  const quoteTone = isImage || isEvent ? "plain" : isMe ? "sent" : "received";
 
   const longPress = onLongPress ? (event) => onLongPress(item, event) : undefined;
+
+  // --- swipe to reply ---------------------------------------------------------
+  const swipeEnabled =
+    Platform.OS !== "web" &&
+    canReply &&
+    !!onReply &&
+    !isShadowHidden &&
+    !isPending &&
+    !isFailed &&
+    !isLocalOnly(item);
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const settle = () =>
+    Animated.spring(swipeX, { toValue: 0, friction: 6, tension: 120, useNativeDriver: false }).start();
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Claim the touch only once it is clearly a rightward drag, so vertical
+        // scrolling and plain taps stay with the list and the bubble.
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          swipeEnabled &&
+          gesture.dx > 12 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+        onPanResponderMove: (_, gesture) =>
+          swipeX.setValue(Math.min(SWIPE_MAX, Math.max(0, gesture.dx * 0.6))),
+        onPanResponderRelease: (_, gesture) => {
+          const triggered = gesture.dx * 0.6 >= SWIPE_REPLY_THRESHOLD * 0.6;
+          settle();
+          if (triggered) onReply(item);
+        },
+        onPanResponderTerminate: settle,
+        onPanResponderTerminationRequest: () => true,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [swipeEnabled, onReply, item]
+  );
+
+  // --- jump highlight ---------------------------------------------------------
+  const flash = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!highlighted) return;
+    flash.setValue(1);
+    Animated.timing(flash, { toValue: 0, duration: 1200, delay: 400, useNativeDriver: false }).start();
+  }, [highlighted, flash]);
 
   const bubble = (
     <TouchableOpacity
@@ -118,6 +217,8 @@ export default function MessageBubble({
         showsSender ? styles.groupMessageBubble : null,
       ]}
     >
+      <QuoteBlock quote={quote} tone={quoteTone} language={language} onPress={onQuotePress} />
+
       {isShadowHidden ? (
         <View style={styles.messageContentContainer}>
           <Text style={styles.reportedPlaceholder}>
@@ -228,9 +329,9 @@ export default function MessageBubble({
     </TouchableOpacity>
   );
 
-  if (!showsSender) return bubble;
-
-  return (
+  const row = !showsSender ? (
+    bubble
+  ) : (
     <View style={styles.groupMessageRow}>
       {startsRun ? (
         isAssistant ? (
@@ -284,9 +385,48 @@ export default function MessageBubble({
       </View>
     </View>
   );
+
+  return (
+    <Animated.View
+      {...(swipeEnabled ? panResponder.panHandlers : {})}
+      style={[
+        styles.row,
+        {
+          transform: [{ translateX: swipeX }],
+          backgroundColor: flash.interpolate({
+            inputRange: [0, 1],
+            outputRange: ["rgba(255,204,0,0)", "rgba(255,204,0,0.35)"],
+          }),
+        },
+      ]}
+    >
+      {swipeEnabled && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.swipeHint,
+            { opacity: swipeX.interpolate({ inputRange: [0, SWIPE_REPLY_THRESHOLD * 0.6], outputRange: [0, 1] }) },
+          ]}
+        >
+          <Ionicons name="arrow-undo" size={20} color="#8E8E93" />
+        </Animated.View>
+      )}
+      {row}
+    </Animated.View>
+  );
 }
 
 const styles = StyleSheet.create({
+  row: {
+    position: "relative",
+  },
+  swipeHint: {
+    position: "absolute",
+    left: -32,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
   message: {
     marginVertical: 3,
     marginHorizontal: 12,
@@ -393,6 +533,53 @@ const styles = StyleSheet.create({
   },
   groupMessageBubble: {
     marginHorizontal: 0,
+  },
+  // The quoted message at the top of a reply.
+  quote: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 6,
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  quote_sent: { backgroundColor: "rgba(255,255,255,0.18)" },
+  quote_received: { backgroundColor: "rgba(0,0,0,0.06)" },
+  quote_plain: {
+    backgroundColor: "#F2F2F7",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#D1D1D6",
+    maxWidth: 240,
+  },
+  quoteBar: {
+    width: 3,
+    borderRadius: 2,
+    marginHorizontal: 8,
+  },
+  quoteBar_sent: { backgroundColor: "#FFFFFF" },
+  quoteBar_received: { backgroundColor: "#0A84FF" },
+  quoteBar_plain: { backgroundColor: "#0A84FF" },
+  quoteText: {
+    flexShrink: 1,
+  },
+  quoteName: {
+    fontSize: webFontSize(12),
+    fontWeight: "700",
+    marginBottom: 1,
+  },
+  quoteName_sent: { color: "#FFFFFF" },
+  quoteName_received: { color: "#0A84FF" },
+  quoteName_plain: { color: "#0A84FF" },
+  quoteBody: {
+    fontSize: webFontSize(13),
+  },
+  quoteBody_sent: { color: "rgba(255,255,255,0.9)" },
+  quoteBody_received: { color: "#3C3C43" },
+  quoteBody_plain: { color: "#3C3C43" },
+  quoteBodyHidden: {
+    fontStyle: "italic",
+    opacity: 0.8,
   },
   mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
   mentionInReceived: { fontWeight: "700", color: "#C2410C" },

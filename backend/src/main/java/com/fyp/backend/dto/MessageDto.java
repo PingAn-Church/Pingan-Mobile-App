@@ -49,6 +49,12 @@ public class MessageDto {
     // The event an "event" message shares. Sent by the client to name the event
     // (the server checks it and writes the body itself); null on everything else.
     private Long sharedEventId;
+    // Replying: the client names the message it answers here; the server checks
+    // it sits in the same conversation. Comes back on every stored reply too.
+    private Long replyToMessageId;
+    // The quoted message as this reader may see it — server-filled, never sent by
+    // a client. Absent on a message that replies to nothing.
+    private ReplyPreviewDto replyTo;
 
     // ✅ Change from Map<Long, String> to Map<String, String> to ensure proper JSON conversion
     private Map<String, String> deliveryStatus;
@@ -65,6 +71,9 @@ public class MessageDto {
                 || viewer.isAdmin();
         this.content = canViewReportedContent ? message.getContent() : null;
         this.sharedEventId = canViewReportedContent ? message.getSharedEventId() : null;
+        Message quoted = message.getReplyTo();
+        this.replyToMessageId = quoted == null ? null : quoted.getId();
+        this.replyTo = ReplyPreviewDto.of(quoted, viewer);
         this.type = message.getType();
         this.timestamp = message.getTimestamp().toString();
         this.conversationId = message.getConversation().getId();
@@ -115,14 +124,14 @@ public class MessageDto {
         return message.getConversation() instanceof GroupConversation group && group.isAppLevel();
     }
 
-    private String displayFirstName(User user) {
+    static String displayFirstName(User user) {
         if (user == null) {
             return "Unknown";
         }
         return user.isDeletedAccount() ? "Deleted" : user.getFirstName();
     }
 
-    private String displayLastName(User user) {
+    static String displayLastName(User user) {
         if (user == null) {
             return "User";
         }

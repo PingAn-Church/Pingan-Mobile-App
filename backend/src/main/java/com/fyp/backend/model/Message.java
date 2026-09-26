@@ -16,7 +16,9 @@ import java.util.Set;
 @Table(name = "messages", indexes = {
         // Backs keyset pagination of chat history (newest-first within a conversation).
         @Index(name = "idx_messages_conversation_id_id", columnList = "conversation_id, id"),
-        @Index(name = "idx_messages_conversation_sender", columnList = "conversation_id, sender_id")
+        @Index(name = "idx_messages_conversation_sender", columnList = "conversation_id, sender_id"),
+        // Lets ON DELETE SET NULL find a deleted message's replies without a table scan.
+        @Index(name = "idx_messages_reply_to", columnList = "reply_to_message_id")
 })
 public class Message {
 
@@ -115,6 +117,27 @@ public class Message {
      */
     @Column(name = "shared_event_id")
     private Long sharedEventId;
+
+    /**
+     * The message this one quotes, or null. Set by the sender when they reply,
+     * and by the assistant on its answers so each sits under its question.
+     *
+     * An association rather than a bare id so a DTO can draw the quote wherever
+     * it is built; @BatchSize keeps a page of history to one extra query for all
+     * its quotes instead of one each. On the database side the key is ON DELETE
+     * SET NULL, installed by DatabaseIntegrityMigration — the key Hibernate
+     * generates on its own would refuse to delete a message anyone has replied
+     * to. The reply stays; only its quote disappears.
+     *
+     * Excluded from equals/hashCode/toString: a self-reference in Lombok's
+     * generated methods would force the lazy load, or worse, chase the chain.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_message_id")
+    @org.hibernate.annotations.BatchSize(size = 30)
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
+    private Message replyTo;
 
 
     // ✅ Updated constructor to initialize conversationType

@@ -120,6 +120,11 @@ public class DatabaseIntegrityMigration {
         // the whole group has already read.
         ensureForeignKey(jdbc, "messages", "responds_to_message_id",
                 "messages", "id", "fk_messages_responds_to", "SET NULL");
+        // A reply outlives what it quotes: delete the original and the reply keeps
+        // its own words, minus the quote. Hibernate regenerates its plain key on
+        // this mapped column every boot; the steady-state churn is documented above.
+        ensureForeignKey(jdbc, "messages", "reply_to_message_id",
+                "messages", "id", "fk_messages_reply_to", "SET NULL");
 
         // One private conversation per pair of users. Duplicates created before this
         // guard existed are merged into the oldest conversation FIRST — the unique

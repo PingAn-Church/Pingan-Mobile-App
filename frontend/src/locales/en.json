@@ -412,6 +412,8 @@
   "deleteThreadFailed": "Failed to delete thread",
   "replies": "Replies",
   "reply": "Reply",
+  "replyingTo": "Replying to %{name}",
+  "replyOriginalNotLoaded": "The original message isn't in the loaded history.",
   "writeReply": "Write a reply",
   "deleteReply": "Delete Reply",
   "deleteReplyFailed": "Failed to delete reply",

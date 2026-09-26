@@ -87,8 +87,32 @@ import { kindOf, messagePreview } from "../../utils/messageKinds";
 import {
   getMessageDate,
   resolveTargetTranslationLanguage,
+  senderDisplayName,
   webFontSize,
 } from "../../utils/chatMessageDisplay";
+
+/**
+ * The reply fields an optimistic message carries: the id the server checks, and
+ * a preview built from the message being answered, so the quote is on screen
+ * before the server's own copy comes back.
+ */
+const replyFieldsFor = (quoted) =>
+  quoted
+    ? {
+        replyToMessageId: quoted.messageId,
+        replyTo: {
+          messageId: quoted.messageId,
+          senderId: quoted.senderId,
+          senderFirstName: quoted.senderFirstName,
+          senderLastName: quoted.senderLastName,
+          senderBot: !!quoted.senderBot,
+          senderDisplayNameZh: quoted.senderDisplayNameZh || null,
+          type: quoted.type,
+          content: quoted.content,
+          hidden: false,
+        },
+      }
+    : {};
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
@@ -279,6 +303,10 @@ export default function ChatPage({ route }) {
 
   const [inputText, setInputText] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
+  // The message the next send will quote, if the user is replying.
+  const [replyingTo, setReplyingTo] = useState(null);
+  // Flashed briefly after jumping to a quoted message.
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   const [showWebNewChatPanel, setShowWebNewChatPanel] = useState(false);
   const [showWebCreateGroupPanel, setShowWebCreateGroupPanel] = useState(false);
@@ -1354,9 +1382,11 @@ export default function ChatPage({ route }) {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
     const mentions = resolveOutgoingMentions(trimmed);
+    const quoted = replyingTo;
 
     const optimisticMessage = {
       ...mentions,
+      ...replyFieldsFor(quoted),
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1376,10 +1406,12 @@ export default function ChatPage({ route }) {
     appendOptimisticMessage(optimisticMessage);
     setInputText("");
     clearPendingMentions();
+    setReplyingTo(null);
     setAckTimeout(localId);
 
     const chatMessage = {
       ...mentions,
+      replyToMessageId: quoted?.messageId ?? null,
       content: trimmed,
       conversationId,
       conversationType,
@@ -1444,9 +1476,46 @@ export default function ChatPage({ route }) {
 
   const beginEditMessage = (message) => {
     setEditingMessage(message);
+    setReplyingTo(null);
     setInputText(message.content || "");
     closeContextMenu();
     textInputRef.current?.focus();
+  };
+
+  const beginReply = (message) => {
+    if (!message || messagingBlocked) return;
+    closeContextMenu();
+    // Editing and replying both own the composer; starting one ends the other.
+    if (editingMessage) {
+      setEditingMessage(null);
+      setInputText("");
+    }
+    setReplyingTo(message);
+    textInputRef.current?.focus();
+  };
+
+  // Jumps to a quoted message when it is in the loaded window and flashes it.
+  // History pages in from the newest end, so an old original may not be here;
+  // loading "around" an arbitrary id is a later step.
+  const scrollToMessage = (messageId) => {
+    const index = messages.findIndex(
+      (it) => it.type !== "date" && String(it.messageId) === String(messageId)
+    );
+    if (index < 0) {
+      showAlert(i18n.t("reply"), i18n.t("replyOriginalNotLoaded"));
+      return;
+    }
+    try {
+      flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    } catch (_) {
+      // onScrollToIndexFailed retries once rows have mounted
+    }
+    const key = String(messageId);
+    setHighlightedMessageId(key);
+    setTimeout(
+      () => setHighlightedMessageId((current) => (current === key ? null : current)),
+      1800
+    );
   };
 
   const resolveImageUrl = useCallback(
@@ -1555,8 +1624,12 @@ export default function ChatPage({ route }) {
     const imageUri = result.assets[0].uri;
     const localId = `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
+    // A photo sent while replying quotes the same message the words would have.
+    const quoted = replyingTo;
+    setReplyingTo(null);
 
     appendOptimisticMessage({
+      ...replyFieldsFor(quoted),
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1592,6 +1665,7 @@ export default function ChatPage({ route }) {
 
       const payload = {
         content: uploadedUrl,
+        replyToMessageId: quoted?.messageId ?? null,
         conversationId,
         conversationType,
         senderId: currentUser.id,
@@ -1713,8 +1787,11 @@ export default function ChatPage({ route }) {
     const parsedDuration = Number(duration);
     const durationInSeconds = Number.isFinite(parsedDuration) ? Math.max(0, Math.floor(parsedDuration)) : 0;
     const localVoiceContent = `${audioUri}|${durationInSeconds}`;
+    const quoted = replyingTo;
+    setReplyingTo(null);
 
     appendOptimisticMessage({
+      ...replyFieldsFor(quoted),
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1751,6 +1828,7 @@ export default function ChatPage({ route }) {
 
       const payload = {
         content: voiceContent,
+        replyToMessageId: quoted?.messageId ?? null,
         conversationId,
         conversationType,
         senderId: currentUser.id,
@@ -1823,6 +1901,13 @@ export default function ChatPage({ route }) {
   const contextCanReport =
     !!contextMessage &&
     contextMessage.senderId !== currentUser?.id &&
+    !contextMessage.pending &&
+    !contextMessage.failed &&
+    !isLocalOnlyMessage(contextMessage);
+  // Anything real can be answered — yours or theirs, words or media.
+  const contextCanReply =
+    !!contextMessage &&
+    !messagingBlocked &&
     !contextMessage.pending &&
     !contextMessage.failed &&
     !isLocalOnlyMessage(contextMessage);
@@ -2230,6 +2315,30 @@ export default function ChatPage({ route }) {
         </View>
       )}
 
+      {/* What the next send will quote. Sits where the editing banner does;
+          the two never show together (beginReply / beginEditMessage). */}
+      {replyingTo && !editingMessage && (
+        <View style={styles.replyBar}>
+          <View style={styles.replyBarStripe} />
+          <View style={styles.replyBarText}>
+            <Text style={styles.replyBarName} numberOfLines={1}>
+              {i18n.t("replyingTo", { name: senderDisplayName(replyingTo, language) })}
+            </Text>
+            <Text style={styles.replyBarPreview} numberOfLines={1}>
+              {messagePreview(replyingTo)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setReplyingTo(null)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("cancel")}
+          >
+            <Ionicons name="close-circle" size={22} color="#8E8E93" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {messagingBlocked && (
         <View style={styles.blockedBanner}>
           <Ionicons name="ban-outline" size={16} color="#8E8E93" />
@@ -2389,6 +2498,12 @@ export default function ChatPage({ route }) {
               onLongPress={openContextMenu}
               onOpenProfile={(userId) => navigation.navigate("UserProfile", { userId })}
               onOpenEvent={(eventId) => navigation.navigate("Events Detail", { eventId })}
+              onReply={beginReply}
+              onQuotePress={scrollToMessage}
+              canReply={!messagingBlocked}
+              highlighted={
+                highlightedMessageId != null && String(item.messageId) === highlightedMessageId
+              }
             />
           );
         }}
@@ -2406,6 +2521,15 @@ export default function ChatPage({ route }) {
               })
             }
           >
+            {contextCanReply && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => beginReply(contextMenu.message)}
+              >
+                <Text style={styles.contextMenuItemText}>{i18n.t("reply")}</Text>
+              </TouchableOpacity>
+            )}
+
             {contextCanCopy && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
@@ -3469,6 +3593,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 5,
     backgroundColor: "#EEE",
+  },
+  replyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#F2F2F7",
+    borderTopWidth: 1,
+    borderColor: "#E1E1E6",
+  },
+  replyBarStripe: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+    backgroundColor: "#0A84FF",
+    marginRight: 10,
+  },
+  replyBarText: {
+    flex: 1,
+  },
+  replyBarName: {
+    fontSize: webFontSize(13),
+    fontWeight: "700",
+    color: "#0A84FF",
+  },
+  replyBarPreview: {
+    fontSize: webFontSize(13),
+    color: "#3C3C43",
+    marginTop: 1,
   },
   dateSeparator: { alignItems: "center", marginVertical: 12 },
   dateText: {
