@@ -1,8 +1,6 @@
 import React, { useContext, useEffect, useState, useCallback } from "react";
 import {
   View,
-  Text,
-  StyleSheet,
   ScrollView,
   FlatList,
   TouchableOpacity,
@@ -24,11 +22,15 @@ import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { formatUserName } from "../../utils/formatName";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Card, Heading, TextLink } from "../../components/ui";
 
 // ==========================================
 // COMPONENT: HOME PAGE
 // ==========================================
 export default function HomePage() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const navigation = useNavigation();
   const { user } = useContext(UserContext);
   // Subscribing here re-renders the greeting (and every other label) on a language toggle.
@@ -41,7 +43,9 @@ export default function HomePage() {
   // Constants for responsive sizing
   const MAX_CONTENT_WIDTH = 1100;
   // On Desktop, cap the width. On mobile, use full width.
-  const contentWidth = isDesktop ? Math.min(width - 40, MAX_CONTENT_WIDTH) : width;
+  const contentWidth = isDesktop
+    ? Math.min(width - 40, MAX_CONTENT_WIDTH)
+    : width;
 
   // Adjust square size based on screen
   const squareSize = isDesktop ? 110 : width * 0.22;
@@ -75,14 +79,16 @@ export default function HomePage() {
       if (user) loadEvents();
       else setEvents([]);
       loadCourses();
-    }, [isDesktop, user?.id])
+    }, [isDesktop, user?.id]),
   );
 
   const loadCourses = async () => {
     try {
       const { courses } = await getPublishedCourses({ limit: 8 });
       setCourses(courses);
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   // Covers are handed to the carousel as their stored object path and resolved by
@@ -92,7 +98,9 @@ export default function HomePage() {
   const loadAnnouncements = async () => {
     try {
       setAnnouncements(await getAllAnnouncements());
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const loadEvents = async () => {
@@ -103,14 +111,18 @@ export default function HomePage() {
         sort: "startAt,asc",
       });
       setEvents(Array.isArray(response?.data) ? response.data : []);
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const loadVideos = async () => {
     try {
       const response = await fetchVideos({ size: isDesktop ? 4 : 3 });
       setVideos(Array.isArray(response?.data) ? response.data : []);
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const getEmbedUrl = (videoId, type) => {
@@ -122,7 +134,9 @@ export default function HomePage() {
   // Greeting line: the Lord's Day gets its own blessing, other days a plain hello.
   // getDay() reads the device's local calendar (0 = Sunday). Signed-out visitors see
   // the bare greeting, with no dangling comma.
-  const greeting = i18n.t(new Date().getDay() === 0 ? "greetingSunday" : "greetingHello");
+  const greeting = i18n.t(
+    new Date().getDay() === 0 ? "greetingSunday" : "greetingHello",
+  );
   const greetingName = formatUserName(user, language);
   const greetingLine = greetingName
     ? i18n.t("greetingWithName", { greeting, name: greetingName })
@@ -134,20 +148,21 @@ export default function HomePage() {
       contentContainerStyle={styles.scrollContentContainer}
     >
       <View style={[styles.responsiveWrapper, { width: contentWidth }]}>
-
         {/* Section 1: Announcements. Hidden entirely when there are none, rather
             than leaving a heading above an empty carousel. This also covers the
             initial render, since announcements load asynchronously. */}
         {announcements.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{i18n.t("announcements")}</Text>
+            <Heading style={styles.sectionTitle}>
+              {i18n.t("announcements")}
+            </Heading>
             <View style={isDesktop ? styles.carouselWebContainer : null}>
               <Carousel
                 data={announcements.map((announcement) => ({
                   key: announcement.id.toString(),
                   imageUrl: announcement.imageUrl || null,
                   description: announcement.title,
-                  link: announcement.announcementLink
+                  link: announcement.announcementLink,
                 }))}
               />
             </View>
@@ -156,62 +171,112 @@ export default function HomePage() {
 
         {/* Section 2: Quick Actions (Grid) */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{greetingLine}</Text>
+          <Heading style={styles.sectionTitle}>{greetingLine}</Heading>
           <ScrollView
             horizontal={!isDesktop}
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={isDesktop ? styles.gridWebContainer : styles.gridMobileContainer}
+            contentContainerStyle={
+              isDesktop ? styles.gridWebContainer : styles.gridMobileContainer
+            }
           >
             {[
-              { icon: "description", color: "#009688", label: "applyForm", screen: "FormApplication" },
-              { icon: "stars", color: "#2A8068", label: "giftDiscovery", screen: "GiftDiscovery" },
-              { icon: "public", color: "#4CAF50", label: "website", url: "https://www.pingan.org.sg" },
-              { icon: "play-arrow", color: "#F44336", label: "youtube", url: "https://www.youtube.com/@Pinganchurch" },
+              {
+                icon: "description",
+                color: colors.tiles.form,
+                label: "applyForm",
+                screen: "FormApplication",
+              },
+              {
+                icon: "stars",
+                color: colors.tiles.gifts,
+                label: "giftDiscovery",
+                screen: "GiftDiscovery",
+              },
+              {
+                icon: "public",
+                color: colors.tiles.website,
+                label: "website",
+                url: "https://www.pingan.org.sg",
+              },
+              {
+                icon: "play-arrow",
+                color: colors.tiles.youtube,
+                label: "youtube",
+                url: "https://www.youtube.com/@Pinganchurch",
+              },
               // Magenta is the one hue not already on this row, so the counselling
               // booking reads as its own thing rather than a second video or map tile.
               // Ionicons for the glyph, so it is the same speech bubble the Chats tab
               // uses rather than a lookalike from a different set.
-              { icon: "chatbubble", iconFamily: "ion", color: "#E91E63", label: "consultation", url: "https://booking.pingan.org.sg/" },
-              { icon: "place", color: "#2196F3", label: "location", url: "https://maps.app.goo.gl/87euaduDeRSA5JMN6" },
-              { icon: "phone", color: "#FFC107", label: "phoneNumber", url: "tel:+6580390059" },
-              { icon: "email", color: "#673AB7", label: "email", url: "mailto:pinganchurchsingapore@gmail.com" },
-            ].filter((item) => user || item.screen !== "FormApplication").map((item, idx) => (
-              <RoundedSquare
-                key={idx}
-                iconName={item.icon}
-                iconFamily={item.iconFamily}
-                iconSize={iconSize}
-                backgroundColor={item.color}
-                iconColor="#fff"
-                size={squareSize}
-                description={i18n.t(item.label)}
-                navigationScreen={item.screen}
-                webUrl={item.url}
-              />
-            ))}
+              {
+                icon: "chatbubble",
+                iconFamily: "ion",
+                color: colors.tiles.consultation,
+                label: "consultation",
+                url: "https://booking.pingan.org.sg/",
+              },
+              {
+                icon: "place",
+                color: colors.tiles.location,
+                label: "location",
+                url: "https://maps.app.goo.gl/87euaduDeRSA5JMN6",
+              },
+              {
+                icon: "phone",
+                color: colors.tiles.phone,
+                label: "phoneNumber",
+                url: "tel:+6580390059",
+              },
+              {
+                icon: "email",
+                color: colors.tiles.email,
+                label: "email",
+                url: "mailto:pinganchurchsingapore@gmail.com",
+              },
+            ]
+              .filter((item) => user || item.screen !== "FormApplication")
+              .map((item, idx) => (
+                <RoundedSquare
+                  key={idx}
+                  iconName={item.icon}
+                  iconFamily={item.iconFamily}
+                  iconSize={iconSize}
+                  backgroundColor={item.color}
+                  iconColor={colors.onPrimary}
+                  size={squareSize}
+                  description={i18n.t(item.label)}
+                  navigationScreen={item.screen}
+                  webUrl={item.url}
+                />
+              ))}
           </ScrollView>
         </View>
 
         {/* Section: Learning */}
         <View style={styles.section}>
           <View style={styles.headerRow}>
-            <Text style={styles.sectionTitle}>{i18n.t("learning")}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Learning")}>
-              <Text style={styles.viewAllText}>{`${i18n.t("viewAll")} →`}</Text>
-            </TouchableOpacity>
+            <Heading style={styles.sectionTitle}>{i18n.t("learning")}</Heading>
+            <TextLink onPress={() => navigation.navigate("Learning")}>
+              {`${i18n.t("viewAll")} →`}
+            </TextLink>
           </View>
           {courses.length > 0 ? (
             <ScrollView
               horizontal={!isDesktop}
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={isDesktop ? styles.flexRowWrap : styles.flexRow}
+              contentContainerStyle={
+                isDesktop ? styles.flexRowWrap : styles.flexRow
+              }
             >
               {courses.map((course) => (
-                <TouchableOpacity
+                <Card
                   key={course.id}
+                  padded={false}
                   style={styles.courseCard}
                   onPress={() =>
-                    navigation.navigate("LearningCourseDetail", { courseId: course.id })
+                    navigation.navigate("LearningCourseDetail", {
+                      courseId: course.id,
+                    })
                   }
                 >
                   <CourseCoverImage
@@ -219,91 +284,156 @@ export default function HomePage() {
                     fallback="https://picsum.photos/seed/course/400/250"
                     style={styles.courseImage}
                   />
-                  <Text style={styles.courseTitle} numberOfLines={2}>
+                  <AppText
+                    variant="cardTitleSmall"
+                    style={styles.courseTitle}
+                    numberOfLines={2}
+                  >
                     {course.title}
-                  </Text>
-                  <Text style={styles.courseMeta} numberOfLines={1}>
+                  </AppText>
+                  <AppText
+                    variant="captionSmall"
+                    style={styles.courseMeta}
+                    numberOfLines={1}
+                  >
                     {course.categoryName} • {course.durationHours}h
-                  </Text>
-                </TouchableOpacity>
+                  </AppText>
+                </Card>
               ))}
             </ScrollView>
           ) : (
-            <Text style={styles.noData}>{i18n.t("noCourses")}</Text>
+            <AppText variant="empty" style={styles.noData}>
+              {i18n.t("noCourses")}
+            </AppText>
           )}
         </View>
 
         {/* Section 3: Events */}
-        {user && <View style={styles.section}>
-          <View style={styles.headerRow}>
-            <Text style={styles.sectionTitle}>{i18n.t("upcoming")} {i18n.t("Events")}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Events")}>
-              <Text style={styles.viewAllText}>
+        {user && (
+          <View style={styles.section}>
+            <View style={styles.headerRow}>
+              <Heading style={styles.sectionTitle}>
+                {i18n.t("upcoming")} {i18n.t("Events")}
+              </Heading>
+              <TextLink onPress={() => navigation.navigate("Events")}>
                 {isDesktop ? `${i18n.t("viewAll")} →` : null}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {events.length > 0 ? (
-            <View style={styles.eventRowWrapper}>
-              <ScrollView
-                horizontal={!isDesktop}
-                showsHorizontalScrollIndicator={false}
-              >
-                <View style={isDesktop ? styles.flexRowWrap : styles.flexRow}>
-                  {events.map((event, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.cardContainer, isDesktop && styles.cardContainerWeb]}
-                      onPress={() => navigation.navigate("Events Detail", { eventId: event.id })}
-                    >
-                      <View style={styles.eventBox}>
-                        <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
-                        <Text style={styles.eventDate}>{event.date}</Text>
-                        <Text style={styles.eventTime}>{event.startTime} - {event.endTime}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-
-              {/* Mobile Arrow */}
-              {!isDesktop && (
-                <TouchableOpacity style={styles.mobileArrow} onPress={() => navigation.navigate("Events")}>
-                  <Ionicons name="chevron-forward" size={20} color="white" />
-                </TouchableOpacity>
-              )}
+              </TextLink>
             </View>
-          ) : (
-            <Text style={styles.noData}>{i18n.t("noUpcomingEvents")}</Text>
-          )}
-        </View>}
+
+            {events.length > 0 ? (
+              <View style={styles.eventRowWrapper}>
+                <ScrollView
+                  horizontal={!isDesktop}
+                  showsHorizontalScrollIndicator={false}
+                >
+                  <View style={isDesktop ? styles.flexRowWrap : styles.flexRow}>
+                    {events.map((event, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.cardContainer,
+                          isDesktop && styles.cardContainerWeb,
+                        ]}
+                        onPress={() =>
+                          navigation.navigate("Events Detail", {
+                            eventId: event.id,
+                          })
+                        }
+                      >
+                        <Card elevated style={styles.eventBox}>
+                          <AppText
+                            variant="cardTitle"
+                            style={styles.eventTitle}
+                            numberOfLines={1}
+                          >
+                            {event.title}
+                          </AppText>
+                          <AppText variant="caption">{event.date}</AppText>
+                          <AppText
+                            variant="caption"
+                            color="primary"
+                            weight="semibold"
+                            style={styles.eventTime}
+                          >
+                            {event.startTime} - {event.endTime}
+                          </AppText>
+                        </Card>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+
+                {/* Mobile Arrow */}
+                {!isDesktop && (
+                  <TouchableOpacity
+                    style={styles.mobileArrow}
+                    onPress={() => navigation.navigate("Events")}
+                    accessibilityRole="button"
+                    accessibilityLabel={i18n.t("viewAll")}
+                  >
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color={colors.onPrimary}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <AppText variant="empty" style={styles.noData}>
+                {i18n.t("noUpcomingEvents")}
+              </AppText>
+            )}
+          </View>
+        )}
 
         {/* Section 4: Videos */}
         <View style={styles.section}>
           <View style={styles.headerRow}>
-            <Text style={styles.sectionTitle}>{i18n.t("videos")}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("VideosPage")}>
-              <Text style={styles.viewAllText}>{isDesktop ? `${i18n.t("viewAll")} →` : null}</Text>
-            </TouchableOpacity>
+            <Heading style={styles.sectionTitle}>{i18n.t("videos")}</Heading>
+            <TextLink onPress={() => navigation.navigate("VideosPage")}>
+              {isDesktop ? `${i18n.t("viewAll")} →` : null}
+            </TextLink>
           </View>
 
           {videos.length > 0 ? (
             <View style={styles.videoRowWrapper}>
-              <ScrollView horizontal={!isDesktop} showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal={!isDesktop}
+                showsHorizontalScrollIndicator={false}
+              >
                 <View style={isDesktop ? styles.videoGridWeb : styles.flexRow}>
                   {videos.map((video, index) => (
-                    <View key={index} style={[styles.videoItem, isDesktop && styles.videoItemWeb]}>
-                      <View style={[styles.videoWrapper, Platform.OS === 'web' && styles.videoWrapperWebHome]}>
+                    <View
+                      key={index}
+                      style={[
+                        styles.videoItem,
+                        isDesktop && styles.videoItemWeb,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.videoWrapper,
+                          Platform.OS === "web" && styles.videoWrapperWebHome,
+                        ]}
+                      >
                         <PlatformWebView
-                          source={{ uri: getEmbedUrl(video.videoId, video.videoType) }}
+                          source={{
+                            uri: getEmbedUrl(video.videoId, video.videoType),
+                          }}
                           style={styles.video}
                           javaScriptEnabled
                           domStorageEnabled
                           scrollEnabled={false} // Important for Web iframe stability
                         />
                       </View>
-                      <Text style={styles.videoTitle} numberOfLines={2}>{video.title}</Text>
+                      <AppText
+                        variant="bodyStrong"
+                        style={styles.videoTitle}
+                        numberOfLines={2}
+                      >
+                        {video.title}
+                      </AppText>
                     </View>
                   ))}
                 </View>
@@ -314,16 +444,23 @@ export default function HomePage() {
                 <TouchableOpacity
                   style={styles.mobileArrow}
                   onPress={() => navigation.navigate("VideosPage")}
+                  accessibilityRole="button"
+                  accessibilityLabel={i18n.t("viewAll")}
                 >
-                  <Ionicons name="chevron-forward" size={20} color="white" />
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.onPrimary}
+                  />
                 </TouchableOpacity>
               )}
             </View>
           ) : (
-            <Text style={styles.noData}>{i18n.t("noVideos")}</Text>
+            <AppText variant="empty" style={styles.noData}>
+              {i18n.t("noVideos")}
+            </AppText>
           )}
         </View>
-
       </View>
     </ScrollView>
   );
@@ -333,6 +470,7 @@ export default function HomePage() {
 // COMPONENT: VIDEOS PAGE (Restored)
 // ==========================================
 export function VideosPage() {
+  const styles = useStyles();
   const navigation = useNavigation();
   const [videos, setVideos] = useState([]);
   const [page, setPage] = useState(0);
@@ -362,8 +500,19 @@ export function VideosPage() {
       try {
         const response = await fetchVideos({ page: nextPage, size: pageSize });
         const items = Array.isArray(response?.data) ? response.data : [];
-        setVideos((prev) => (replace ? items : [...prev, ...items.filter((v) => !prev.some((p) => p.id === v.id))]));
-        setPage(Number.isFinite(Number(response?.pagination?.page)) ? Number(response.pagination.page) : nextPage);
+        setVideos((prev) =>
+          replace
+            ? items
+            : [
+                ...prev,
+                ...items.filter((v) => !prev.some((p) => p.id === v.id)),
+              ],
+        );
+        setPage(
+          Number.isFinite(Number(response?.pagination?.page))
+            ? Number(response.pagination.page)
+            : nextPage,
+        );
         setHasMore(Boolean(response?.pagination?.hasMore));
       } catch (error) {
         console.error("Error fetching videos:", error);
@@ -371,7 +520,7 @@ export function VideosPage() {
         setLoading(false);
       }
     },
-    [pageSize]
+    [pageSize],
   );
 
   useFocusEffect(
@@ -380,7 +529,7 @@ export function VideosPage() {
       setPage(0);
       setHasMore(true);
       loadVideosPage(0, true);
-    }, [loadVideosPage])
+    }, [loadVideosPage]),
   );
 
   const loadMoreVideos = () => {
@@ -396,13 +545,41 @@ export function VideosPage() {
       keyExtractor={(item) => String(item.id)}
       onEndReached={loadMoreVideos}
       onEndReachedThreshold={0.3}
-      ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
-      ListEmptyComponent={!loading ? <Text style={styles.noData}>{i18n.t("noVideos")}</Text> : null}
+      ListFooterComponent={
+        loading ? <ActivityIndicator style={styles.loadingMore} /> : null
+      }
+      ListEmptyComponent={
+        !loading ? (
+          <AppText variant="empty" style={styles.noData}>
+            {i18n.t("noVideos")}
+          </AppText>
+        ) : null
+      }
       renderItem={({ item: video }) => (
         // Math.min keeps the 800px column inside 768-834dp tablet-portrait windows.
-        <View style={{ width: isDesktop ? Math.min(800, width - 32) : '100%', alignItems: 'center' }}>
-          <View style={[styles.videoItem, { width: isDesktop ? '100%' : width * 0.9 }, Platform.OS === 'web' && isDesktop && styles.videosPageVideoItemWeb]}>
-            <View style={[styles.videoWrapper, Platform.OS === 'web' && isDesktop && styles.videoWrapperWebAllVideos]}>
+        <View
+          style={{
+            width: isDesktop ? Math.min(800, width - 32) : "100%",
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={[
+              styles.videoItem,
+              { width: isDesktop ? "100%" : width * 0.9 },
+              Platform.OS === "web" &&
+                isDesktop &&
+                styles.videosPageVideoItemWeb,
+            ]}
+          >
+            <View
+              style={[
+                styles.videoWrapper,
+                Platform.OS === "web" &&
+                  isDesktop &&
+                  styles.videoWrapperWebAllVideos,
+              ]}
+            >
               <PlatformWebView
                 source={{ uri: getEmbedUrl(video.videoId, video.videoType) }}
                 style={styles.video}
@@ -410,7 +587,9 @@ export function VideosPage() {
                 domStorageEnabled
               />
             </View>
-            <Text style={styles.videoTitle}>{video.title}</Text>
+            <AppText variant="bodyStrong" style={styles.videoTitle}>
+              {video.title}
+            </AppText>
           </View>
         </View>
       )}
@@ -421,63 +600,63 @@ export function VideosPage() {
 // ==========================================
 // STYLES
 // ==========================================
-const styles = StyleSheet.create({
+// Fixed layout sizes for this screen. Colours, text, spacing, radius and
+// shadows come from the theme; only these screen-specific dimensions stay here.
+const EVENT_CARD_WIDTH = 240;
+const COURSE_CARD_WIDTH = 220;
+const COURSE_IMAGE_HEIGHT = 120;
+const VIDEO_ITEM_WIDTH = 300;
+
+const useStyles = makeStyles((t) => ({
   mainScroll: {
     flex: 1, // Critical for Web to fill height
-    backgroundColor: "#fff",
+    backgroundColor: t.colors.background,
   },
   scrollContentContainer: {
     alignItems: "center",
-    paddingBottom: 40,
+    paddingBottom: t.spacing["4xl"],
     flexGrow: 1,
   },
   responsiveWrapper: {
-    paddingHorizontal: Platform.OS === 'web' ? 20 : 0,
-    alignSelf: 'center',
+    paddingHorizontal: Platform.OS === "web" ? t.spacing["2xl"] : 0,
+    alignSelf: "center",
   },
   section: {
-    marginTop: 30,
-    width: '100%',
+    marginTop: t.spacing["3xl"],
+    width: "100%",
   },
+  // Text style comes from <Heading>; this is only its position.
   sectionTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 15,
-    marginLeft: 15, // Match mobile padding
-    color: "#333",
+    marginBottom: t.spacing.lg,
+    marginLeft: t.spacing.lg, // Match mobile padding
   },
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingRight: 20,
-  },
-  viewAllText: {
-    color: 'blue',
-    fontWeight: '600',
-    fontSize: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingRight: t.spacing["2xl"],
   },
 
   // Carousel. No height: the carousel sizes itself to the tallest announcement
   // (each card follows its own picture's aspect ratio), so pinning it here would
   // crop whatever doesn't fit the old 400px box.
   carouselWebContainer: {
-    borderRadius: 15,
-    overflow: 'hidden',
-    marginHorizontal: 15,
+    borderRadius: t.radius.lg,
+    overflow: "hidden",
+    marginHorizontal: t.spacing.lg,
   },
 
   // Grid
   gridWebContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 20,
-    paddingLeft: 15,
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    flexWrap: "wrap",
+    gap: t.spacing["2xl"],
+    paddingLeft: t.spacing.lg,
   },
   gridMobileContainer: {
-    flexDirection: 'row',
-    paddingLeft: 10, // Match original look
+    flexDirection: "row",
+    paddingLeft: t.spacing.base, // Match original look
   },
 
   // Events
@@ -486,46 +665,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   flexRow: {
-    flexDirection: 'row',
-    paddingLeft: 5,
+    flexDirection: "row",
+    paddingLeft: t.spacing.sm,
   },
   flexRowWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 15,
-    paddingLeft: 15,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: t.spacing.lg,
+    paddingLeft: t.spacing.lg,
   },
   cardContainer: {
-    width: 240,
-    marginHorizontal: 5,
+    width: EVENT_CARD_WIDTH,
+    marginHorizontal: t.spacing.sm,
   },
   cardContainerWeb: {
-    width: '23%',
+    width: "23%",
     minWidth: 200,
     marginHorizontal: 0,
   },
+  // Look comes from <Card elevated>; this is only its position.
   eventBox: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 5,
-    borderWidth: 1,
-    borderColor: "#eee",
-    // Shadow for iOS/Android/Web
-    ...Platform.select({
-      web: { boxShadow: '0px 4px 6px rgba(0,0,0,0.05)' },
-      default: {
-        elevation: 2,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      }
-    })
+    marginVertical: t.spacing.sm,
   },
-  eventTitle: { fontSize: 17, fontWeight: "bold", color: "#222", marginBottom: 8 },
-  eventDate: { fontSize: 14, color: "#666" },
-  eventTime: { fontSize: 14, color: "#007AFF", marginTop: 4, fontWeight: '600' },
+  eventTitle: {
+    marginBottom: t.spacing.md,
+  },
+  eventTime: {
+    marginTop: t.spacing.xs,
+  },
 
   // Videos
   videoRowWrapper: {
@@ -533,16 +700,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   videoGridWeb: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 20,
-    paddingHorizontal: 15,
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: t.spacing["2xl"],
+    paddingHorizontal: t.spacing.lg,
+    width: "100%",
   },
   videoItem: {
-    width: 300, // Mobile width
-    marginHorizontal: 10,
-    marginBottom: 20,
+    width: VIDEO_ITEM_WIDTH, // Mobile width
+    marginHorizontal: t.spacing.base,
+    marginBottom: t.spacing["2xl"],
   },
   videoItemWeb: {
     flex: 1,
@@ -550,11 +717,11 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   videoWrapper: {
-    width: '100%',
+    width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#000',
+    borderRadius: t.radius.md,
+    overflow: "hidden",
+    backgroundColor: t.colors.media,
   },
   videoWrapperWebHome: {
     height: 160,
@@ -565,67 +732,59 @@ const styles = StyleSheet.create({
   video: {
     flex: 1,
     // Ensures iframe fills container on web
-    height: '100%',
-    width: '100%'
+    height: "100%",
+    width: "100%",
   },
   videoTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 10,
-    color: "#333",
+    marginTop: t.spacing.base,
     textAlign: "left",
-    lineHeight: 22,
   },
 
   // Videos Page specific
   videosPageContainer: {
     flexGrow: 1,
-    backgroundColor: "#f9f9f9",
-    padding: 20,
+    backgroundColor: t.colors.backgroundAlt,
+    padding: t.spacing["2xl"],
     alignItems: "center",
   },
   videosPageVideoItemWeb: {
     maxWidth: 560,
   },
+  loadingMore: {
+    marginVertical: t.spacing.xl,
+  },
 
-  // Learning
+  // Learning — look comes from <Card padded={false}>; this is size and position.
   courseCard: {
-    width: 220,
-    marginHorizontal: 8,
-    marginBottom: 10,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
+    width: COURSE_CARD_WIDTH,
+    marginHorizontal: t.spacing.md,
+    marginBottom: t.spacing.base,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#eee",
   },
   courseImage: {
     width: "100%",
-    height: 120,
-    backgroundColor: "#ddd",
+    height: COURSE_IMAGE_HEIGHT,
+    backgroundColor: t.colors.placeholder,
   },
   courseTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#222",
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingHorizontal: t.spacing.base,
+    paddingTop: t.spacing.md,
   },
   courseMeta: {
-    fontSize: 13,
-    color: "#666",
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-    paddingTop: 2,
+    paddingHorizontal: t.spacing.base,
+    paddingBottom: t.spacing.base,
+    paddingTop: t.spacing["2xs"],
   },
 
   // Shared
   mobileArrow: {
-    backgroundColor: "#007bff",
-    padding: 10,
-    borderRadius: 30,
-    marginLeft: 5,
-    marginRight: 10,
+    backgroundColor: t.colors.primary,
+    padding: t.spacing.base,
+    borderRadius: t.radius.full,
+    marginLeft: t.spacing.sm,
+    marginRight: t.spacing.base,
   },
-  noData: { fontSize: 16, color: "gray", padding: 20 },
-});
+  noData: {
+    padding: t.spacing["2xl"],
+  },
+}));

@@ -64,6 +64,7 @@ import StorageSettingsPage from "./src/pages/Others/StorageSettingsPage";
 import { init as initMediaCache } from "./src/service/MediaCacheService";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { LanguageProvider } from "./src/context/LanguageContext";
+import { ThemeProvider } from "./src/theme";
 import { LanguageContext } from "./src/context/LanguageContext";
 import "./i18n";
 import i18n from "./i18n";
@@ -532,6 +533,7 @@ export default function App() {
   }, []);
 
   return (
+    <ThemeProvider>
     <KeyboardProvider>
     <NavigationContainer
       ref={navigationRef}
@@ -798,5 +800,6 @@ export default function App() {
       </QueryClientProvider>
     </NavigationContainer>
     </KeyboardProvider>
+    </ThemeProvider>
   );
 }
