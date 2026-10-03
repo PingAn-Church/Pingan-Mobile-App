@@ -1,14 +1,12 @@
-// Spacing tokens (margin / padding), matching the values in use today.
-// Standardisation will round these onto a 4-point grid.
+// Spacing tokens (margin / padding) on a 4-point grid.
+// Same names and steps as src/learning/constants Spacing.
 export const spacing = {
-  "2xs": 2,
   xs: 4,
-  sm: 5,
-  md: 8,
-  base: 10,
-  lg: 15,
-  xl: 16,
-  "2xl": 20,
-  "3xl": 30,
-  "4xl": 40,
+  sm: 8,
+  md: 12,
+  base: 16,
+  lg: 20,
+  xl: 24,
+  "2xl": 32,
+  "3xl": 40,
 };

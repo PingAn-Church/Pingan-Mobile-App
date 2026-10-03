@@ -4,9 +4,9 @@ import { useTheme } from "../../theme";
 
 // All app text. Pick a role with `variant`; override colour or weight with a
 // token name (e.g. color="primary", weight="semibold") instead of a raw value.
-export default function AppText({ variant = "caption", color, weight, style, ...props }) {
+export default function AppText({ variant = "body", color, weight, style, ...props }) {
   const theme = useTheme();
-  const v = theme.textVariants[variant] ?? theme.textVariants.caption;
+  const v = theme.textVariants[variant] ?? theme.textVariants.body;
 
   const base = {
     fontSize: v.fontSize,

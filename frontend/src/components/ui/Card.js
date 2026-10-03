@@ -40,7 +40,7 @@ export default function Card({
 
 const useStyles = makeStyles((t) => ({
   base: {
-    borderRadius: t.radius.md,
+    borderRadius: t.radius.card,
     borderWidth: t.components.card.borderWidth,
     borderColor: t.colors.borderSubtle,
   },

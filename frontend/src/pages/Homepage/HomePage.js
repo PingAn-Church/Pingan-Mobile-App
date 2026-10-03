@@ -292,7 +292,7 @@ export default function HomePage() {
                     {course.title}
                   </AppText>
                   <AppText
-                    variant="captionSmall"
+                    variant="secondary"
                     style={styles.courseMeta}
                     numberOfLines={1}
                   >
@@ -302,7 +302,7 @@ export default function HomePage() {
               ))}
             </ScrollView>
           ) : (
-            <AppText variant="empty" style={styles.noData}>
+            <AppText variant="body" color="textSecondary" style={styles.noData}>
               {i18n.t("noCourses")}
             </AppText>
           )}
@@ -315,9 +315,11 @@ export default function HomePage() {
               <Heading style={styles.sectionTitle}>
                 {i18n.t("upcoming")} {i18n.t("Events")}
               </Heading>
-              <TextLink onPress={() => navigation.navigate("Events")}>
-                {isDesktop ? `${i18n.t("viewAll")} →` : null}
-              </TextLink>
+              {isDesktop && (
+                <TextLink onPress={() => navigation.navigate("Events")}>
+                  {`${i18n.t("viewAll")} →`}
+                </TextLink>
+              )}
             </View>
 
             {events.length > 0 ? (
@@ -348,9 +350,9 @@ export default function HomePage() {
                           >
                             {event.title}
                           </AppText>
-                          <AppText variant="caption">{event.date}</AppText>
+                          <AppText variant="secondary">{event.date}</AppText>
                           <AppText
-                            variant="caption"
+                            variant="secondary"
                             color="primary"
                             weight="semibold"
                             style={styles.eventTime}
@@ -380,7 +382,7 @@ export default function HomePage() {
                 )}
               </View>
             ) : (
-              <AppText variant="empty" style={styles.noData}>
+              <AppText variant="body" color="textSecondary" style={styles.noData}>
                 {i18n.t("noUpcomingEvents")}
               </AppText>
             )}
@@ -391,9 +393,11 @@ export default function HomePage() {
         <View style={styles.section}>
           <View style={styles.headerRow}>
             <Heading style={styles.sectionTitle}>{i18n.t("videos")}</Heading>
-            <TextLink onPress={() => navigation.navigate("VideosPage")}>
-              {isDesktop ? `${i18n.t("viewAll")} →` : null}
-            </TextLink>
+            {isDesktop && (
+              <TextLink onPress={() => navigation.navigate("VideosPage")}>
+                {`${i18n.t("viewAll")} →`}
+              </TextLink>
+            )}
           </View>
 
           {videos.length > 0 ? (
@@ -428,7 +432,8 @@ export default function HomePage() {
                         />
                       </View>
                       <AppText
-                        variant="bodyStrong"
+                        variant="body"
+                        weight="semibold"
                         style={styles.videoTitle}
                         numberOfLines={2}
                       >
@@ -456,7 +461,7 @@ export default function HomePage() {
               )}
             </View>
           ) : (
-            <AppText variant="empty" style={styles.noData}>
+            <AppText variant="body" color="textSecondary" style={styles.noData}>
               {i18n.t("noVideos")}
             </AppText>
           )}
@@ -550,7 +555,7 @@ export function VideosPage() {
       }
       ListEmptyComponent={
         !loading ? (
-          <AppText variant="empty" style={styles.noData}>
+          <AppText variant="body" color="textSecondary" style={styles.noData}>
             {i18n.t("noVideos")}
           </AppText>
         ) : null
@@ -587,7 +592,7 @@ export function VideosPage() {
                 domStorageEnabled
               />
             </View>
-            <AppText variant="bodyStrong" style={styles.videoTitle}>
+            <AppText variant="body" weight="semibold" style={styles.videoTitle}>
               {video.title}
             </AppText>
           </View>
@@ -614,36 +619,36 @@ const useStyles = makeStyles((t) => ({
   },
   scrollContentContainer: {
     alignItems: "center",
-    paddingBottom: t.spacing["4xl"],
+    paddingBottom: t.spacing["3xl"],
     flexGrow: 1,
   },
   responsiveWrapper: {
-    paddingHorizontal: Platform.OS === "web" ? t.spacing["2xl"] : 0,
+    paddingHorizontal: Platform.OS === "web" ? t.spacing.lg : 0,
     alignSelf: "center",
   },
   section: {
-    marginTop: t.spacing["3xl"],
+    marginTop: t.spacing["2xl"],
     width: "100%",
   },
   // Text style comes from <Heading>; this is only its position.
   sectionTitle: {
-    marginBottom: t.spacing.lg,
-    marginLeft: t.spacing.lg, // Match mobile padding
+    marginBottom: t.spacing.base,
+    marginLeft: t.spacing.base, // Match mobile padding
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingRight: t.spacing["2xl"],
+    paddingRight: t.spacing.lg,
   },
 
   // Carousel. No height: the carousel sizes itself to the tallest announcement
   // (each card follows its own picture's aspect ratio), so pinning it here would
   // crop whatever doesn't fit the old 400px box.
   carouselWebContainer: {
-    borderRadius: t.radius.lg,
+    borderRadius: t.radius.card,
     overflow: "hidden",
-    marginHorizontal: t.spacing.lg,
+    marginHorizontal: t.spacing.base,
   },
 
   // Grid
@@ -651,12 +656,12 @@ const useStyles = makeStyles((t) => ({
     flexDirection: "row",
     justifyContent: "flex-start",
     flexWrap: "wrap",
-    gap: t.spacing["2xl"],
-    paddingLeft: t.spacing.lg,
+    gap: t.spacing.lg,
+    paddingLeft: t.spacing.base,
   },
   gridMobileContainer: {
     flexDirection: "row",
-    paddingLeft: t.spacing.base, // Match original look
+    paddingLeft: t.spacing.md, // Match original look
   },
 
   // Events
@@ -666,17 +671,17 @@ const useStyles = makeStyles((t) => ({
   },
   flexRow: {
     flexDirection: "row",
-    paddingLeft: t.spacing.sm,
+    paddingLeft: t.spacing.xs,
   },
   flexRowWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: t.spacing.lg,
-    paddingLeft: t.spacing.lg,
+    gap: t.spacing.base,
+    paddingLeft: t.spacing.base,
   },
   cardContainer: {
     width: EVENT_CARD_WIDTH,
-    marginHorizontal: t.spacing.sm,
+    marginHorizontal: t.spacing.xs,
   },
   cardContainerWeb: {
     width: "23%",
@@ -685,10 +690,10 @@ const useStyles = makeStyles((t) => ({
   },
   // Look comes from <Card elevated>; this is only its position.
   eventBox: {
-    marginVertical: t.spacing.sm,
+    marginVertical: t.spacing.xs,
   },
   eventTitle: {
-    marginBottom: t.spacing.md,
+    marginBottom: t.spacing.sm,
   },
   eventTime: {
     marginTop: t.spacing.xs,
@@ -702,14 +707,14 @@ const useStyles = makeStyles((t) => ({
   videoGridWeb: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: t.spacing["2xl"],
-    paddingHorizontal: t.spacing.lg,
+    gap: t.spacing.lg,
+    paddingHorizontal: t.spacing.base,
     width: "100%",
   },
   videoItem: {
     width: VIDEO_ITEM_WIDTH, // Mobile width
-    marginHorizontal: t.spacing.base,
-    marginBottom: t.spacing["2xl"],
+    marginHorizontal: t.spacing.md,
+    marginBottom: t.spacing.lg,
   },
   videoItemWeb: {
     flex: 1,
@@ -719,7 +724,7 @@ const useStyles = makeStyles((t) => ({
   videoWrapper: {
     width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: t.radius.md,
+    borderRadius: t.radius.card,
     overflow: "hidden",
     backgroundColor: t.colors.media,
   },
@@ -736,29 +741,29 @@ const useStyles = makeStyles((t) => ({
     width: "100%",
   },
   videoTitle: {
-    marginTop: t.spacing.base,
+    marginTop: t.spacing.md,
     textAlign: "left",
   },
 
   // Videos Page specific
   videosPageContainer: {
     flexGrow: 1,
-    backgroundColor: t.colors.backgroundAlt,
-    padding: t.spacing["2xl"],
+    backgroundColor: t.colors.background,
+    padding: t.spacing.lg,
     alignItems: "center",
   },
   videosPageVideoItemWeb: {
     maxWidth: 560,
   },
   loadingMore: {
-    marginVertical: t.spacing.xl,
+    marginVertical: t.spacing.base,
   },
 
   // Learning — look comes from <Card padded={false}>; this is size and position.
   courseCard: {
     width: COURSE_CARD_WIDTH,
-    marginHorizontal: t.spacing.md,
-    marginBottom: t.spacing.base,
+    marginHorizontal: t.spacing.sm,
+    marginBottom: t.spacing.md,
     overflow: "hidden",
   },
   courseImage: {
@@ -767,24 +772,24 @@ const useStyles = makeStyles((t) => ({
     backgroundColor: t.colors.placeholder,
   },
   courseTitle: {
-    paddingHorizontal: t.spacing.base,
-    paddingTop: t.spacing.md,
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.sm,
   },
   courseMeta: {
-    paddingHorizontal: t.spacing.base,
-    paddingBottom: t.spacing.base,
-    paddingTop: t.spacing["2xs"],
+    paddingHorizontal: t.spacing.md,
+    paddingBottom: t.spacing.md,
+    paddingTop: t.spacing.xs,
   },
 
   // Shared
   mobileArrow: {
     backgroundColor: t.colors.primary,
-    padding: t.spacing.base,
+    padding: t.spacing.md,
     borderRadius: t.radius.full,
-    marginLeft: t.spacing.sm,
-    marginRight: t.spacing.base,
+    marginLeft: t.spacing.xs,
+    marginRight: t.spacing.md,
   },
   noData: {
-    padding: t.spacing["2xl"],
+    padding: t.spacing.lg,
   },
 }));
