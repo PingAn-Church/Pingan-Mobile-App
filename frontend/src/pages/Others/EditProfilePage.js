@@ -28,6 +28,23 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { showAlert } from "../../utils/showAlert";
 
+// Without an explicit minimum the Android picker clamps to 0 ms (1970-01-01)
+// as soon as a maximum is set, so older birthdays snapped back to 1970.
+const MIN_BIRTHDAY = new Date(1900, 0, 1);
+
+// Birthdays are stored as plain "YYYY-MM-DD". Read and write them in local time:
+// going through toISOString() turned an early-morning pick in UTC+8 into the
+// previous day, and new Date("YYYY-MM-DD") is UTC midnight, a day early west of UTC.
+const toBirthdayString = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const birthdayToDate = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || "");
+  if (!match) return new Date();
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+};
 
 const EditProfile = () => {
   const navigation = useNavigation();
@@ -125,16 +142,10 @@ const EditProfile = () => {
 
   const handleSave = async () => {
     if (submitting) return; // ignore repeat taps while saving
-    if (!firstName || !lastName || !email) {
+    // Email isn't editable here (the server refuses a changed one), so only the
+    // fields the user can actually fill in are checked.
+    if (!firstName || !lastName) {
       showAlert(i18n.t("error"), i18n.t("allFieldsRequired"), [
-        { text: i18n.t("ok") },
-      ]);
-      return;
-    }
-
-    const emailRegex = /\S+@\S+\.\S+/;
-    if (!emailRegex.test(email)) {
-      showAlert(i18n.t("error"), i18n.t("enterValidEmail"), [
         { text: i18n.t("ok") },
       ]);
       return;
@@ -145,13 +156,13 @@ const EditProfile = () => {
     try {
       // ensure picture changed
       if (profileImage && profileImage !== originalProfileImage) {
-        profileImageUrl = await uploadImageUsingPresignedUrl("profile", email); // Pass the file type as 'profile'
+        // The email only names the uploaded file; fall back to the id if it didn't load.
+        profileImageUrl = await uploadImageUsingPresignedUrl("profile", email || String(user.id)); // Pass the file type as 'profile'
       }
 
       const userData = {
         firstName,
         lastName,
-        email,
         birthday,
         profileImage: profileImageUrl ?? null, // Include the uploaded image URL, null = don't update
       };
@@ -189,7 +200,7 @@ const EditProfile = () => {
     if (Platform.OS === "android") {
       setShowDatePicker(false);
       if (event?.type === "set" && selectedDate) {
-        setBirthday(selectedDate.toISOString().split("T")[0]);
+        setBirthday(toBirthdayString(selectedDate));
       }
       return;
     }
@@ -198,9 +209,11 @@ const EditProfile = () => {
     // value and keep the picker open so the user can adjust day/month/year freely;
     // they confirm with the Done button below.
     if (selectedDate) {
-      setBirthday(selectedDate.toISOString().split("T")[0]);
+      setBirthday(toBirthdayString(selectedDate));
     }
   };
+
+  const pickerValue = birthdayToDate(birthday);
 
   return (
     <KeyboardAwareScrollView
@@ -236,9 +249,6 @@ const EditProfile = () => {
         onChangeText={setLastName}
       />
 
-      <Text style={styles.label}>{i18n.t("email")}</Text>
-      <TextInput style={styles.input} value={email} editable={false} />
-
       <Text style={styles.label}>{i18n.t("birthday")}</Text>
       <TouchableOpacity onPress={() => setShowDatePicker(true)}>
         <Text style={styles.input}>{birthday || i18n.t("selectDate")}</Text>
@@ -247,10 +257,11 @@ const EditProfile = () => {
         (Platform.OS === "ios" ? (
           <View style={styles.iosPickerContainer}>
             <DateTimePicker
-              value={birthday ? new Date(birthday) : new Date()}
+              value={pickerValue}
               mode="date"
               display="spinner"
               onChange={handleDateChange}
+              minimumDate={MIN_BIRTHDAY}
               maximumDate={new Date()}
               style={styles.iosPicker}
             />
@@ -263,13 +274,16 @@ const EditProfile = () => {
           </View>
         ) : (
           <DateTimePicker
-            value={birthday ? new Date(birthday) : new Date()}
+            value={pickerValue}
             mode="date"
             display="default"
             onChange={handleDateChange}
+            minimumDate={MIN_BIRTHDAY}
             maximumDate={new Date()}
           />
         ))}
+
+      <Text style={styles.emailHint}>{i18n.t("changeEmailContactAdmin")}</Text>
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -320,6 +334,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
+  },
+  emailHint: {
+    fontSize: 14,
+    color: "#888",
+    marginTop: 10,
   },
   buttonContainer: {
     marginVertical: 30,

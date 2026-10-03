@@ -46,6 +46,7 @@ export default function ProfilePage() {
   const navigation = useNavigation();
   const [userDetails, setUserDetails] = useState([]);
   const [profileImage, setProfileImage] = useState(null);
+  const [email, setEmail] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [termsVisible, setTermsVisible] = useState(false);
   const { language, toggleLanguage } = useContext(LanguageContext);
@@ -76,6 +77,9 @@ export default function ProfilePage() {
           // reloads on every focus, and a fresh signature each time would make the
           // same avatar look like a new picture and be downloaded again.
           setProfileImage(data.profileImage || null);
+          // Shown under the avatar rather than as a detail row: it's the login
+          // identity, not something the user edits here.
+          setEmail(data.email || "");
 
           setUserDetails([
             {
@@ -86,12 +90,6 @@ export default function ProfilePage() {
             },
             {
               key: "2",
-              icon: "mail-outline",
-              label: "email",
-              value: data.email,
-            },
-            {
-              key: "3",
               icon: "cake",
               label: "birthday",
               value: data.birthday,
@@ -350,6 +348,7 @@ export default function ProfilePage() {
               <Ionicons name="person-circle" size={100} color="#6e6e6e" />
             )}
           </View>
+          {!!email && <Text style={styles.headerEmail}>{email}</Text>}
         </View>
 
         {user?.admin && (
@@ -754,6 +753,11 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
+  },
+  headerEmail: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#888",
   },
   detailsContainer: {
     flexDirection: "column",
