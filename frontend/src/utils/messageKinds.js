@@ -64,6 +64,17 @@ export const MESSAGE_KINDS = {
     canTranslate: false,
     canEdit: false,
   },
+  // A sticker. The body is its fallback emoji (written by the server), so a
+  // row or a quote reads "[Sticker] 🙏" without needing the picture.
+  sticker: {
+    bubble: "sticker",
+    preview: (message) =>
+      [i18n.t("chatPreviewSticker"), String(message?.content || "")].filter(Boolean).join(" "),
+    canCopy: false,
+    canDownload: false,
+    canTranslate: false,
+    canEdit: false,
+  },
 };
 
 /** The kind for a message or a bare type string; unknown and missing types read as text. */

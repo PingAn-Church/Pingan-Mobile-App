@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  BackHandler,
   Modal,
   Pressable,
   Platform,
@@ -94,6 +95,8 @@ import VoiceRecorder from "../../components/Chat/VoiceRecorder";
 import ImageViewer from "../../components/Chat/ImageViewer";
 import ComposerActionButton from "../../components/Chat/ComposerActionButton";
 import ChatActionSheet from "../../components/Chat/ChatActionSheet";
+import ComposerStickerButton from "../../components/Chat/ComposerStickerButton";
+import StickerPanel, { stickerPanelHeight } from "../../components/Chat/StickerPanel";
 import MessageBubble from "../../components/Chat/MessageBubble";
 import { kindOf, messagePreview } from "../../utils/messageKinds";
 import {
@@ -348,6 +351,23 @@ export default function ChatPage({ route }) {
   const [isSendingText, setIsSendingText] = useState(false);
   // The panel behind the composer's "+" (photo, event share).
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  // The sticker panel, open in the layout under the composer.
+  const [stickerPanelVisible, setStickerPanelVisible] = useState(false);
+
+  // Android back closes the sticker panel before it leaves the chat.
+  useEffect(() => {
+    if (!stickerPanelVisible) return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setStickerPanelVisible(false);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [stickerPanelVisible]);
+
+  // A different conversation starts with the panel shut.
+  useEffect(() => {
+    setStickerPanelVisible(false);
+  }, [conversationId]);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
     x: 0,
@@ -1505,6 +1525,7 @@ export default function ChatPage({ route }) {
   const beginEditMessage = (message) => {
     setEditingMessage(message);
     setReplyingTo(null);
+    setStickerPanelVisible(false);
     setInputText(message.content || "");
     closeContextMenu();
     textInputRef.current?.focus();
@@ -1907,6 +1928,86 @@ export default function ChatPage({ route }) {
       );
       clearAckTimeout(localId);
       showAlert("Error", "Image failed to send");
+    }
+  };
+
+  // --- stickers ----------------------------------------------------------------
+  // The composer's left button: opens the panel where the keyboard would be, or,
+  // when it is already open, hands the space back to typing.
+  const toggleStickerPanel = () => {
+    if (messagingBlocked || editingMessage) return;
+    if (stickerPanelVisible) {
+      setStickerPanelVisible(false);
+      textInputRef.current?.focus();
+      return;
+    }
+    Keyboard.dismiss();
+    setStickerPanelVisible(true);
+  };
+
+  /**
+   * Sends a sticker. The message names the sticker by id; its body is the
+   * sticker's fallback emoji — the same one the server will write — so the
+   * optimistic bubble matches the server's echo, and a server that predates
+   * stickers still stores something every build can show.
+   */
+  const sendSticker = async (sticker) => {
+    if (messagingBlocked || !sticker?.id) return;
+    if (!currentUser?.id || !conversationId || !conversationType) return;
+
+    const localId = `local-sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
+    // A sticker sent while replying quotes the same message the words would have.
+    const quoted = replyingTo;
+    setReplyingTo(null);
+
+    appendOptimisticMessage({
+      ...replyFieldsFor(quoted),
+      localId,
+      clientMessageId: localId,
+      messageId: localId,
+      content: sticker.emoji,
+      stickerId: sticker.id,
+      conversationId,
+      conversationType,
+      senderId: currentUser.id,
+      recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+      type: "sticker",
+      deliveryStatus: {},
+      createdAt,
+      timestamp: createdAt,
+      pending: true,
+      failed: false,
+    });
+    setAckTimeout(localId);
+
+    try {
+      const persisted = await sendMessageToDatabase(
+        {
+          content: sticker.emoji,
+          stickerId: sticker.id,
+          replyToMessageId: quoted?.messageId ?? null,
+          conversationId,
+          conversationType,
+          senderId: currentUser.id,
+          recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+          type: "sticker",
+          deliveryStatus: {},
+          createdAt,
+          clientMessageId: localId,
+        },
+        conversationType
+      );
+      if (persisted?.messageId) {
+        replaceOptimisticMessage(localId, persisted);
+        clearAckTimeout(localId);
+      }
+    } catch (error) {
+      updateConversationHistory((history) =>
+        history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
+      );
+      clearAckTimeout(localId);
+      showAlert(i18n.t("error"), i18n.t("stickerSendFailed"));
     }
   };
 
@@ -2505,7 +2606,12 @@ export default function ChatPage({ route }) {
     <View style={styles.composerWrap}>
       {showJumpToEnd && (
         <TouchableOpacity
-          style={styles.jumpToEndButton}
+          // Floats a fixed distance above the composer's bottom edge; with the
+          // sticker panel open that edge is the panel's, so lift it past it.
+          style={[
+            styles.jumpToEndButton,
+            stickerPanelVisible && { bottom: 78 + stickerPanelHeight(windowWidth) },
+          ]}
           onPress={jumpToEnd}
           activeOpacity={0.85}
           accessibilityLabel="Jump to latest messages"
@@ -2620,7 +2726,14 @@ export default function ChatPage({ route }) {
       )}
 
       <View style={[styles.inputContainer, messagingBlocked && styles.inputContainerBlocked]}>
-        {/* Photo moved into the "+" panel on the right; the input gets the width. */}
+        {/* Stickers, where the photo button used to sit (photos live in the "+"
+            panel on the right now). Opens the panel under the composer. */}
+        <ComposerStickerButton
+          active={stickerPanelVisible}
+          disabled={messagingBlocked || !!editingMessage || !conversationId || !conversationType}
+          onPress={toggleStickerPanel}
+        />
+
         <View style={styles.inputPill}>
           <TextInput
             ref={textInputRef}
@@ -2631,6 +2744,8 @@ export default function ChatPage({ route }) {
             style={styles.inputField}
             multiline
             editable={!messagingBlocked}
+            // The keyboard and the sticker panel take the same space; typing wins.
+            onFocus={() => setStickerPanelVisible(false)}
           />
 
           <View
@@ -2660,6 +2775,13 @@ export default function ChatPage({ route }) {
           busy={isSendingText && !editingMessage}
         />
       </View>
+
+      {/* In the layout, under the input row, where the keyboard would be: the
+          list above shrinks to make room, so the chat stays in view. */}
+      <StickerPanel
+        visible={stickerPanelVisible && !messagingBlocked && !editingMessage}
+        onSend={sendSticker}
+      />
 
       <ChatActionSheet
         visible={actionSheetVisible}

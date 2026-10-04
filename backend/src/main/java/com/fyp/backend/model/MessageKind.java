@@ -46,7 +46,15 @@ public enum MessageKind {
      * writes the body ("📊 question" / "📝 question") and binds the poll row; the
      * push carries that body as it stands, since it is language-neutral already.
      */
-    POLL("poll", false, false, true, false, false, null, "[poll] ");
+    POLL("poll", false, false, true, false, false, null, "[poll] "),
+
+    /**
+     * A sticker from {@link StickerCatalog}. The client names it by id; the
+     * body is written by the server as the sticker's fallback emoji (see
+     * ChatService.prepareSticker), which is what a build without the picture
+     * shows. The picture ships in the app, so there is no media to clean up.
+     */
+    STICKER("sticker", false, false, true, false, true, "push.chat.sticker", "[sticker] ");
 
     private final String type;
     private final boolean mediaBody;
@@ -118,7 +126,8 @@ public enum MessageKind {
 
     /**
      * Message-bundle key for the push body, or null when the push should carry
-     * the sender's own words. EVENT's key takes the event title as {0}.
+     * the sender's own words. EVENT's key takes the event title as {0}, and
+     * STICKER's the sticker's emoji.
      */
     public String pushBodyKey() {
         return pushBodyKey;
@@ -138,6 +147,7 @@ public enum MessageKind {
             case EVENT -> assistantPlaceholder + body.replaceFirst("^📅\\s*", "");
             case NOTICE -> assistantPlaceholder + body.replaceFirst("^📌\\s*", "");
             case POLL -> assistantPlaceholder + body.replaceFirst("^[📊📝]\\s*", "");
+            case STICKER -> assistantPlaceholder + body;
         };
     }
 }

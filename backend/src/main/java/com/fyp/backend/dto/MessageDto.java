@@ -49,6 +49,10 @@ public class MessageDto {
     // The event an "event" message shares. Sent by the client to name the event
     // (the server checks it and writes the body itself); null on everything else.
     private Long sharedEventId;
+    // The sticker a "sticker" message shows, as a StickerCatalog id ("basic.praying").
+    // Sent by the client to name the sticker; the server checks it and writes the
+    // body (the sticker's fallback emoji) itself. Null on everything else.
+    private String stickerId;
     // Replying: the client names the message it answers here; the server checks
     // it sits in the same conversation. Comes back on every stored reply too.
     private Long replyToMessageId;
@@ -78,6 +82,7 @@ public class MessageDto {
                 || viewer.isAdmin();
         this.content = canViewReportedContent ? message.getContent() : null;
         this.sharedEventId = canViewReportedContent ? message.getSharedEventId() : null;
+        this.stickerId = canViewReportedContent ? message.getStickerId() : null;
         Message quoted = message.getReplyTo();
         this.replyToMessageId = quoted == null ? null : quoted.getId();
         this.replyTo = ReplyPreviewDto.of(quoted, viewer);

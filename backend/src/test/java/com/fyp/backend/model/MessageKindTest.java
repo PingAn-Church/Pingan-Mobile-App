@@ -20,11 +20,11 @@ class MessageKindTest {
 
     @Test
     void nullBlankAndUnknownTypesBehaveAsText() {
-        // A build that ships a type before the server learns it (the sticker
-        // project) must degrade to a text bubble, not be refused.
+        // A build that ships a type before the server learns it must degrade to
+        // a text bubble, not be refused.
         assertEquals(MessageKind.TEXT, MessageKind.of(null));
         assertEquals(MessageKind.TEXT, MessageKind.of("  "));
-        assertEquals(MessageKind.TEXT, MessageKind.of("sticker"));
+        assertEquals(MessageKind.TEXT, MessageKind.of("hologram"));
     }
 
     @Test
@@ -69,6 +69,19 @@ class MessageKindTest {
         assertTrue(MessageKind.IMAGE.clientMaySend());
         assertTrue(MessageKind.VOICE.clientMaySend());
         assertTrue(MessageKind.EVENT.clientMaySend());
+    }
+
+    @Test
+    void aStickerIsSentByClientsButItsBodyIsTheServers() {
+        assertEquals(MessageKind.STICKER, MessageKind.of("sticker"));
+        assertTrue(MessageKind.STICKER.clientMaySend());
+        assertTrue(MessageKind.STICKER.serverWritesBody());
+        assertFalse(MessageKind.STICKER.requiresContent());
+        assertFalse(MessageKind.STICKER.isEditable());
+        // The picture ships in the app; there is no stored media to delete.
+        assertFalse(MessageKind.STICKER.hasMediaBody());
+        assertEquals("push.chat.sticker", MessageKind.STICKER.pushBodyKey());
+        assertEquals("[sticker] 🙏", MessageKind.STICKER.readable("🙏"));
     }
 
     @Test

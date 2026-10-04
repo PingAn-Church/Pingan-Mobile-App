@@ -264,6 +264,11 @@ public class ChatService {
         if (kind == MessageKind.EVENT) {
             return pushMessages.text(kind.pushBodyKey(), sharedEventTitle(messageDto));
         }
+        // "[Sticker] 🙏": the label in the reader's language, then the fallback emoji.
+        if (kind == MessageKind.STICKER) {
+            return pushMessages.text(kind.pushBodyKey(),
+                    messageDto.getContent() == null ? "" : messageDto.getContent());
+        }
         if (kind.pushBodyKey() != null) {
             return pushMessages.text(kind.pushBodyKey());
         }
@@ -559,6 +564,27 @@ public class ChatService {
         messageDto.setMentionsEveryone(false);
     }
 
+    /**
+     * Turns a sticker send into the message that is stored.
+     *
+     * The client names the sticker; the body is ours — the catalog's emoji for
+     * it. That body is what every reader without the picture sees: a build that
+     * predates stickers draws an unknown type as a text bubble, and it is also
+     * the chat-list preview, the quote in a reply and the tail of the push. An
+     * id the catalog does not know is refused rather than stored, so a message
+     * can never point at a picture nobody has.
+     */
+    private void prepareSticker(MessageDto messageDto) {
+        StickerCatalog.Sticker sticker = StickerCatalog.find(messageDto.getStickerId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown sticker."));
+        messageDto.setType(MessageKind.STICKER.type());
+        messageDto.setStickerId(sticker.id());
+        messageDto.setContent(sticker.emoji());
+        messageDto.setSharedEventId(null);
+        messageDto.setMentionedUserIds(new ArrayList<>());
+        messageDto.setMentionsEveryone(false);
+    }
+
     static String eventShareText(Event event) {
         StringBuilder text = new StringBuilder("📅 ");
         text.append(event.getTitle() == null ? "" : event.getTitle().trim());
@@ -655,10 +681,17 @@ public class ChatService {
         }
 
         MessageKind kind = MessageKind.of(messageDto.getType());
+        // Only a sticker carries a sticker id.
+        if (kind != MessageKind.STICKER) {
+            messageDto.setStickerId(null);
+        }
         if (kind == MessageKind.EVENT) {
             // Server-written from the event itself, so there is nothing of the
             // sender's to filter — see prepareEventShare.
             prepareEventShare(messageDto);
+        } else if (kind == MessageKind.STICKER) {
+            // Likewise server-written, from the catalog — see prepareSticker.
+            prepareSticker(messageDto);
         } else {
             // Only an event share may point at an event.
             messageDto.setSharedEventId(null);

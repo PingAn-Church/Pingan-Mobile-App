@@ -18,6 +18,7 @@ import i18n from "../../../i18n";
 import CachedImage from "../CachedImage";
 import { kindOf, messagePreview } from "../../utils/messageKinds";
 import { displayEmoji } from "../../utils/reactions";
+import { stickerForMessage, stickerLabel } from "../../utils/stickers";
 import {
   formatDeliveryStateLabel,
   formatTime,
@@ -151,7 +152,11 @@ export default function MessageBubble({
   // A poll draws as a card; without its data (should not happen) the stored
   // "📊 question" line shows as text instead.
   const isPoll = !isShadowHidden && kind.bubble === "poll" && !!item.poll;
-  const isCard = isImage || isEvent || isPoll;
+  // A sticker this build has the picture for. One from a newer pack has none
+  // here, and falls through to the text bubble showing its emoji body.
+  const sticker = !isShadowHidden && kind.bubble === "sticker" ? stickerForMessage(item) : null;
+  const isSticker = !!sticker;
+  const isCard = isImage || isEvent || isPoll || isSticker;
   const expectedTargetLanguage = resolveTargetTranslationLanguage(item.content, language);
   const outgoingDeliveryState = isMe
     ? resolveOutgoingDeliveryState(item.deliveryStatus, currentUserId)
@@ -265,6 +270,14 @@ export default function MessageBubble({
           language={language}
           onOpen={onOpenEvent}
           onLongPress={Platform.OS === "web" ? undefined : longPress}
+        />
+      ) : isSticker ? (
+        <Image
+          source={sticker.source}
+          style={styles.stickerImage}
+          resizeMode="contain"
+          accessible
+          accessibilityLabel={stickerLabel(sticker)}
         />
       ) : isPoll ? (
         <PollCard
@@ -556,6 +569,12 @@ const styles = StyleSheet.create({
   },
   pollMessageBubble: {
     maxWidth: 300,
+  },
+  // No bubble behind a sticker: the picture is the message. The source is
+  // 240px, drawn at half that so it is sharp on a 2x screen.
+  stickerImage: {
+    width: 120,
+    height: 120,
   },
   // A pinned-notice line: centred, cream, the group's voice rather than a person's.
   noticeMessage: {

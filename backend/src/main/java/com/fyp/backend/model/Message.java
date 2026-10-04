@@ -123,6 +123,14 @@ public class Message {
     private Long sharedEventId;
 
     /**
+     * The sticker a "sticker" message shows, as a {@link StickerCatalog} id;
+     * null on every other message. The picture lives in the app, so this is all
+     * that is stored — the body beside it is the sticker's fallback emoji.
+     */
+    @Column(name = "sticker_id", length = 64)
+    private String stickerId;
+
+    /**
      * The message this one quotes, or null. Set by the sender when they reply,
      * and by the assistant on its answers so each sits under its question.
      *
@@ -159,5 +167,7 @@ public class Message {
         this.mentionsEveryone = messageDto.isMentionsEveryone();
         // Validated by ChatService.prepareEventShare before it gets here.
         this.sharedEventId = messageDto.getSharedEventId();
+        // Likewise checked against the catalog by ChatService.prepareSticker.
+        this.stickerId = messageDto.getStickerId();
     }
 }

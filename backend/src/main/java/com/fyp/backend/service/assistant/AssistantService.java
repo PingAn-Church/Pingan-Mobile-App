@@ -19,6 +19,7 @@ import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.MessageKind;
+import com.fyp.backend.model.StickerCatalog;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageRepository;
@@ -334,7 +335,15 @@ public class AssistantService {
      * shown to the model is attached alongside this text, never in place of it.
      */
     private static String readable(Message message) {
-        return MessageKind.of(message.getType()).readable(message.getContent());
+        MessageKind kind = MessageKind.of(message.getType());
+        // A sticker is read by name: "[sticker: praying]" says what was meant,
+        // where the stored emoji alone would only hint at it.
+        if (kind == MessageKind.STICKER) {
+            return StickerCatalog.find(message.getStickerId())
+                    .map(sticker -> "[sticker: " + sticker.name() + "]")
+                    .orElseGet(() -> kind.readable(message.getContent()));
+        }
+        return kind.readable(message.getContent());
     }
 
     private static Map<String, Object> message(String role, String content) {
