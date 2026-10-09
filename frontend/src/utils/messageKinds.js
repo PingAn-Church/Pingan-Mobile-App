@@ -1,4 +1,5 @@
 import i18n from "../../i18n";
+import { stripInlineMarkup } from "./inlineMarkup";
 
 /**
  * What each chat message `type` means on the client, in one place.
@@ -9,7 +10,8 @@ import i18n from "../../i18n";
  * previewed by its content — which is exactly what the server writes into the
  * body of every non-text kind, so an older build never shows garbage.
  */
-const previewContent = (message) => String(message?.content || "");
+// A row, a quote or a banner draws no styling, so the *markers* come off the words.
+const previewContent = (message) => stripInlineMarkup(message?.content);
 
 export const MESSAGE_KINDS = {
   text: {

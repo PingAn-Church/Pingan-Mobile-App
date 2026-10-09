@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import i18n from "../../../i18n";
+import RichText from "../RichText";
 import { senderDisplayName, webFontSize } from "../../utils/chatMessageDisplay";
 import { POLL_MULTI, POLL_SIGNUP, POLL_SINGLE, formatDeadline, pollModeLabel } from "../../utils/polls";
 
@@ -139,7 +140,7 @@ export default function PollCard({
         )}
       </View>
 
-      <Text style={styles.question}>{poll.question}</Text>
+      <RichText style={styles.question}>{poll.question}</RichText>
 
       {isSignup ? (
         <View style={styles.list}>

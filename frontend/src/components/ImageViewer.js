@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import i18n from "../../../i18n";
+import i18n from "../../i18n";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -28,7 +28,7 @@ const distanceBetween = (touches) => {
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 /**
- * Full-screen photo view for a chat image.
+ * Full-screen photo view — chat photos, thread covers, reply pictures.
  *
  * Tapping anywhere that is not an action button closes it, so the whole backdrop
  * — including the photo — is a dismiss target. Two fingers pinch to zoom, and one

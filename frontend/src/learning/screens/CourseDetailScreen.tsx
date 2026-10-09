@@ -30,6 +30,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
+import RichText from "../../components/RichText";
 
 export default function CourseDetailScreen() {
   const navigation = useNavigation<any>();
@@ -254,7 +255,7 @@ export default function CourseDetailScreen() {
           </TouchableOpacity>
         )}
 
-        {!!data.description && <Text style={styles.description}>{data.description}</Text>}
+        {!!data.description && <RichText style={styles.description}>{data.description}</RichText>}
 
         {data.outcomes.length > 0 && (
           <View style={styles.section}>

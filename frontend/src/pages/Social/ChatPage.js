@@ -31,6 +31,7 @@ import defaultProfileImage from "../../../assets/user.png";
 // The assistant has no stored avatar; it wears the app's own icon.
 import appIcon from "../../../assets/icon.png";
 import CachedImage from "../../components/CachedImage";
+import { stripInlineMarkup } from "../../utils/inlineMarkup";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -92,7 +93,7 @@ import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../.
 import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { setActiveConversation, clearActiveConversation } from "../../utils/activeConversation";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
-import ImageViewer from "../../components/Chat/ImageViewer";
+import ImageViewer from "../../components/ImageViewer";
 import ComposerActionButton from "../../components/Chat/ComposerActionButton";
 import ChatActionSheet from "../../components/Chat/ChatActionSheet";
 import ComposerStickerButton from "../../components/Chat/ComposerStickerButton";
@@ -403,7 +404,8 @@ export default function ChatPage({ route }) {
     if (messageType !== "text") return;
 
     const messageIdKey = String(message?.messageId || "");
-    const sourceContent = String(message?.content || "").trim();
+    // Markers would only confuse the translator; the translation shows plain.
+    const sourceContent = stripInlineMarkup(message?.content).trim();
     if (!messageIdKey || !sourceContent) return;
 
     const targetLang = resolveTargetTranslationLanguage(sourceContent, language);
@@ -2190,7 +2192,8 @@ export default function ChatPage({ route }) {
   const contextKind = kindOf(contextMessage);
   const contextMessageType = String(contextMessage?.type || "").toLowerCase();
   const contextMessageIdKey = String(contextMessage?.messageId || "");
-  const contextSourceContent = String(contextMessage?.content || "").trim();
+  // Translations are keyed on the words without their *markers* (see requestTranslation).
+  const contextSourceContent = stripInlineMarkup(contextMessage?.content).trim();
   const contextCanCopy = contextKind.canCopy;
   const contextCanDownload = contextKind.canDownload;
   const contextTargetLanguage = resolveTargetTranslationLanguage(

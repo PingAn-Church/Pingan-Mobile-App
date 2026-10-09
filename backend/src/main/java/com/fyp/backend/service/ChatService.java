@@ -9,6 +9,7 @@ import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.*;
+import com.fyp.backend.util.InlineMarkup;
 import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
@@ -251,9 +252,9 @@ public class ChatService {
     }
 
     /**
-     * The push body. Text messages carry the sender's own words through
-     * untouched; the media placeholders are ours to write, so they follow the
-     * recipient's language.
+     * The push body. Text messages carry the sender's own words through, minus
+     * the inline markers a notification cannot draw; the media placeholders are
+     * ours to write, so they follow the recipient's language.
      */
     private LocalizedText getPushNotificationBody(MessageDto messageDto) {
         if (messageDto == null) {
@@ -272,8 +273,9 @@ public class ChatService {
         if (kind.pushBodyKey() != null) {
             return pushMessages.text(kind.pushBodyKey());
         }
-        String content = messageDto.getContent();
-        return (content == null || content.trim().isEmpty())
+        // Words go out as typed, minus the *markers* a notification cannot draw.
+        String content = InlineMarkup.strip(messageDto.getContent());
+        return content.trim().isEmpty()
                 ? pushMessages.text("push.chat.newMessage")
                 : pushMessages.literal(content);
     }

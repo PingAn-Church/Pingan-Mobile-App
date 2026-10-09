@@ -200,6 +200,8 @@ class ReplyMessageTest {
         assertEquals(160, ReplyPreviewDto.excerpt(longText).length());
         assertTrue(ReplyPreviewDto.excerpt(longText).endsWith("…"));
         assertEquals("short", ReplyPreviewDto.excerpt("  short  "));
+        // A quote draws no styling, so the markers are not quoted either.
+        assertEquals("Sunday is cancelled", ReplyPreviewDto.excerpt("*Sunday* is _cancelled_"));
         assertNull(ReplyPreviewDto.excerpt(null));
     }
 

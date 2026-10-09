@@ -158,6 +158,9 @@ jobs:
       - name: Check locale parity
         run: node scripts/check-locales.js
 
+      - name: Check inline markup rules
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-inline-markup.mjs
+
       - name: Export Expo web build
         run: npx expo export --platform web --output-dir dist
 

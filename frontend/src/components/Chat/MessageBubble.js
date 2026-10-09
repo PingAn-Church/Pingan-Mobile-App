@@ -16,6 +16,8 @@ import defaultProfileImage from "../../../assets/user.png";
 import appIcon from "../../../assets/icon.png";
 import i18n from "../../../i18n";
 import CachedImage from "../CachedImage";
+import { spanStyle } from "../RichText";
+import { parseInlineMarkup, stripInlineMarkup } from "../../utils/inlineMarkup";
 import { kindOf, messagePreview } from "../../utils/messageKinds";
 import { displayEmoji } from "../../utils/reactions";
 import { stickerForMessage, stickerLabel } from "../../utils/stickers";
@@ -157,7 +159,10 @@ export default function MessageBubble({
   const sticker = !isShadowHidden && kind.bubble === "sticker" ? stickerForMessage(item) : null;
   const isSticker = !!sticker;
   const isCard = isImage || isEvent || isPoll || isSticker;
-  const expectedTargetLanguage = resolveTargetTranslationLanguage(item.content, language);
+  // A translation is requested for the words without their *markers*, so that
+  // is what a stored one is matched against.
+  const plainContent = stripInlineMarkup(item.content).trim();
+  const expectedTargetLanguage = resolveTargetTranslationLanguage(plainContent, language);
   const outgoingDeliveryState = isMe
     ? resolveOutgoingDeliveryState(item.deliveryStatus, currentUserId)
     : null;
@@ -166,7 +171,7 @@ export default function MessageBubble({
   const showTranslation =
     !!translation?.visible &&
     translation?.targetLang === expectedTargetLanguage &&
-    translation?.sourceContent === String(item.content || "").trim();
+    translation?.sourceContent === plainContent;
   const quote = isShadowHidden ? null : item.replyTo || null;
   const quoteTone = isCard || isNotice ? "plain" : isMe ? "sent" : "received";
 
@@ -328,18 +333,24 @@ export default function MessageBubble({
               isMe ? styles.contentSent : styles.contentReceived,
             ]}
           >
-            {splitOnMentions(item.content, mentionLabels).map((part, partIndex) =>
-              part.isMention ? (
-                <Text
-                  key={partIndex}
-                  style={isMe ? styles.mentionInSent : styles.mentionInReceived}
-                >
-                  {part.text}
-                </Text>
-              ) : (
-                part.text
-              )
-            )}
+            {/* Markup outside, mentions inside: "*see @Name*" is bold with the
+                name still highlighted within it. */}
+            {parseInlineMarkup(item.content).map((span, spanIndex) => (
+              <Text key={spanIndex} style={spanStyle(span)}>
+                {splitOnMentions(span.text, mentionLabels).map((part, partIndex) =>
+                  part.isMention ? (
+                    <Text
+                      key={partIndex}
+                      style={isMe ? styles.mentionInSent : styles.mentionInReceived}
+                    >
+                      {part.text}
+                    </Text>
+                  ) : (
+                    part.text
+                  )
+                )}
+              </Text>
+            ))}
           </Text>
 
           {showTranslation && (

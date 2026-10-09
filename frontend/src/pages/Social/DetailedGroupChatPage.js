@@ -41,6 +41,7 @@ import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import { groupDisplayName } from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
+import RichText from "../../components/RichText";
 
 const DetailedGroupChatPage = ({ route }) => {
   const { conversationId } = route.params; // We're still using conversationId passed via route
@@ -560,7 +561,7 @@ const DetailedGroupChatPage = ({ route }) => {
               <Text style={styles.name}>
                 {formatName(item.firstName, item.lastName) || item.fallbackName}
               </Text>
-              <Text style={styles.bio}>{item.bio || i18n.t("noBio")}</Text>
+              <RichText style={styles.bio}>{item.bio || i18n.t("noBio")}</RichText>
             </View>
 
             {/* Make Admin Button */}

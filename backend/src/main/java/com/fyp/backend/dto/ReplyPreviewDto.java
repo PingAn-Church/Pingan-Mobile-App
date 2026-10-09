@@ -2,6 +2,7 @@ package com.fyp.backend.dto;
 
 import com.fyp.backend.model.Message;
 import com.fyp.backend.model.User;
+import com.fyp.backend.util.InlineMarkup;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -67,7 +68,8 @@ public class ReplyPreviewDto {
         if (content == null) {
             return null;
         }
-        String trimmed = content.trim();
+        // A quote or a notice line draws no styling, so the *markers* come off.
+        String trimmed = InlineMarkup.strip(content).trim();
         return trimmed.length() <= EXCERPT_LENGTH
                 ? trimmed
                 : trimmed.substring(0, EXCERPT_LENGTH - 1) + "…";

@@ -109,4 +109,43 @@ class ChatPushNotificationTest {
         verify(messagingTemplate, times(0))
                 .convertAndSend(any(String.class), any(Object.class));
     }
+
+    @Test
+    void thePushBodyCarriesTheWordsWithoutTheirMarkers() {
+        User sender = user(1L);
+        GroupConversation conversation = new GroupConversation();
+        conversation.setId(42L);
+        conversation.setGroupName("Test Group");
+        conversation.setParticipants(List.of(sender, user(2L)));
+
+        when(groupConversationRepository.findById(42L)).thenReturn(Optional.of(conversation));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L)));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MessageDto dto = new MessageDto();
+        dto.setConversationId(42L);
+        dto.setSenderId(1L);
+        dto.setType("text");
+        dto.setConversationType("group");
+        dto.setContent("*Sunday* service is _cancelled_");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            MessageDto sent = chatService.sendMessageAndBroadcast(dto, "group");
+            // Stored as typed: the app draws the markup; only a notification cannot.
+            assertEquals("*Sunday* service is _cancelled_", sent.getContent());
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        ArgumentCaptor<LocalizedText> body = ArgumentCaptor.forClass(LocalizedText.class);
+        verify(fanoutPublisher).publishChat(
+                any(MessageDto.class), eq(List.of(2L)), eq(List.of()),
+                any(LocalizedText.class), body.capture(), any(LocalizedText.class));
+        assertEquals("Sunday service is cancelled", body.getValue().render("en"));
+        assertEquals("Sunday service is cancelled", body.getValue().render("zh"));
+    }
 }
