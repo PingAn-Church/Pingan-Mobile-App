@@ -23,7 +23,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.fyp.backend.dto.EventDto;
 import com.fyp.backend.model.Event;
+import com.fyp.backend.repository.EventRegistrationRepository;
 import com.fyp.backend.repository.EventRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,6 +34,8 @@ class EventServiceTest {
     private static final Instant NOW = Instant.parse("2026-07-04T04:00:00Z");
 
     @Mock private EventRepository eventRepository;
+    @Mock private EventRegistrationRepository registrationRepository;
+    @Mock private EventRegistrationService registrationService;
 
     @InjectMocks private EventService eventService;
 
@@ -99,6 +103,78 @@ class EventServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
         verify(eventRepository, never()).save(any());
+    }
+
+    @Test
+    void editingFromABuildWithoutRegistrationKeepsTheEventsSignUpSettings() {
+        // The current app's edit form sends only the original six fields. That
+        // must not switch registration off or wipe the capacity/visibility.
+        Event event = scheduled("2026-10-04", "10:00 AM", "12:00 PM");
+        event.setRegistrationEnabled(true);
+        event.setRegistrationCapacity(40);
+        event.setRegistrantVisibility("EVERYONE");
+        when(eventRepository.findById(5L)).thenReturn(Optional.of(event));
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Event saved = eventService.updateEvent(5L, legacyDto("2026-10-04", "10:00 AM", "12:00 PM"));
+
+        assertEquals(Boolean.TRUE, saved.getRegistrationEnabled());
+        assertEquals(40, saved.getRegistrationCapacity());
+        assertEquals("EVERYONE", saved.getRegistrantVisibility());
+        verify(registrationRepository, never()).clearReminders(any());
+    }
+
+    @Test
+    void reschedulingClearsRemindersSoTheNewTimeIsRemindedToo() {
+        Event event = scheduled("2026-10-04", "10:00 AM", "12:00 PM");
+        when(eventRepository.findById(5L)).thenReturn(Optional.of(event));
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        eventService.updateEvent(5L, legacyDto("2026-10-05", "10:00 AM", "12:00 PM"));
+
+        verify(registrationRepository).clearReminders(5L);
+    }
+
+    @Test
+    void newEventsTakeTheirRegistrationSettingsFromTheForm() {
+        EventDto dto = legacyDto("2026-10-04", "10:00 AM", "12:00 PM");
+        dto.setRegistrationEnabled(true);
+        dto.setRegistrationCapacity(0);
+        dto.setRegistrantVisibility("REGISTRANTS");
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Event created = eventService.createEvent(dto);
+
+        assertEquals(Boolean.TRUE, created.getRegistrationEnabled());
+        assertEquals(null, created.getRegistrationCapacity());
+        assertEquals("REGISTRANTS", created.getRegistrantVisibility());
+    }
+
+    @Test
+    void deletingAnEventDeletesItsRegistrations() {
+        when(eventRepository.existsById(5L)).thenReturn(true);
+
+        eventService.deleteEvent(5L);
+
+        verify(registrationRepository).deleteByEventId(5L);
+        verify(eventRepository).deleteById(5L);
+    }
+
+    private Event scheduled(String date, String start, String end) {
+        Event event = new Event("Service", "desc", date, start, end, "Hall");
+        ReflectionTestUtils.invokeMethod(eventService, "applyDateTimes", event);
+        return event;
+    }
+
+    private EventDto legacyDto(String date, String start, String end) {
+        EventDto dto = new EventDto();
+        dto.setTitle("Service");
+        dto.setDescription("desc");
+        dto.setDate(date);
+        dto.setStartTime(start);
+        dto.setEndTime(end);
+        dto.setLocation("Hall");
+        return dto;
     }
 
     private Event event(Instant startAt, Instant endAt) {

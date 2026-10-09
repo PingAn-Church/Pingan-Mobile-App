@@ -10,6 +10,7 @@ import com.fyp.backend.model.User;
 import com.fyp.backend.repository.ThreadReplyRepository;
 import com.fyp.backend.repository.ThreadRepository;
 import com.fyp.backend.repository.UserRepository;
+import com.fyp.backend.util.InlineMarkup;
 import com.fyp.backend.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -133,7 +134,8 @@ public class ThreadReplyService {
             if (subscribers.isEmpty()) return;
 
             LocalizedText authorName = pushMessages.personName(author.getFirstName(), author.getLastName());
-            String snippet = reply.getContent() == null ? "" : reply.getContent().trim();
+            // A push cannot draw *bold*, so the snippet goes out without the markers.
+            String snippet = InlineMarkup.strip(reply.getContent()).trim();
             LocalizedText body = language -> {
                 String shown = snippet.isEmpty()
                         ? pushMessages.get(language, "push.chat.photo")

@@ -18,6 +18,8 @@ import com.fyp.backend.config.app.AssistantProperties;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
+import com.fyp.backend.model.MessageKind;
+import com.fyp.backend.model.StickerCatalog;
 import com.fyp.backend.model.User;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.MessageRepository;
@@ -97,6 +99,9 @@ public class AssistantService {
             Style:
             - Reply in the language the question was asked in.
             - Be brief — a few sentences. This is a chat, not an essay.
+            - Plain text. The chat draws only three markers, which you may use sparingly:
+              *bold*, _italic_ and ~struck out~. Headings, bullet points, numbered lists,
+              tables, links and code blocks are not drawn and show up as typed.
             """;
 
     private final AssistantProperties properties;
@@ -325,21 +330,23 @@ public class AssistantService {
     }
 
     private static boolean isPhoto(Message message) {
-        return message.getType() != null && "image".equalsIgnoreCase(message.getType());
+        return MessageKind.of(message.getType()) == MessageKind.IMAGE;
     }
 
     /**
-     * Media becomes a placeholder. The stored value is an OSS object path, which
-     * means nothing to a model and would leak the storage layout; a photo that is
+     * Media becomes a placeholder (see MessageKind.readable). A photo that is
      * shown to the model is attached alongside this text, never in place of it.
      */
     private static String readable(Message message) {
-        String type = message.getType() == null ? "text" : message.getType().toLowerCase(Locale.ROOT);
-        return switch (type) {
-            case "image" -> "[photo]";
-            case "voice" -> "[voice message]";
-            default -> message.getContent() == null ? "" : message.getContent();
-        };
+        MessageKind kind = MessageKind.of(message.getType());
+        // A sticker is read by name: "[sticker: praying]" says what was meant,
+        // where the stored emoji alone would only hint at it.
+        if (kind == MessageKind.STICKER) {
+            return StickerCatalog.find(message.getStickerId())
+                    .map(sticker -> "[sticker: " + sticker.name() + "]")
+                    .orElseGet(() -> kind.readable(message.getContent()));
+        }
+        return kind.readable(message.getContent());
     }
 
     private static Map<String, Object> message(String role, String content) {

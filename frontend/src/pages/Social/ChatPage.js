@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  BackHandler,
   Modal,
   Pressable,
   Platform,
@@ -30,6 +31,7 @@ import defaultProfileImage from "../../../assets/user.png";
 // The assistant has no stored avatar; it wears the app's own icon.
 import appIcon from "../../../assets/icon.png";
 import CachedImage from "../../components/CachedImage";
+import { stripInlineMarkup } from "../../utils/inlineMarkup";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -52,7 +54,19 @@ import {
   getConversationMuteStatus,
   setConversationMuteStatus,
   markConversationRead,
+  toggleReaction,
+  getReactionUsers,
+  pinGroupNotice,
+  unpinGroupNotice,
+  getGroupNoticeReaders,
+  votePoll,
+  addPollEntry,
+  removePollEntry,
+  closePoll,
+  getPollVoters,
 } from "../../service/ChatService";
+import GroupNoticeBanner from "../../components/Chat/GroupNoticeBanner";
+import { REACTION_EMOJIS, applyOwnReaction, displayEmoji } from "../../utils/reactions";
 import {
   getLocalUri as getCachedMedia,
   peekLocalUri as peekCachedMedia,
@@ -79,24 +93,48 @@ import { searchUsers, getUserById, startGroupChat, startPrivateChat } from "../.
 import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { setActiveConversation, clearActiveConversation } from "../../utils/activeConversation";
 import VoiceRecorder from "../../components/Chat/VoiceRecorder";
-import VoicePlayer from "../../components/Chat/VoicePlayer";
-import ImageViewer from "../../components/Chat/ImageViewer";
+import ImageViewer from "../../components/ImageViewer";
+import ComposerActionButton from "../../components/Chat/ComposerActionButton";
+import ChatActionSheet from "../../components/Chat/ChatActionSheet";
+import ComposerStickerButton from "../../components/Chat/ComposerStickerButton";
+import StickerPanel, { stickerPanelHeight } from "../../components/Chat/StickerPanel";
+import MessageBubble from "../../components/Chat/MessageBubble";
+import { kindOf, messagePreview } from "../../utils/messageKinds";
+import {
+  getMessageDate,
+  resolveTargetTranslationLanguage,
+  senderDisplayName,
+  webFontSize,
+} from "../../utils/chatMessageDisplay";
+
+/**
+ * The reply fields an optimistic message carries: the id the server checks, and
+ * a preview built from the message being answered, so the quote is on screen
+ * before the server's own copy comes back.
+ */
+const replyFieldsFor = (quoted) =>
+  quoted
+    ? {
+        replyToMessageId: quoted.messageId,
+        replyTo: {
+          messageId: quoted.messageId,
+          senderId: quoted.senderId,
+          senderFirstName: quoted.senderFirstName,
+          senderLastName: quoted.senderLastName,
+          senderBot: !!quoted.senderBot,
+          senderDisplayNameZh: quoted.senderDisplayNameZh || null,
+          type: quoted.type,
+          content: quoted.content,
+          hidden: false,
+        },
+      }
+    : {};
 import DetailedPrivateChatPage from "./DetailedPrivateChatPage";
 import DetailedGroupChatPage from "./DetailedGroupChatPage";
 import { confirmAction } from "../../utils/confirmAction";
 import { reportMessage } from "../../service/ReportService";
 import { getBlockStatus, getBlockedIds } from "../../service/BlockService";
 import { parseServerDate } from "../../utils/serverDate";
-
-// Shared server-UTC normalization — the local variant this replaces only
-// covered the space-separated shape; see utils/serverDate for the full contract.
-const getMessageDate = (msg) =>
-  parseServerDate(msg?.timestamp) || parseServerDate(msg?.createdAt) || new Date(0);
-
-const formatTime = (msg) => {
-  const date = getMessageDate(msg);
-  return new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" }).format(date);
-};
 
 const sortByTimeAscending = (a, b) => getMessageDate(a) - getMessageDate(b);
 const dedupeHistoryByMessageId = (history = []) => {
@@ -132,14 +170,6 @@ const dedupeHistoryByMessageId = (history = []) => {
 };
 const isLocalOnlyMessage = (message) =>
   typeof message?.messageId === "string" && message.messageId.startsWith("local-");
-const parseVoiceContent = (content) => {
-  if (!content) return { audioUrl: "", duration: 0 };
-  const [audioUrl, durationPart] = String(content).split("|");
-  return {
-    audioUrl: audioUrl || "",
-    duration: Number.parseInt(durationPart, 10) || 0,
-  };
-};
 const getVoiceUploadConfig = (audioUri) => {
   const cleanUri = String(audioUri || "").split("?")[0].split("#")[0];
   const extension = cleanUri.includes(".")
@@ -186,55 +216,6 @@ const blobToDataUrl = (blob) =>
     reader.readAsDataURL(blob);
   });
 
-const normalizeTranslationLanguage = (languageCode) => {
-  const raw = String(languageCode || "en").trim().toLowerCase();
-  const base = raw.split("-")[0];
-  return base === "zh" ? "zh" : "en";
-};
-
-const containsChineseChars = (value) => /[\u3400-\u9FFF\uF900-\uFAFF]/.test(String(value || ""));
-const containsLatinChars = (value) => /[A-Za-z]/.test(String(value || ""));
-
-const resolveTargetTranslationLanguage = (content, appLanguage) => {
-  if (containsChineseChars(content)) {
-    return "en";
-  }
-
-  if (containsLatinChars(content)) {
-    return "zh";
-  }
-
-  return normalizeTranslationLanguage(appLanguage);
-};
-
-const normalizeDeliveryState = (value) => {
-  const raw = String(value || "").toUpperCase();
-  if (raw === "READ") return "seen";
-  if (raw === "DELIVERED") return "delivered";
-  if (raw === "SENT") return "sent";
-  return null;
-};
-
-const resolveOutgoingDeliveryState = (deliveryStatusMap, currentUserId) => {
-  const recipientStates = Object.entries(deliveryStatusMap || {})
-    .filter(([recipientId]) => String(recipientId) !== String(currentUserId))
-    .map(([, status]) => normalizeDeliveryState(status))
-    .filter(Boolean);
-
-  if (!recipientStates.length) return null;
-  if (recipientStates.includes("seen")) return "seen";
-  if (recipientStates.includes("delivered")) return "delivered";
-  if (recipientStates.includes("sent")) return "sent";
-  return null;
-};
-
-const formatDeliveryStateLabel = (state) => {
-  if (state === "seen") return "Seen";
-  if (state === "delivered") return "Delivered";
-  if (state === "sent") return "Sent";
-  return "";
-};
-
 /**
  * The @token being typed, or null when the picker should stay shut.
  *
@@ -257,163 +238,15 @@ const applyMentionToText = (text, label) =>
     return `${lead}@${label} `;
   });
 
-const escapeForRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/**
- * Splits message text so the names it calls out can be drawn differently from
- * the rest. Falls back to plain text when a mentioned name can't be resolved —
- * a missing highlight is better than a crash or a mangled message.
- */
-const splitOnMentions = (content, labels) => {
-  const text = String(content ?? "");
-  const usable = (labels || []).filter(Boolean).map(escapeForRegex);
-  if (!usable.length) return [{ text, isMention: false }];
-
-  const pattern = new RegExp(`@(?:${usable.join("|")})`, "g");
-  const parts = [];
-  let cursor = 0;
-  let match;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      parts.push({ text: text.slice(cursor, match.index), isMention: false });
-    }
-    parts.push({ text: match[0], isMention: true });
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < text.length) parts.push({ text: text.slice(cursor), isMention: false });
-  return parts.length ? parts : [{ text, isMention: false }];
-};
-
 const getConversationPreview = (conversation, currentUserId) => {
   const history = conversation?.chatHistory || [];
   const lastMessage = history[history.length - 1];
   if (!lastMessage) return i18n.t("chat");
 
-  const messageType = String(lastMessage?.type || "text").toLowerCase();
-  let content = String(lastMessage?.content || "");
-
-  if (messageType === "image") content = i18n.t("chatPreviewPhoto");
-  if (messageType === "voice") content = i18n.t("chatPreviewVoice");
-
+  const content = messagePreview(lastMessage);
   const isMine = String(lastMessage?.senderId) === String(currentUserId);
   return isMine ? `${i18n.t("chatPreviewYou")}: ${content}` : content;
 };
-
-const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
-
-// Bounds a chat photo is drawn inside. Wide enough to read, short enough that one
-// tall screenshot doesn't push the rest of the conversation off screen.
-const IMAGE_BUBBLE_MAX_WIDTH = 240;
-const IMAGE_BUBBLE_MAX_HEIGHT = 320;
-
-/**
- * Largest box with the photo's own proportions that fits the bounds above, so
- * nothing is cropped. Replaces the fixed square, which cut the sides off
- * panoramas and the top and bottom off tall shots.
- */
-const fitImageWithinBubble = (naturalWidth, naturalHeight) => {
-  const ratio = naturalWidth / naturalHeight;
-  let width = IMAGE_BUBBLE_MAX_WIDTH;
-  let height = width / ratio;
-
-  if (height > IMAGE_BUBBLE_MAX_HEIGHT) {
-    height = IMAGE_BUBBLE_MAX_HEIGHT;
-    width = height * ratio;
-  }
-
-  return { width: Math.round(width), height: Math.round(height) };
-};
-
-// Defined at module scope (NOT inside ChatPage) on purpose: a component declared
-// inside another component is a brand-new type on every parent render, so React
-// unmounts and remounts it each time — which makes every chat <Image> reload from
-// the network (the "flashing" in conversation history). At module scope the type is
-// stable, so loaded images survive the chat's frequent re-renders. React.memo skips
-// re-rendering rows whose props are unchanged.
-const ChatImage = React.memo(function ChatImage({
-  message,
-  isMe,
-  resolveUri,
-  onPress,
-  onLongPress,
-}) {
-  // Source priority: the local file (sender's own freshly-sent image — instant and
-  // survives the optimistic -> persisted swap), then the on-device media cache, then
-  // the remote presigned URL. peekCachedMedia seeds the first render synchronously so
-  // an already-cached image never flashes through a spinner.
-  const [uri, setUri] = useState(
-    () => message.localPreviewUri || peekCachedMedia(message.content) || null
-  );
-  const [displaySize, setDisplaySize] = useState(null);
-
-  useEffect(() => {
-    let active = true;
-    if (message.localPreviewUri) {
-      setUri(message.localPreviewUri);
-      return () => {
-        active = false;
-      };
-    }
-    // Serve from the local cache (downloads once on a miss); fall back to the remote
-    // presigned URL only if it couldn't be cached.
-    getCachedMedia(message.content, resolveUri).then(async (local) => {
-      if (!active) return;
-      setUri(local || (await resolveUri(message.content)));
-    });
-    return () => {
-      active = false;
-    };
-  }, [message.content, message.localPreviewUri, resolveUri]);
-
-  // Sized from the photo's own proportions rather than a fixed square, so a tall
-  // or panoramic shot is shown whole instead of centre-cropped. Until getSize
-  // answers, styles.chatImage's square stands in.
-  useEffect(() => {
-    if (!uri) return undefined;
-    let active = true;
-    Image.getSize(
-      uri,
-      (width, height) => {
-        if (active && width > 0 && height > 0) setDisplaySize(fitImageWithinBubble(width, height));
-      },
-      // Unreadable dimensions just keep the fallback box.
-      () => {}
-    );
-    return () => {
-      active = false;
-    };
-  }, [uri]);
-
-  if (!uri) {
-    return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
-  }
-
-  return (
-    // The long press lives here rather than on the surrounding bubble: this
-    // Touchable claims the touch first, so a handler on the parent would never
-    // fire for a press that lands on the photo.
-    <TouchableOpacity
-      activeOpacity={0.92}
-      onPress={() => onPress(message, uri)}
-      onLongPress={onLongPress ? (event) => onLongPress(message, event) : undefined}
-      delayLongPress={300}
-    >
-      <Image
-        source={{ uri }}
-        style={[
-          styles.chatImage,
-          displaySize,
-          isMe ? styles.chatImageSent : styles.chatImageReceived,
-        ]}
-      />
-      {message.pending ? (
-        <View style={styles.imageUploadOverlay}>
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        </View>
-      ) : null}
-    </TouchableOpacity>
-  );
-});
 
 const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
   iconUri,
@@ -486,6 +319,10 @@ export default function ChatPage({ route }) {
 
   const [inputText, setInputText] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
+  // The message the next send will quote, if the user is replying.
+  const [replyingTo, setReplyingTo] = useState(null);
+  // Flashed briefly after jumping to a quoted message.
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   const [showWebNewChatPanel, setShowWebNewChatPanel] = useState(false);
   const [showWebCreateGroupPanel, setShowWebCreateGroupPanel] = useState(false);
@@ -513,6 +350,25 @@ export default function ChatPage({ route }) {
   const [participants, setParticipants] = useState([]);
   const [conversationType, setConversationType] = useState("");
   const [isSendingText, setIsSendingText] = useState(false);
+  // The panel behind the composer's "+" (photo, event share).
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+  // The sticker panel, open in the layout under the composer.
+  const [stickerPanelVisible, setStickerPanelVisible] = useState(false);
+
+  // Android back closes the sticker panel before it leaves the chat.
+  useEffect(() => {
+    if (!stickerPanelVisible) return undefined;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setStickerPanelVisible(false);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [stickerPanelVisible]);
+
+  // A different conversation starts with the panel shut.
+  useEffect(() => {
+    setStickerPanelVisible(false);
+  }, [conversationId]);
   const [contextMenu, setContextMenu] = useState({
     visible: false,
     x: 0,
@@ -548,7 +404,8 @@ export default function ChatPage({ route }) {
     if (messageType !== "text") return;
 
     const messageIdKey = String(message?.messageId || "");
-    const sourceContent = String(message?.content || "").trim();
+    // Markers would only confuse the translator; the translation shows plain.
+    const sourceContent = stripInlineMarkup(message?.content).trim();
     if (!messageIdKey || !sourceContent) return;
 
     const targetLang = resolveTargetTranslationLanguage(sourceContent, language);
@@ -866,6 +723,10 @@ export default function ChatPage({ route }) {
   const canMentionEveryone =
     conversationType === "group" &&
     (conversation?.adminIds || []).some((id) => String(id) === String(currentUser?.id));
+  // The same standing decides who may pin the group notice.
+  const isGroupAdmin = canMentionEveryone;
+  // Set from the "+" panel: the next text sent is pinned as the group notice.
+  const [noticeMode, setNoticeMode] = useState(false);
 
   const handleInputTextChange = useCallback(
     (text) => {
@@ -1559,9 +1420,14 @@ export default function ChatPage({ route }) {
     const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
     const mentions = resolveOutgoingMentions(trimmed);
+    const quoted = replyingTo;
+    // Composing a group notice: pin this message once the server has it.
+    const pinAfterSend = noticeMode && isGroupAdmin;
+    setNoticeMode(false);
 
     const optimisticMessage = {
       ...mentions,
+      ...replyFieldsFor(quoted),
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1581,10 +1447,12 @@ export default function ChatPage({ route }) {
     appendOptimisticMessage(optimisticMessage);
     setInputText("");
     clearPendingMentions();
+    setReplyingTo(null);
     setAckTimeout(localId);
 
     const chatMessage = {
       ...mentions,
+      replyToMessageId: quoted?.messageId ?? null,
       content: trimmed,
       conversationId,
       conversationType,
@@ -1605,6 +1473,15 @@ export default function ChatPage({ route }) {
       if (persisted?.messageId) {
         replaceOptimisticMessage(localId, persisted);
         clearAckTimeout(localId);
+        if (pinAfterSend) {
+          // The message is sent either way; only the pin can still fail.
+          try {
+            const updated = await pinGroupNotice(conversationId, persisted.messageId);
+            applyConversationNotice(updated?.notice);
+          } catch (pinError) {
+            showAlert(i18n.t("error"), pinError?.response?.data || i18n.t("eventActionFailed"));
+          }
+        }
       }
     } catch (error) {
       updateConversationHistory((history) =>
@@ -1649,9 +1526,230 @@ export default function ChatPage({ route }) {
 
   const beginEditMessage = (message) => {
     setEditingMessage(message);
+    setReplyingTo(null);
+    setStickerPanelVisible(false);
     setInputText(message.content || "");
     closeContextMenu();
     textInputRef.current?.focus();
+  };
+
+  const beginReply = (message) => {
+    if (!message || messagingBlocked) return;
+    closeContextMenu();
+    // Editing and replying both own the composer; starting one ends the other.
+    if (editingMessage) {
+      setEditingMessage(null);
+      setInputText("");
+    }
+    setReplyingTo(message);
+    textInputRef.current?.focus();
+  };
+
+  // Jumps to a quoted message when it is in the loaded window and flashes it.
+  // History pages in from the newest end, so an old original may not be here;
+  // loading "around" an arbitrary id is a later step.
+  const scrollToMessage = (messageId) => {
+    const index = messages.findIndex(
+      (it) => it.type !== "date" && String(it.messageId) === String(messageId)
+    );
+    if (index < 0) {
+      showAlert(i18n.t("reply"), i18n.t("replyOriginalNotLoaded"));
+      return;
+    }
+    try {
+      flatListRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    } catch (_) {
+      // onScrollToIndexFailed retries once rows have mounted
+    }
+    const key = String(messageId);
+    setHighlightedMessageId(key);
+    setTimeout(
+      () => setHighlightedMessageId((current) => (current === key ? null : current)),
+      1800
+    );
+  };
+
+  // --- group notice ------------------------------------------------------------
+  const applyConversationNotice = (notice) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        String(conv.conversationId) === String(conversationId) ? { ...conv, notice: notice || null } : conv
+      )
+    );
+  };
+
+  const handlePinMessage = async (message) => {
+    closeContextMenu();
+    if (!message?.messageId || isLocalOnlyMessage(message) || message.pending) return;
+    try {
+      const updated = await pinGroupNotice(conversationId, message.messageId);
+      applyConversationNotice(updated?.notice);
+    } catch (error) {
+      showAlert(i18n.t("error"), error?.response?.data || i18n.t("eventActionFailed"));
+    }
+  };
+
+  const handleUnpin = async () => {
+    const confirmed = await confirmAction({
+      title: i18n.t("unpinMessage"),
+      message: i18n.t("unpinConfirm"),
+      confirmText: i18n.t("unpinMessage"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await unpinGroupNotice(conversationId);
+      applyConversationNotice(null);
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  const showNoticeReaders = async () => {
+    try {
+      const { read, total } = await getGroupNoticeReaders(conversationId);
+      showAlert(i18n.t("noticeReadersTitle"), i18n.t("noticeReaders", { read, total }));
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  // Admin holds the banner: remove it, or see how many have read it.
+  const manageNotice = () => {
+    Alert.alert(i18n.t("groupNotice"), undefined, [
+      { text: i18n.t("noticeReadersTitle"), onPress: showNoticeReaders },
+      { text: i18n.t("unpinMessage"), style: "destructive", onPress: handleUnpin },
+      { text: i18n.t("cancel"), style: "cancel" },
+    ]);
+  };
+
+  // The pinned message first (that is what people want to read); the "📌" line
+  // it posted is newer and more likely still loaded, so it is the fallback.
+  const jumpToNotice = (notice) => {
+    const loaded = (id) =>
+      id != null && messages.some((it) => it.type !== "date" && String(it.messageId) === String(id));
+    if (loaded(notice?.messageId)) return scrollToMessage(notice.messageId);
+    if (loaded(notice?.noticeMessageId)) return scrollToMessage(notice.noticeMessageId);
+    return scrollToMessage(notice?.messageId);
+  };
+
+  const beginNotice = () => {
+    setActionSheetVisible(false);
+    if (!isGroupAdmin || messagingBlocked) return;
+    setReplyingTo(null);
+    if (editingMessage) {
+      setEditingMessage(null);
+      setInputText("");
+    }
+    setNoticeMode(true);
+    setTimeout(() => textInputRef.current?.focus(), 250);
+  };
+
+  // --- polls -------------------------------------------------------------------
+  const startPoll = (mode) => {
+    setActionSheetVisible(false);
+    if (messagingBlocked || conversationType !== "group") return;
+    setTimeout(
+      () => navigation.navigate("PollComposer", { conversationId, conversationType, mode }),
+      200
+    );
+  };
+
+  // Every poll call answers with the poll's message as this reader now sees it
+  // (their own choices and reactions filled in); it simply replaces the row.
+  const applyMessage = (dto) => {
+    if (!dto?.messageId) return;
+    updateConversationHistory((history) =>
+      history.map((msg) => (String(msg.messageId) === String(dto.messageId) ? { ...msg, ...dto } : msg))
+    );
+  };
+
+  const pollAction = async (action) => {
+    try {
+      applyMessage(await action());
+    } catch (error) {
+      showAlert(
+        i18n.t("error"),
+        typeof error?.response?.data === "string" ? error.response.data : i18n.t("eventActionFailed")
+      );
+    }
+  };
+
+  const handleVote = (poll, optionIds) => pollAction(() => votePoll(poll.id, optionIds));
+  const handleSignUp = (poll, note) => pollAction(() => addPollEntry(poll.id, note));
+  const handleLeaveSignUp = (poll) => pollAction(() => removePollEntry(poll.id));
+  const handleClosePoll = async (poll) => {
+    const confirmed = await confirmAction({
+      title: i18n.t("closePoll"),
+      message: i18n.t("closePollConfirm"),
+      confirmText: i18n.t("closePoll"),
+      cancelText: i18n.t("cancel"),
+      destructive: true,
+    });
+    if (confirmed) pollAction(() => closePoll(poll.id));
+  };
+  const handleShowVoters = async (poll, option) => {
+    try {
+      const people = await getPollVoters(poll.id, option.id);
+      const names = people
+        .map((person) =>
+          person.bot
+            ? (String(language || "").startsWith("zh") && person.displayNameZh) || person.firstName
+            : formatName(person.firstName, person.lastName)
+        )
+        .filter(Boolean);
+      showAlert(
+        i18n.t("whoChose", { option: option.text || "" }),
+        names.length ? names.join("\n") : i18n.t("noOneYet")
+      );
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  const applyReactions = (messageId, reactions) => {
+    updateConversationHistory((history) =>
+      history.map((msg) =>
+        String(msg.messageId) === String(messageId) ? { ...msg, reactions } : msg
+      )
+    );
+  };
+
+  // Adds or withdraws the viewer's emoji. Shown at once and confirmed by the
+  // server's answer; put back the way it was if the server refuses.
+  const handleToggleReaction = async (message, emoji, on) => {
+    if (!message?.messageId || message.pending || isLocalOnlyMessage(message)) return;
+    closeContextMenu();
+    const before = Array.isArray(message.reactions) ? message.reactions : [];
+    applyReactions(message.messageId, applyOwnReaction(before, emoji, on));
+    try {
+      const updated = await toggleReaction(message.messageId, emoji, on);
+      if (Array.isArray(updated?.reactions)) applyReactions(message.messageId, updated.reactions);
+    } catch (error) {
+      applyReactions(message.messageId, before);
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
+  const showReactors = async (message, emoji) => {
+    if (!message?.messageId || isLocalOnlyMessage(message)) return;
+    try {
+      const people = await getReactionUsers(message.messageId, emoji);
+      const names = people
+        .map((person) =>
+          person.bot
+            ? (String(language || "").startsWith("zh") && person.displayNameZh) || person.firstName
+            : formatName(person.firstName, person.lastName)
+        )
+        .filter(Boolean);
+      showAlert(
+        i18n.t("reactedWith", { emoji: displayEmoji(emoji) }),
+        names.length ? names.join("\n") : i18n.t("noOneYet")
+      );
+    } catch (error) {
+      showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
   };
 
   const resolveImageUrl = useCallback(
@@ -1760,8 +1858,12 @@ export default function ChatPage({ route }) {
     const imageUri = result.assets[0].uri;
     const localId = `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
+    // A photo sent while replying quotes the same message the words would have.
+    const quoted = replyingTo;
+    setReplyingTo(null);
 
     appendOptimisticMessage({
+      ...replyFieldsFor(quoted),
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1797,6 +1899,7 @@ export default function ChatPage({ route }) {
 
       const payload = {
         content: uploadedUrl,
+        replyToMessageId: quoted?.messageId ?? null,
         conversationId,
         conversationType,
         senderId: currentUser.id,
@@ -1830,6 +1933,163 @@ export default function ChatPage({ route }) {
     }
   };
 
+  // --- stickers ----------------------------------------------------------------
+  // The composer's left button: opens the panel where the keyboard would be, or,
+  // when it is already open, hands the space back to typing.
+  const toggleStickerPanel = () => {
+    if (messagingBlocked || editingMessage) return;
+    if (stickerPanelVisible) {
+      setStickerPanelVisible(false);
+      textInputRef.current?.focus();
+      return;
+    }
+    Keyboard.dismiss();
+    setStickerPanelVisible(true);
+  };
+
+  /**
+   * Sends a sticker. The message names the sticker by id; its body is the
+   * sticker's fallback emoji — the same one the server will write — so the
+   * optimistic bubble matches the server's echo, and a server that predates
+   * stickers still stores something every build can show.
+   */
+  const sendSticker = async (sticker) => {
+    if (messagingBlocked || !sticker?.id) return;
+    if (!currentUser?.id || !conversationId || !conversationType) return;
+
+    const localId = `local-sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
+    // A sticker sent while replying quotes the same message the words would have.
+    const quoted = replyingTo;
+    setReplyingTo(null);
+
+    appendOptimisticMessage({
+      ...replyFieldsFor(quoted),
+      localId,
+      clientMessageId: localId,
+      messageId: localId,
+      content: sticker.emoji,
+      stickerId: sticker.id,
+      conversationId,
+      conversationType,
+      senderId: currentUser.id,
+      recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+      type: "sticker",
+      deliveryStatus: {},
+      createdAt,
+      timestamp: createdAt,
+      pending: true,
+      failed: false,
+    });
+    setAckTimeout(localId);
+
+    try {
+      const persisted = await sendMessageToDatabase(
+        {
+          content: sticker.emoji,
+          stickerId: sticker.id,
+          replyToMessageId: quoted?.messageId ?? null,
+          conversationId,
+          conversationType,
+          senderId: currentUser.id,
+          recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+          type: "sticker",
+          deliveryStatus: {},
+          createdAt,
+          clientMessageId: localId,
+        },
+        conversationType
+      );
+      if (persisted?.messageId) {
+        replaceOptimisticMessage(localId, persisted);
+        clearAckTimeout(localId);
+      }
+    } catch (error) {
+      updateConversationHistory((history) =>
+        history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
+      );
+      clearAckTimeout(localId);
+      showAlert(i18n.t("error"), i18n.t("stickerSendFailed"));
+    }
+  };
+
+  const openActionSheet = () => {
+    if (messagingBlocked) return;
+    Keyboard.dismiss();
+    setActionSheetVisible(true);
+  };
+
+  // The picker is a full-screen view of its own; let the sheet finish sliding
+  // away first rather than opening it over a half-dismissed panel.
+  const pickPhotoFromSheet = () => {
+    setActionSheetVisible(false);
+    setTimeout(pickAndSendImage, 250);
+  };
+
+  /**
+   * Sends an event card. The optimistic bubble shows the same one-line text the
+   * server will write, and the card fills in from the live event as soon as it
+   * is on screen. The server checks the event exists and writes the body.
+   */
+  const shareEvent = async (event) => {
+    setActionSheetVisible(false);
+    if (messagingBlocked || !event?.id) return;
+    if (!currentUser?.id || !conversationId || !conversationType) return;
+
+    const localId = `local-event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
+    const fallbackText = ["📅 " + (event.title || ""), [event.date, event.startTime].filter(Boolean).join(" "), event.location]
+      .filter(Boolean)
+      .join(" · ");
+
+    appendOptimisticMessage({
+      localId,
+      clientMessageId: localId,
+      messageId: localId,
+      content: fallbackText,
+      sharedEventId: event.id,
+      conversationId,
+      conversationType,
+      senderId: currentUser.id,
+      recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+      type: "event",
+      deliveryStatus: {},
+      createdAt,
+      timestamp: createdAt,
+      pending: true,
+      failed: false,
+    });
+    setAckTimeout(localId);
+
+    try {
+      const persisted = await sendMessageToDatabase(
+        {
+          content: String(event.id),
+          sharedEventId: event.id,
+          conversationId,
+          conversationType,
+          senderId: currentUser.id,
+          recipientIds: participants.map((p) => p.id).filter((id) => id !== currentUser.id),
+          type: "event",
+          deliveryStatus: {},
+          createdAt,
+          clientMessageId: localId,
+        },
+        conversationType
+      );
+      if (persisted?.messageId) {
+        replaceOptimisticMessage(localId, persisted);
+        clearAckTimeout(localId);
+      }
+    } catch (error) {
+      updateConversationHistory((history) =>
+        history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
+      );
+      clearAckTimeout(localId);
+      showAlert(i18n.t("error"), i18n.t("shareEventFailed"));
+    }
+  };
+
   const handleVoiceRecordingComplete = async (audioUri, duration) => {
     if (messagingBlocked) return;
     if (!currentUser?.id || !conversationId || !conversationType || !audioUri) return;
@@ -1841,8 +2101,11 @@ export default function ChatPage({ route }) {
     const parsedDuration = Number(duration);
     const durationInSeconds = Number.isFinite(parsedDuration) ? Math.max(0, Math.floor(parsedDuration)) : 0;
     const localVoiceContent = `${audioUri}|${durationInSeconds}`;
+    const quoted = replyingTo;
+    setReplyingTo(null);
 
     appendOptimisticMessage({
+      ...replyFieldsFor(quoted),
       localId,
       clientMessageId: localId,
       messageId: localId,
@@ -1879,6 +2142,7 @@ export default function ChatPage({ route }) {
 
       const payload = {
         content: voiceContent,
+        replyToMessageId: quoted?.messageId ?? null,
         conversationId,
         conversationType,
         senderId: currentUser.id,
@@ -1923,11 +2187,15 @@ export default function ChatPage({ route }) {
     (!editingMessage && isSendingText);
 
   const contextMessage = contextMenu.message;
+  // What the long-press menu may offer is decided by the message's kind — see
+  // utils/messageKinds, the client twin of the server's MessageKind.
+  const contextKind = kindOf(contextMessage);
   const contextMessageType = String(contextMessage?.type || "").toLowerCase();
   const contextMessageIdKey = String(contextMessage?.messageId || "");
-  const contextSourceContent = String(contextMessage?.content || "").trim();
-  const contextCanCopy = contextMessageType === "text" || contextMessageType === "image";
-  const contextCanDownload = contextMessageType === "image";
+  // Translations are keyed on the words without their *markers* (see requestTranslation).
+  const contextSourceContent = stripInlineMarkup(contextMessage?.content).trim();
+  const contextCanCopy = contextKind.canCopy;
+  const contextCanDownload = contextKind.canDownload;
   const contextTargetLanguage = resolveTargetTranslationLanguage(
     contextSourceContent,
     language
@@ -1935,7 +2203,7 @@ export default function ChatPage({ route }) {
   const contextTranslation = contextMessageIdKey ? translations[contextMessageIdKey] : null;
   const contextCanTranslate =
     isTranslationEnabled &&
-    contextMessageType === "text" &&
+    contextKind.canTranslate &&
     !!contextMessageIdKey &&
     !!contextSourceContent;
   const contextHasVisibleTranslation =
@@ -1951,6 +2219,15 @@ export default function ChatPage({ route }) {
     !contextMessage.pending &&
     !contextMessage.failed &&
     !isLocalOnlyMessage(contextMessage);
+  // Anything real can be answered — yours or theirs, words or media.
+  const contextCanReply =
+    !!contextMessage &&
+    !messagingBlocked &&
+    !contextMessage.pending &&
+    !contextMessage.failed &&
+    !isLocalOnlyMessage(contextMessage);
+  // Group admins pin any real message as the notice — except a "📌" line itself.
+  const contextCanPin = contextCanReply && isGroupAdmin && contextKind.bubble !== "notice";
 
   // Actions offered along the bottom of the full-screen photo. Same operations the
   // context menu exposes for an image, minus edit and translate, which are text-only.
@@ -2332,7 +2609,12 @@ export default function ChatPage({ route }) {
     <View style={styles.composerWrap}>
       {showJumpToEnd && (
         <TouchableOpacity
-          style={styles.jumpToEndButton}
+          // Floats a fixed distance above the composer's bottom edge; with the
+          // sticker panel open that edge is the panel's, so lift it past it.
+          style={[
+            styles.jumpToEndButton,
+            stickerPanelVisible && { bottom: 78 + stickerPanelHeight(windowWidth) },
+          ]}
           onPress={jumpToEnd}
           activeOpacity={0.85}
           accessibilityLabel="Jump to latest messages"
@@ -2351,6 +2633,53 @@ export default function ChatPage({ route }) {
             }}
           >
             <Text style={{ color: "red", fontSize: webFontSize(12) }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Composing the group notice: the next text sent is pinned. */}
+      {noticeMode && !editingMessage && (
+        <View style={styles.replyBar}>
+          <View style={[styles.replyBarStripe, { backgroundColor: "#B26A00" }]} />
+          <View style={styles.replyBarText}>
+            <Text style={[styles.replyBarName, { color: "#B26A00" }]} numberOfLines={1}>
+              {i18n.t("groupNotice")}
+            </Text>
+            <Text style={styles.replyBarPreview} numberOfLines={1}>
+              {i18n.t("composeNoticeHint")}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setNoticeMode(false)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("cancel")}
+          >
+            <Ionicons name="close-circle" size={22} color="#8E8E93" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* What the next send will quote. Sits where the editing banner does;
+          the two never show together (beginReply / beginEditMessage). */}
+      {replyingTo && !editingMessage && (
+        <View style={styles.replyBar}>
+          <View style={styles.replyBarStripe} />
+          <View style={styles.replyBarText}>
+            <Text style={styles.replyBarName} numberOfLines={1}>
+              {i18n.t("replyingTo", { name: senderDisplayName(replyingTo, language) })}
+            </Text>
+            <Text style={styles.replyBarPreview} numberOfLines={1}>
+              {messagePreview(replyingTo)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setReplyingTo(null)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("cancel")}
+          >
+            <Ionicons name="close-circle" size={22} color="#8E8E93" />
           </TouchableOpacity>
         </View>
       )}
@@ -2400,14 +2729,13 @@ export default function ChatPage({ route }) {
       )}
 
       <View style={[styles.inputContainer, messagingBlocked && styles.inputContainerBlocked]}>
-        <TouchableOpacity
-          onPress={pickAndSendImage}
-          style={styles.attachButton}
-          activeOpacity={0.82}
-          disabled={messagingBlocked}
-        >
-          <Ionicons name="image" size={23} color={messagingBlocked ? "#B0B0B3" : "#111111"} />
-        </TouchableOpacity>
+        {/* Stickers, where the photo button used to sit (photos live in the "+"
+            panel on the right now). Opens the panel under the composer. */}
+        <ComposerStickerButton
+          active={stickerPanelVisible}
+          disabled={messagingBlocked || !!editingMessage || !conversationId || !conversationType}
+          onPress={toggleStickerPanel}
+        />
 
         <View style={styles.inputPill}>
           <TextInput
@@ -2419,6 +2747,8 @@ export default function ChatPage({ route }) {
             style={styles.inputField}
             multiline
             editable={!messagingBlocked}
+            // The keyboard and the sticker panel take the same space; typing wins.
+            onFocus={() => setStickerPanelVisible(false)}
           />
 
           <View
@@ -2434,28 +2764,39 @@ export default function ChatPage({ route }) {
           </View>
         </View>
 
-        <TouchableOpacity
-          onPress={handleSendOrUpdate}
-          disabled={isSendDisabled}
-          style={[
-            styles.sendButton,
-            isSendDisabled ? styles.sendButtonDisabled : styles.sendButtonActive,
-          ]}
-          activeOpacity={0.86}
-        >
-          {isSendingText ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            // Icons instead of the old hardcoded English "Send"/"Update":
-            // language-neutral, and the paper plane is the universal send glyph.
-            <Ionicons
-              name={editingMessage ? "checkmark" : "paper-plane"}
-              size={20}
-              color="#FFFFFF"
-            />
-          )}
-        </TouchableOpacity>
+        {/* "+" while the box is empty (opens the actions panel), the paper plane
+            once there is text, a check while editing. Icons, not words, so the
+            control needs no translation. */}
+        <ComposerActionButton
+          mode={editingMessage ? "edit" : inputText.trim() ? "send" : "plus"}
+          onPress={editingMessage || inputText.trim() ? handleSendOrUpdate : openActionSheet}
+          disabled={
+            editingMessage || inputText.trim()
+              ? isSendDisabled
+              : messagingBlocked || !conversationId || !conversationType
+          }
+          busy={isSendingText && !editingMessage}
+        />
       </View>
+
+      {/* In the layout, under the input row, where the keyboard would be: the
+          list above shrinks to make room, so the chat stays in view. */}
+      <StickerPanel
+        visible={stickerPanelVisible && !messagingBlocked && !editingMessage}
+        onSend={sendSticker}
+      />
+
+      <ChatActionSheet
+        visible={actionSheetVisible}
+        onClose={() => setActionSheetVisible(false)}
+        onPickPhoto={pickPhotoFromSheet}
+        onShareEvent={shareEvent}
+        canPostNotice={isGroupAdmin}
+        onComposeNotice={beginNotice}
+        canCreatePoll={conversationType === "group"}
+        onCreatePoll={startPoll}
+        language={language}
+      />
     </View>
   );
 
@@ -2468,6 +2809,15 @@ export default function ChatPage({ route }) {
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
     >
+      {conversationType === "group" && conversation?.notice && (
+        <GroupNoticeBanner
+          notice={conversation.notice}
+          language={language}
+          canManage={isGroupAdmin}
+          onOpen={jumpToNotice}
+          onManage={manageNotice}
+        />
+      )}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -2504,246 +2854,39 @@ export default function ChatPage({ route }) {
             );
           }
 
-          const isMe = item.senderId === currentUser?.id;
-          // In a group there is no other way to tell who is speaking, so incoming
-          // messages carry the sender's face and name. Your own don't — you know
-          // who you are — and a private chat has exactly one other person.
-          const showsSender = conversationType === "group" && !isMe;
-          // The list is inverted, so the message drawn ABOVE this one is the next
-          // index. Only the first message of a run is labelled; repeating the
-          // avatar and name down a burst of five replies is just noise.
-          const above = messages[index + 1];
-          const startsRun =
-            !above ||
-            above.type === "date" ||
-            String(above.senderId) !== String(item.senderId);
-          // The message carries the sender's avatar path itself, so this still works
-          // in the app-level group, whose roster is deliberately not sent to clients.
-          // The directory is the fallback for messages stored before that field existed.
-          const senderAvatarPath =
-            item.senderProfileImage || userDirectory[String(item.senderId)]?.profileImage || null;
-          // The assistant is named in both languages and carries no stored avatar,
-          // so it is drawn from the app icon and named for whoever is reading.
-          const isAssistant = !!item.senderBot;
-          const senderName = isAssistant
-            ? (String(language || "").startsWith("zh") && item.senderDisplayNameZh) ||
-              item.senderFirstName ||
-              i18n.t("unknownUser")
-            : formatName(item.senderFirstName, item.senderLastName) || i18n.t("unknownUser");
-          const isFailed = item.failed;
-          const isPending = item.pending;
-          // Reported messages are shadow-hidden: everyone except the sender sees
-          // a muted placeholder until an admin resolves the report.
-          const isShadowHidden = !!item.reported && !isMe;
-          const messageType = (item.type || "").toLowerCase();
-          const isVoice = !isShadowHidden && messageType === "voice";
-          const isImage = !isShadowHidden && messageType === "image";
-          const messageIdKey = String(item.messageId || "");
-          const translationEntry = messageIdKey ? translations[messageIdKey] : null;
-          const expectedTargetLanguage = resolveTargetTranslationLanguage(
-            item.content,
-            language
-          );
-          const outgoingDeliveryState = isMe
-            ? resolveOutgoingDeliveryState(item.deliveryStatus, currentUser?.id)
-            : null;
-          const showOutgoingDeliveryState =
-            isMe && !isPending && !isFailed && !!outgoingDeliveryState;
-          const showTranslation =
-            !!translationEntry?.visible &&
-            translationEntry?.targetLang === expectedTargetLanguage &&
-            translationEntry?.sourceContent === String(item.content || "").trim();
-
-          const bubble = (
-            <TouchableOpacity
-              // Images handle their own long press inside <ChatImage>, but the
-              // bubble has padding around the photo — catching it here too means a
-              // press on the margin still opens the menu.
-              onLongPress={
-                Platform.OS === "web" || isShadowHidden
-                  ? undefined
-                  : (event) => openContextMenu(item, event)
-              }
-              onPress={
-                Platform.OS === "web" && !isImage && !isShadowHidden
-                  ? (event) => openContextMenu(item, event)
-                  : undefined
-              }
-              activeOpacity={0.7}
-              style={[
-                styles.message,
-                isVoice
-                  ? (isMe ? styles.voiceMessageBubbleSent : styles.voiceMessageBubbleReceived)
-                  : isImage
-                    ? (isMe ? styles.imageMessageBubbleSent : styles.imageMessageBubbleReceived)
-                    : (isMe ? styles.sentMessage : styles.receivedMessage),
-                isVoice ? styles.voiceMessageBubble : null,
-                isFailed ? styles.failedMessage : null,
-                // The avatar gutter replaces the bubble's own left margin.
-                showsSender ? styles.groupMessageBubble : null,
-              ]}
-            >
-              {isShadowHidden ? (
-                <View style={styles.messageContentContainer}>
-                  <Text style={styles.reportedPlaceholder}>
-                    {i18n.t("reportedPendingReview")}
-                  </Text>
-                </View>
-              ) : isImage ? (
-                <ChatImage
-                  message={item}
-                  isMe={isMe}
-                  resolveUri={resolveImageUrl}
-                  onPress={openImageViewer}
-                  onLongPress={
-                    Platform.OS === "web" || isShadowHidden ? undefined : openContextMenu
-                  }
-                />
-              ) : isVoice ? (
-                (() => {
-                  const { audioUrl, duration } = parseVoiceContent(item.content);
-
-                  return (
-                    <View style={styles.voiceWrapper}>
-                      <View
-                        style={[
-                          styles.voiceCard,
-                          isMe ? styles.voiceCardSent : styles.voiceCardReceived,
-                        ]}
-                      >
-                        <VoicePlayer
-                          audioUrl={audioUrl}
-                          duration={duration}
-                          conversationId={conversationId}
-                          isMe={isMe}
-                        />
-                      </View>
-                    </View>
-                  );
-                })()
-              ) : (
-                <View style={styles.messageContentContainer}>
-                  <Text
-                    selectable
-                    style={[
-                      styles.content,
-                      isMe ? styles.contentSent : styles.contentReceived,
-                    ]}
-                  >
-                    {splitOnMentions(item.content, mentionLabelsFor(item)).map((part, partIndex) =>
-                      part.isMention ? (
-                        <Text
-                          key={partIndex}
-                          style={isMe ? styles.mentionInSent : styles.mentionInReceived}
-                        >
-                          {part.text}
-                        </Text>
-                      ) : (
-                        part.text
-                      )
-                    )}
-                  </Text>
-
-                  {showTranslation && (
-                    <View style={styles.translationContainer}>
-                      <View style={styles.translationDivider} />
-                      <Text
-                        style={[
-                          styles.translatedText,
-                          isMe ? styles.contentSent : styles.contentReceived,
-                        ]}
-                      >
-                        {translationEntry.text}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              <Text
-                style={[
-                  styles.timestamp,
-                  isImage ? styles.imageTimestamp : (isMe ? styles.timestampSent : styles.timestampReceived),
-                  isVoice ? styles.voiceTimestamp : null,
-                ]}
-              >
-                {formatTime(item)}
-                {isMe && item.isEdited ? " • Edited" : ""}
-                {isPending ? " • Sending..." : ""}
-                {isFailed ? " • Failed" : ""}
-              </Text>
-              {showOutgoingDeliveryState && (
-                <Text
-                  style={[
-                    styles.deliveryStatus,
-                    isImage ? styles.imageTimestamp : styles.timestampSent,
-                    isVoice ? styles.deliveryStatusVoice : null,
-                    !isImage && outgoingDeliveryState === "seen" ? styles.deliveryStatusSeen : null,
-                  ]}
-                >
-                  {formatDeliveryStateLabel(outgoingDeliveryState)}
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-
-          if (!showsSender) return bubble;
-
+          // The list is inverted, so the message drawn ABOVE this one is the
+          // next index; the bubble uses it to decide whether it starts a run.
           return (
-            <View style={styles.groupMessageRow}>
-              {startsRun ? (
-                isAssistant ? (
-                  // No profile to open, and no stored avatar to fetch: the
-                  // assistant wears the app icon straight from the bundle.
-                  <Image source={appIcon} style={styles.groupMessageAvatar} />
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
-                    accessibilityRole="button"
-                    accessibilityLabel={senderName}
-                  >
-                    <CachedImage
-                      uri={senderAvatarPath}
-                      type="profile"
-                      fallbackSource={defaultProfileImage}
-                      style={styles.groupMessageAvatar}
-                    />
-                  </TouchableOpacity>
-                )
-              ) : (
-                // Holds the gutter open so every bubble in a run stays on the
-                // same left edge as the one carrying the avatar.
-                <View style={styles.groupMessageAvatarSpacer} />
-              )}
-              <View style={styles.groupMessageColumn}>
-                {startsRun &&
-                  (isAssistant ? (
-                    <View style={styles.assistantNameRow}>
-                      <Text style={styles.groupSenderName} numberOfLines={1}>
-                        {senderName}
-                      </Text>
-                      <View style={styles.assistantBadge}>
-                        <Text style={styles.assistantBadgeText}>{i18n.t("aiBadge")}</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
-                    >
-                      <Text style={styles.groupSenderName} numberOfLines={1}>
-                        {senderName}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                {bubble}
-                {isAssistant && (
-                  // Chrome, not message text. In the body it would ride along in
-                  // the push notification and stand in for the answer as the
-                  // conversation-list preview, and cost tokens on every reply.
-                  <Text style={styles.assistantDisclaimer}>{i18n.t("assistantDisclaimer")}</Text>
-                )}
-              </View>
-            </View>
+            <MessageBubble
+              item={item}
+              previous={messages[index + 1]}
+              currentUserId={currentUser?.id}
+              conversationType={conversationType}
+              conversationId={conversationId}
+              language={language}
+              fallbackAvatarPath={userDirectory[String(item.senderId)]?.profileImage || null}
+              mentionLabels={mentionLabelsFor(item)}
+              translation={translations[String(item.messageId || "")] || null}
+              resolveImageUrl={resolveImageUrl}
+              onOpenImage={openImageViewer}
+              onLongPress={openContextMenu}
+              onOpenProfile={(userId) => navigation.navigate("UserProfile", { userId })}
+              onOpenEvent={(eventId) => navigation.navigate("Events Detail", { eventId })}
+              onReply={beginReply}
+              onQuotePress={scrollToMessage}
+              onToggleReaction={messagingBlocked ? undefined : handleToggleReaction}
+              onShowReactors={showReactors}
+              onVote={messagingBlocked ? undefined : handleVote}
+              onSignUp={messagingBlocked ? undefined : handleSignUp}
+              onLeaveSignUp={messagingBlocked ? undefined : handleLeaveSignUp}
+              onClosePoll={handleClosePoll}
+              onShowVoters={handleShowVoters}
+              isGroupAdmin={isGroupAdmin}
+              canReply={!messagingBlocked}
+              highlighted={
+                highlightedMessageId != null && String(item.messageId) === highlightedMessageId
+              }
+            />
           );
         }}
       />
@@ -2760,6 +2903,48 @@ export default function ChatPage({ route }) {
               })
             }
           >
+            {/* The fixed emoji set, across the top of the menu. A lit one is
+                already yours; pressing it again withdraws it. */}
+            {contextCanReply && (
+              <View style={styles.reactionPicker}>
+                {REACTION_EMOJIS.map(({ key, display }) => {
+                  const mine = (contextMessage?.reactions || []).some(
+                    (tally) => tally?.emoji === key && tally?.mine
+                  );
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => handleToggleReaction(contextMessage, key, !mine)}
+                      style={[styles.reactionPickerItem, mine && styles.reactionPickerItemMine]}
+                      accessibilityRole="button"
+                      accessibilityLabel={display}
+                      accessibilityState={{ selected: mine }}
+                    >
+                      <Text style={styles.reactionPickerEmoji}>{display}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {contextCanReply && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => beginReply(contextMenu.message)}
+              >
+                <Text style={styles.contextMenuItemText}>{i18n.t("reply")}</Text>
+              </TouchableOpacity>
+            )}
+
+            {contextCanPin && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => handlePinMessage(contextMenu.message)}
+              >
+                <Text style={styles.contextMenuItemText}>{i18n.t("pinMessage")}</Text>
+              </TouchableOpacity>
+            )}
+
             {contextCanCopy && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
@@ -2829,7 +3014,7 @@ export default function ChatPage({ route }) {
             )}
 
             {contextMenu.message?.senderId === currentUser?.id &&
-              (contextMenu.message?.type || "").toLowerCase() === "text" &&
+              contextKind.canEdit &&
               !contextMenu.message?.pending &&
               !isLocalOnlyMessage(contextMenu.message) && (
                 <TouchableOpacity
@@ -3702,130 +3887,6 @@ const styles = StyleSheet.create({
   nativeHeaderChevron: {
     marginLeft: 4,
   },
-  message: {
-    marginVertical: 3,
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    maxWidth: "82%",
-  },
-  // The tightened corner is the bubble's tail, so it sits at the TOP on the
-  // sender's side — pointing up at their avatar, which is drawn at the head of
-  // the group rather than the foot of it.
-  sentMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#0A84FF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  receivedMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  imageMessageBubbleSent: {
-    alignSelf: "flex-end",
-    padding: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: 230,
-  },
-  imageMessageBubbleReceived: {
-    alignSelf: "flex-start",
-    padding: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: 230,
-  },
-  chatImage: {
-    width: 220,
-    height: 220,
-    borderRadius: 18,
-  },
-  chatImageSent: {
-    borderWidth: 2,
-    borderColor: "rgba(10,132,255,0.25)",
-  },
-  chatImageReceived: {
-    borderWidth: 1,
-    borderColor: "#D7D7DB",
-  },
-  // Dim + spinner shown over a photo while it is still uploading.
-  imageUploadOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 18,
-  },
-  failedMessage: {
-    borderWidth: 1,
-    borderColor: "#E35D5D",
-  },
-  // Group chats only: an incoming message is drawn as [avatar][name over bubble],
-  // so you can tell who is speaking without opening the participant list.
-  groupMessageRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingLeft: 12,
-    paddingRight: 12,
-  },
-  groupMessageAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-    marginTop: 4,
-    backgroundColor: "#E9E9EB",
-  },
-  groupMessageAvatarSpacer: {
-    width: 32,
-    marginRight: 8,
-  },
-  groupMessageColumn: {
-    flex: 1,
-    alignItems: "flex-start",
-  },
-  assistantNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  assistantBadge: {
-    backgroundColor: "#E7E3FF",
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  assistantBadgeText: {
-    fontSize: webFontSize(10),
-    fontWeight: "700",
-    color: "#5B4BD6",
-    letterSpacing: 0.4,
-  },
-  assistantDisclaimer: {
-    fontSize: webFontSize(11),
-    color: "#8E8E93",
-    marginTop: 2,
-    marginLeft: 4,
-    maxWidth: "82%",
-  },
-  groupSenderName: {
-    fontSize: webFontSize(12),
-    fontWeight: "600",
-    color: "#6B7280",
-    marginLeft: 4,
-    marginBottom: 2,
-  },
-  groupMessageBubble: {
-    marginHorizontal: 0,
-  },
   sidebarTopicsAvatar: {
     backgroundColor: "#0F766E",
     alignItems: "center",
@@ -3865,40 +3926,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   mentionName: { fontSize: webFontSize(15), color: "#1F1F22", flex: 1 },
-  mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
-  mentionInReceived: { fontWeight: "700", color: "#C2410C" },
-  content: {
-    fontSize: webFontSize(16),
-    lineHeight: Platform.OS === "web" ? 24 : 21,
-  },
-  contentSent: {
-    color: "#FFFFFF",
-  },
-  contentReceived: {
-    color: "#111113",
-  },
-  reportedPlaceholder: {
-    fontSize: webFontSize(15),
-    lineHeight: Platform.OS === "web" ? 22 : 20,
-    fontStyle: "italic",
-    color: "#8A8A8E",
-  },
-  timestamp: {
-    fontSize: webFontSize(10),
-    alignSelf: "flex-end",
-    marginTop: 4,
-    letterSpacing: 0.1,
-  },
-  timestampSent: {
-    color: "rgba(255,255,255,0.82)",
-  },
-  timestampReceived: {
-    color: "rgba(60,60,67,0.62)",
-  },
-  imageTimestamp: {
-    color: "rgba(60,60,67,0.62)",
-    marginTop: 6,
-  },
   composerWrap: {
     position: "relative",
     overflow: "visible",
@@ -3952,15 +3979,6 @@ const styles = StyleSheet.create({
     elevation: 5,
     zIndex: 10,
   },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E7E7EA",
-    marginRight: 7,
-  },
   inputPill: {
     flex: 1,
     minHeight: 40,
@@ -3984,29 +4002,41 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     color: "#111113",
   },
-  sendButton: {
-    // Icon-only now, so a compact round-ish pill; minHeight keeps the tap
-    // target at 40dp regardless of font scale.
-    minWidth: 52,
-    minHeight: 40,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    marginLeft: 7,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonActive: {
-    backgroundColor: "#0A84FF",
-  },
-  sendButtonDisabled: {
-    backgroundColor: "#C4C8D0",
-  },
   editingBanner: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 5,
     backgroundColor: "#EEE",
+  },
+  replyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#F2F2F7",
+    borderTopWidth: 1,
+    borderColor: "#E1E1E6",
+  },
+  replyBarStripe: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+    backgroundColor: "#0A84FF",
+    marginRight: 10,
+  },
+  replyBarText: {
+    flex: 1,
+  },
+  replyBarName: {
+    fontSize: webFontSize(13),
+    fontWeight: "700",
+    color: "#0A84FF",
+  },
+  replyBarPreview: {
+    fontSize: webFontSize(13),
+    color: "#3C3C43",
+    marginTop: 1,
   },
   dateSeparator: { alignItems: "center", marginVertical: 12 },
   dateText: {
@@ -4021,67 +4051,6 @@ const styles = StyleSheet.create({
   voiceRecorderWrap: {
     marginLeft: 3,
     alignSelf: "center",
-  },
-  voiceMessageBubble: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderWidth: 0,
-  },
-  // Tail at the top, matching sentMessage / receivedMessage above.
-  voiceMessageBubbleSent: {
-    alignSelf: "flex-end",
-    backgroundColor: "#0A84FF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  voiceMessageBubbleReceived: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  voiceWrapper: {
-    width: "100%",
-    alignItems: "stretch",
-    justifyContent: "center",
-  },
-  voiceCard: {
-    width: "100%",
-    minWidth: 228,
-    maxWidth: 320,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-  },
-  voiceCardSent: {
-    backgroundColor: "rgba(255, 255, 255, 0.14)",
-    borderColor: "rgba(255,255,255,0.24)",
-  },
-  voiceCardReceived: {
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderColor: "rgba(141,141,147,0.2)",
-  },
-  voiceTimestamp: {
-    alignSelf: "flex-end",
-    marginTop: 6,
-  },
-  deliveryStatus: {
-    fontSize: webFontSize(11),
-    alignSelf: "flex-end",
-    marginTop: 1,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-  deliveryStatusSeen: {
-    color: "rgba(255,255,255,0.98)",
-  },
-  deliveryStatusVoice: {
-    marginTop: 2,
   },
   menuOverlay: {
     ...StyleSheet.absoluteFill,
@@ -4106,6 +4075,28 @@ const styles = StyleSheet.create({
   contextMenuItem: {
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  reactionPicker: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  reactionPickerItem: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reactionPickerItemMine: {
+    backgroundColor: "#E5F0FF",
+  },
+  reactionPickerEmoji: {
+    fontSize: 24,
   },
   contextMenuItemText: {
     fontSize: webFontSize(14),
@@ -4143,22 +4134,5 @@ const styles = StyleSheet.create({
     fontSize: webFontSize(14),
     color: "#111827",
     fontWeight: "500",
-  },
-  messageContentContainer: {
-    width: "100%",
-    minWidth: 80,
-  },
-  translationContainer: {
-    marginTop: 8,
-  },
-  translationDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.1)",
-    marginVertical: 4,
-    width: '100%',
-  },
-  translatedText: {
-    fontSize: webFontSize(15),
-    fontStyle: "italic",
   },
 });

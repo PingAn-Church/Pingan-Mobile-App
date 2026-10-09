@@ -61,6 +61,13 @@ public class PushNotificationService {
      */
     static final String NEW_MEMBER_TYPE = "new-member";
 
+    /**
+     * Tags the "an event you registered for starts soon" push. The event id rides
+     * in its own data key, never conversationId: builds that predate this type
+     * route any conversationId into a chat, so without one they just open the app.
+     */
+    public static final String EVENT_REMINDER_TYPE = "event-reminder";
+
     private final String EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
     // Reused across sends — RestTemplate is thread-safe once built, and a new one
@@ -209,6 +216,57 @@ public class PushNotificationService {
                     null, NEW_MEMBER_TYPE);
         } catch (Exception ignored) {
             // best-effort notification; never disrupt the originating action
+        }
+    }
+
+    /**
+     * Tells registrants that an event starts soon.
+     *
+     * Batched like a queued chat send (bulk user/token reads, Expo batch shape)
+     * because one popular event can have a few hundred sign-ups. Only members who
+     * are still active and verified are told — registering needed verification,
+     * and someone un-verified since should not keep hearing from the church.
+     * Best-effort: nothing here throws, since the caller has already marked these
+     * reminders sent and a retry would only double them up.
+     */
+    public void notifyEventReminder(List<Long> recipientIds, Long eventId,
+            LocalizedText title, LocalizedText body) {
+        if (recipientIds == null || recipientIds.isEmpty() || eventId == null) return;
+        try {
+            Map<Long, User> users = new HashMap<>();
+            userRepository.findAllById(recipientIds).forEach(user -> users.put(user.getId(), user));
+
+            Map<Long, List<PushToken>> tokensByUser = new HashMap<>();
+            pushTokenRepository.findByUserIdIn(recipientIds).stream()
+                    .filter(PushToken::isActive)
+                    .forEach(token -> tokensByUser
+                            .computeIfAbsent(token.getUser().getId(), ignored -> new ArrayList<>())
+                            .add(token));
+
+            List<Map<String, Object>> payloads = new ArrayList<>();
+            for (Long userId : recipientIds) {
+                User user = users.get(userId);
+                List<PushToken> tokens = tokensByUser.getOrDefault(userId, List.of());
+                if (!canReceiveQueuedSocialPush(user) || tokens.isEmpty()) continue;
+
+                String language = user.getLanguage();
+                String localizedBody = body == null ? "" : body.render(language);
+                String localizedTitle = title == null ? "" : title.render(language);
+                for (PushToken token : tokens) {
+                    Map<String, Object> payload = buildPayload(token.getToken(), localizedBody, localizedTitle,
+                            null, EVENT_REMINDER_TYPE, null, null, token.getDeviceType());
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> data = (Map<String, Object>) payload.get("data");
+                    data.put("eventId", String.valueOf(eventId));
+                    payloads.add(payload);
+                }
+            }
+
+            for (int from = 0; from < payloads.size(); from += 100) {
+                sendChunkWithRetry(payloads.subList(from, Math.min(from + 100, payloads.size())));
+            }
+        } catch (Exception e) {
+            log.warn("Event reminder push for event {} failed: {}", eventId, e.getMessage());
         }
     }
 

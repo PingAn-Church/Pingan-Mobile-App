@@ -38,6 +38,7 @@ import DetailedGroupChatPage from "./src/pages/Social/DetailedGroupChatPage";
 import DetailedPrivateChatPage from "./src/pages/Social/DetailedPrivateChatPage";
 import MyActivityPage from "./src/pages/Activity/MyActivityPage";
 import ActivityDetailPage from "./src/pages/Activity/ActivityDetailPage";
+import PollComposerPage from "./src/pages/Social/PollComposerPage";
 import { UserProvider, UserContext } from "./src/context/UserContext";
 import { ChatProvider, ChatContext } from "./src/context/ChatContext";
 import { WebSocketProvider } from "./src/context/WebSocketProvider";
@@ -578,6 +579,7 @@ export default function App() {
                     name="Chat"
                     component={ChatPage}
                   />
+                  <Stack.Screen name="PollComposer" component={PollComposerPage} />
                   <Stack.Screen name="NewChat" component={NewChatScreen} />
                   <Stack.Screen
                     name="UserProfile"

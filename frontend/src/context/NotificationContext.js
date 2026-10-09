@@ -59,7 +59,7 @@ export const NotificationProvider = ({ children }) => {
 
         const listener2 = Notifications.addNotificationResponseReceivedListener(async (response) => {
           const data = response.notification.request.content.data;
-          const { conversationId, conversationType, threadId } = data;
+          const { conversationId, conversationType, threadId, eventId } = data;
 
           await waitForUserToBeReady();
 
@@ -79,6 +79,10 @@ export const NotificationProvider = ({ children }) => {
             // Manage Users is where that happens, so land them there rather
             // than on the home screen with nothing to act on.
             navigation.navigate("ManageUsers");
+          } else if (conversationType === "event-reminder" && eventId != null) {
+            // "An event you registered for starts soon." The id rides in its own
+            // key, never conversationId, so older builds just open the app.
+            navigation.navigate("Events Detail", { eventId });
           } else if (conversationType === "learning") {
             // Enrolment, completion, quiz-passed, achievement and goal pushes
             // carry no conversation — land the learner on their courses hub

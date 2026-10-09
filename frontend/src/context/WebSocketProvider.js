@@ -29,6 +29,7 @@ const WebSocketProvider = ({ children }) => {
     onParticipantUpdate: chat.handleParticipantUpdate,
     onGroupAdminUpdate: chat.handleGroupAdminUpdate,
     onGroupIconUpdate: chat.handleGroupIconUpdate,
+    onGroupNoticeUpdate: chat.handleGroupNoticeUpdate,
     onModerationEvent: handleModerationEvent,
     onPermissionUpdate: applyPermissionUpdate,
   });

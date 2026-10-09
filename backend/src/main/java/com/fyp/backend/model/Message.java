@@ -13,10 +13,16 @@ import java.util.Set;
 @Entity
 @Data
 @NoArgsConstructor
+// Lazy Message proxies (a page of replies' quoted originals) load in batches of
+// 30 rather than one query each. Hibernate 6 only accepts this on the entity,
+// not on the @ManyToOne that points at it.
+@org.hibernate.annotations.BatchSize(size = 30)
 @Table(name = "messages", indexes = {
         // Backs keyset pagination of chat history (newest-first within a conversation).
         @Index(name = "idx_messages_conversation_id_id", columnList = "conversation_id, id"),
-        @Index(name = "idx_messages_conversation_sender", columnList = "conversation_id, sender_id")
+        @Index(name = "idx_messages_conversation_sender", columnList = "conversation_id, sender_id"),
+        // Lets ON DELETE SET NULL find a deleted message's replies without a table scan.
+        @Index(name = "idx_messages_reply_to", columnList = "reply_to_message_id")
 })
 public class Message {
 
@@ -106,6 +112,43 @@ public class Message {
     @Column(name = "responds_to_message_id")
     private Long respondsToMessageId;
 
+    /**
+     * The event an "event" message shares; null on every other message.
+     *
+     * A plain id with no foreign key: deleting an event must not delete the
+     * chat messages that once shared it. The card for a deleted event just says
+     * so, and the stored body still reads sensibly on its own.
+     */
+    @Column(name = "shared_event_id")
+    private Long sharedEventId;
+
+    /**
+     * The sticker a "sticker" message shows, as a {@link StickerCatalog} id;
+     * null on every other message. The picture lives in the app, so this is all
+     * that is stored — the body beside it is the sticker's fallback emoji.
+     */
+    @Column(name = "sticker_id", length = 64)
+    private String stickerId;
+
+    /**
+     * The message this one quotes, or null. Set by the sender when they reply,
+     * and by the assistant on its answers so each sits under its question.
+     *
+     * An association rather than a bare id so a DTO can draw the quote wherever
+     * it is built; the class-level @BatchSize on Message keeps a page of history
+     * to one extra query for all its quotes instead of one each. On the database
+     * side the key is ON DELETE SET NULL, installed by DatabaseIntegrityMigration
+     * — the key Hibernate generates on its own would refuse to delete a message
+     * anyone has replied to. The reply stays; only its quote disappears.
+     *
+     * Excluded from equals/hashCode/toString: a self-reference in Lombok's
+     * generated methods would force the lazy load, or worse, chase the chain.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_message_id")
+    @lombok.ToString.Exclude
+    @lombok.EqualsAndHashCode.Exclude
+    private Message replyTo;
 
 
     // ✅ Updated constructor to initialize conversationType
@@ -122,5 +165,9 @@ public class Message {
                 ? new HashSet<>()
                 : new HashSet<>(messageDto.getMentionedUserIds());
         this.mentionsEveryone = messageDto.isMentionsEveryone();
+        // Validated by ChatService.prepareEventShare before it gets here.
+        this.sharedEventId = messageDto.getSharedEventId();
+        // Likewise checked against the catalog by ChatService.prepareSticker.
+        this.stickerId = messageDto.getStickerId();
     }
 }

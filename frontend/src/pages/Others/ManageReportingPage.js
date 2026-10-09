@@ -19,6 +19,7 @@ import { UserContext } from "../../context/UserContext";
 import { LanguageContext } from "../../context/LanguageContext";
 import i18n from "../../../i18n";
 import { parseServerDate } from "../../utils/serverDate";
+import RichText from "../../components/RichText";
 
 const REPORT_PAGE_SIZE = 20;
 const STATUS_PENDING = "PENDING";
@@ -185,7 +186,7 @@ function ReportedContent({ report }) {
     );
   }
 
-  return <Text style={styles.contentText}>{report.messageContent}</Text>;
+  return <RichText style={styles.contentText}>{report.messageContent}</RichText>;
 }
 
 export default function ManageReportingPage() {

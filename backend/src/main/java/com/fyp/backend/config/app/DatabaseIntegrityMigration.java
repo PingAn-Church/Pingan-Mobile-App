@@ -59,6 +59,43 @@ public class DatabaseIntegrityMigration {
             log.warn("Removed {} orphan mention row(s) and {} orphan topic subscription row(s).",
                     orphanMentions, orphanSubscriptions);
         }
+        int orphanRegistrations = jdbc.update("""
+                DELETE FROM event_registrations er
+                WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.id = er.event_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = er.user_id)
+                """);
+        if (orphanRegistrations > 0) {
+            log.warn("Removed {} orphan event registration row(s).", orphanRegistrations);
+        }
+        int orphanReactions = jdbc.update("""
+                DELETE FROM message_reactions mr
+                WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = mr.message_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = mr.user_id)
+                """);
+        if (orphanReactions > 0) {
+            log.warn("Removed {} orphan message reaction row(s).", orphanReactions);
+        }
+        // Polls whose message is gone, then options and votes whose parent is gone
+        // — children first would leave the parents' own orphans behind.
+        int orphanPolls = jdbc.update("""
+                DELETE FROM polls p
+                WHERE p.message_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = p.message_id)
+                """);
+        int orphanPollOptions = jdbc.update("""
+                DELETE FROM poll_options o
+                WHERE NOT EXISTS (SELECT 1 FROM polls p WHERE p.id = o.poll_id)
+                """);
+        int orphanPollVotes = jdbc.update("""
+                DELETE FROM poll_votes v
+                WHERE NOT EXISTS (SELECT 1 FROM polls p WHERE p.id = v.poll_id)
+                   OR NOT EXISTS (SELECT 1 FROM poll_options o WHERE o.id = v.option_id)
+                   OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = v.user_id)
+                """);
+        if (orphanPolls + orphanPollOptions + orphanPollVotes > 0) {
+            log.warn("Removed {} orphan poll(s), {} option row(s) and {} vote row(s).",
+                    orphanPolls, orphanPollOptions, orphanPollVotes);
+        }
 
         ensureCascadeForeignKey(jdbc, "message_mentions", "message_id",
                 "messages", "id", "fk_message_mentions_message");
@@ -68,6 +105,26 @@ public class DatabaseIntegrityMigration {
                 "threads", "id", "fk_thread_subscriptions_thread");
         ensureCascadeForeignKey(jdbc, "thread_subscriptions", "user_id",
                 "users", "id", "fk_thread_subscriptions_user");
+        // Deleting an event, or an account, takes its sign-ups with it.
+        ensureCascadeForeignKey(jdbc, "event_registrations", "event_id",
+                "events", "id", "fk_event_registrations_event");
+        ensureCascadeForeignKey(jdbc, "event_registrations", "user_id",
+                "users", "id", "fk_event_registrations_user");
+        // A reaction lives and dies with its message and its owner.
+        ensureCascadeForeignKey(jdbc, "message_reactions", "message_id",
+                "messages", "id", "fk_message_reactions_message");
+        ensureCascadeForeignKey(jdbc, "message_reactions", "user_id",
+                "users", "id", "fk_message_reactions_user");
+        // A poll goes with its message; its options and votes go with it; a vote
+        // goes with its voter. Who created what is a pointer that outlives them.
+        ensureCascadeForeignKey(jdbc, "polls", "message_id", "messages", "id", "fk_polls_message");
+        ensureForeignKey(jdbc, "polls", "creator_id", "users", "id", "fk_polls_creator", "SET NULL");
+        ensureCascadeForeignKey(jdbc, "poll_options", "poll_id", "polls", "id", "fk_poll_options_poll");
+        ensureForeignKey(jdbc, "poll_options", "created_by_id", "users", "id",
+                "fk_poll_options_created_by", "SET NULL");
+        ensureCascadeForeignKey(jdbc, "poll_votes", "poll_id", "polls", "id", "fk_poll_votes_poll");
+        ensureCascadeForeignKey(jdbc, "poll_votes", "option_id", "poll_options", "id", "fk_poll_votes_option");
+        ensureCascadeForeignKey(jdbc, "poll_votes", "user_id", "users", "id", "fk_poll_votes_user");
 
         jdbc.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_group_conversations_single_app_level
@@ -107,6 +164,17 @@ public class DatabaseIntegrityMigration {
         // the whole group has already read.
         ensureForeignKey(jdbc, "messages", "responds_to_message_id",
                 "messages", "id", "fk_messages_responds_to", "SET NULL");
+        // A reply outlives what it quotes: delete the original and the reply keeps
+        // its own words, minus the quote. Hibernate regenerates its plain key on
+        // this mapped column every boot; the steady-state churn is documented above.
+        ensureForeignKey(jdbc, "messages", "reply_to_message_id",
+                "messages", "id", "fk_messages_reply_to", "SET NULL");
+        // A group's pinned message and its "📌" announcement are pointers: deleting
+        // either message clears the pointer rather than refusing the delete.
+        ensureForeignKey(jdbc, "group_conversations", "pinned_message_id",
+                "messages", "id", "fk_group_conversations_pinned_message", "SET NULL");
+        ensureForeignKey(jdbc, "group_conversations", "pinned_notice_message_id",
+                "messages", "id", "fk_group_conversations_pinned_notice", "SET NULL");
 
         // One private conversation per pair of users. Duplicates created before this
         // guard existed are merged into the oldest conversation FIRST — the unique

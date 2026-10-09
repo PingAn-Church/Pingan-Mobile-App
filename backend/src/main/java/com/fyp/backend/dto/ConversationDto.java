@@ -63,6 +63,10 @@ public class ConversationDto {
     // sender and tick without the client fetching a history page per conversation.
     // Null for a conversation with no messages yet. Additive: older clients ignore it.
     private LastMessageDto lastMessage;
+    // The group's pinned message, if any — see GroupNoticeDto. Filled in by
+    // ConversationService (it needs the message and the pinner loaded); null on
+    // private conversations and on groups with nothing pinned. Additive.
+    private GroupNoticeDto notice;
 
     // Constructor for GroupConversation
     public ConversationDto(GroupConversation groupConversation) {

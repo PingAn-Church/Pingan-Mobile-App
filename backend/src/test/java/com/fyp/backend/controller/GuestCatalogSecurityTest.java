@@ -37,6 +37,7 @@ import com.fyp.backend.service.CourseService;
 import com.fyp.backend.service.EnrollmentService;
 import com.fyp.backend.service.EventService;
 import com.fyp.backend.service.ReviewService;
+import com.fyp.backend.service.EventRegistrationService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 
@@ -56,6 +57,7 @@ class GuestCatalogSecurityTest {
     @MockBean private ReviewService reviewService;
     @MockBean private EnrollmentService enrollmentService;
     @MockBean private EventService eventService;
+    @MockBean private EventRegistrationService eventRegistrationService;
     @MockBean private UserService userService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private UserRepository userRepository;

@@ -32,6 +32,11 @@ const dispatchConversationPayload = (payload, onMessageReceived = null) => {
     currentHandlers.onModerationEvent?.(payload);
     return;
   }
+  // The group notice changed (pinned or removed); not a message.
+  if (payload?.eventType === "GROUP_NOTICE") {
+    currentHandlers.onGroupNoticeUpdate?.(payload);
+    return;
+  }
   const handler = onMessageReceived || currentHandlers.onMessageReceived;
   handler?.(payload);
 };

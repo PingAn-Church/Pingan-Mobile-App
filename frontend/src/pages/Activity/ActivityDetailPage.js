@@ -14,10 +14,12 @@ import { getUserById } from "../../service/UserService";
 import { useRoute } from "@react-navigation/native";
 import { UserContext } from "../../context/UserContext";
 import UserIdentity from "../../components/UserIdentity";
+import EventRegistrationPanel from "../../components/Events/EventRegistrationPanel";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import RichText from "../../components/RichText";
 
 export default function ActivityDetailPage() {
   const route = useRoute();
@@ -165,13 +167,18 @@ export default function ActivityDetailPage() {
     return <Text style={styles.error}>{i18n.t("eventNotFound")}</Text>;
   }
 
+  const showCheckInButton = canCheckIn && !userCheckedIn;
+
   return (
     <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContainer, showCheckInButton && styles.scrollWithButton]}
+      >
       <Text style={styles.title}>{event.title}</Text>
 
       <View style={styles.infoContainer}>
         <FontAwesome name="info-circle" size={30} color="#007AFF" />
-        <Text style={styles.description}>{event.description}</Text>
+        <RichText style={styles.description}>{event.description}</RichText>
       </View>
 
       <View style={styles.infoContainer}>
@@ -212,38 +219,36 @@ export default function ActivityDetailPage() {
         </View>
       )}
 
+      <EventRegistrationPanel eventId={eventId} />
+
       <View style={styles.adminContainer}>
         {checkedInUsers.length > 0 ? (
           <>
             <Text style={styles.adminHeader}>{i18n.t("checkedInUsers")}</Text>
-            <FlatList
-              data={checkedInUsers}
-              keyExtractor={(item) =>
-                item.id?.toString() ?? Math.random().toString()
-              } // Ensures a valid key
-              renderItem={({ item }) => (
-                <View style={styles.userContainer}>
-                  <Ionicons
-                    name="person-outline"
-                    size={20}
-                    style={styles.userIcon}
-                  />
-                  <UserIdentity
-                    user={item}
-                    nameStyle={styles.userText}
-                    showEmail={!!user?.admin}
-                  />
-                </View>
-              )}
-            />
+            {/* Mapped rather than a FlatList: it now sits inside the page's
+                ScrollView, where a nested virtualized list is an error. */}
+            {checkedInUsers.map((item, index) => (
+              <View key={item.id?.toString() ?? `checked-in-${index}`} style={styles.userContainer}>
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  style={styles.userIcon}
+                />
+                <UserIdentity
+                  user={item}
+                  nameStyle={styles.userText}
+                  showEmail={!!user?.admin}
+                />
+              </View>
+            ))}
           </>
         ) : (
           <Text style={styles.noCheckedIn}>{i18n.t("noCheckedInUsers")}</Text>
         )}
       </View>
+      </ScrollView>
 
-      {canCheckIn &&
-        !userCheckedIn &&
+      {showCheckInButton &&
         (user.id ? (
           <TouchableOpacity
             style={styles.checkInButton}
@@ -266,10 +271,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1, // Ensures full height
     backgroundColor: "#fff",
-    padding: 20,
   },
   scrollContainer: {
     padding: 20,
+  },
+  // Room under the last row for the floating check-in button.
+  scrollWithButton: {
+    paddingBottom: 110,
   },
   loading: {
     fontSize: 18,

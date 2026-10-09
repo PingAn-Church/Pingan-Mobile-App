@@ -18,6 +18,7 @@ import {
   type QuizDetail,
   type QuizResultDetail,
 } from "@/services/quizService";
+import RichText from "../../components/RichText";
 
 /** Render any stored answer shape (string, option list, or matching pairs). */
 const formatAnswer = (v: any): string => {
@@ -200,7 +201,7 @@ export default function QuizResultsScreen() {
             {!!q.feedback && (
               <View style={styles.feedbackBox}>
                 <Text style={styles.feedbackLabel}>{i18n.t("instructorFeedback")}</Text>
-                <Text style={styles.feedbackText}>{q.feedback}</Text>
+                <RichText style={styles.feedbackText}>{q.feedback}</RichText>
               </View>
             )}
 

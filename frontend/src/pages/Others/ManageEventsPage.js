@@ -9,6 +9,10 @@ import {
   TextInput,
   Button,
   ScrollView,
+  Switch,
+  Animated,
+  LayoutAnimation,
+  Pressable,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +29,7 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { Platform, ActivityIndicator } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { showAlert } from "../../utils/showAlert";
+import { formatRegisteredCount } from "../../utils/eventDisplay";
 
 const formatWebTimeToAMPM = (timeString) => {
   if (!timeString) return "";
@@ -71,6 +76,67 @@ const convertToDateTime = (dateString, timeString) => {
     return null;
   }
 };
+
+/**
+ * A row of mutually exclusive options with a highlight that slides to the
+ * chosen one. The highlight's width comes from the measured row, so it adapts
+ * to screen width and font scaling.
+ */
+function SegmentedChoice({ options, value, onChange }) {
+  const [width, setWidth] = useState(0);
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
+  const position = useRef(new Animated.Value(selectedIndex)).current;
+
+  useEffect(() => {
+    Animated.spring(position, {
+      toValue: selectedIndex,
+      friction: 8,
+      tension: 90,
+      useNativeDriver: true,
+    }).start();
+  }, [selectedIndex, position]);
+
+  const segmentWidth = width / options.length;
+
+  return (
+    <View style={styles.segmented} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      {width > 0 && (
+        <Animated.View
+          style={[
+            styles.segmentHighlight,
+            {
+              width: segmentWidth - 4,
+              transform: [
+                {
+                  translateX: position.interpolate({
+                    inputRange: [0, Math.max(1, options.length - 1)],
+                    outputRange: [2, 2 + segmentWidth * Math.max(1, options.length - 1)],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      )}
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            style={styles.segment}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+          >
+            <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={2}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function ManageEventsPage() {
   const navigation = useNavigation();
@@ -145,6 +211,11 @@ export default function ManageEventsPage() {
           {item.date} | {item.startTime} - {item.endTime}
         </Text>
         <Text style={styles.subtitle}>{item.location}</Text>
+        {item.registrationEnabled && (
+          <Text style={styles.registrationLine}>
+            {i18n.t("eventRegistration")} · {formatRegisteredCount(item)}
+          </Text>
+        )}
       </View>
       <TouchableOpacity onPress={() => handleDelete(item.id)}>
         <Ionicons name="trash-outline" size={24} color="red" />
@@ -195,6 +266,23 @@ export function EventFormPage() {
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const dateInputRef = useRef(null);
+
+  // Optional sign-up. Prefilled from the list item when editing (the summary
+  // carries these three), defaults off for a new event.
+  const [registrationEnabled, setRegistrationEnabled] = useState(
+    !!editingEvent?.registrationEnabled
+  );
+  const [registrationCapacity, setRegistrationCapacity] = useState(
+    editingEvent?.registrationCapacity ? String(editingEvent.registrationCapacity) : ""
+  );
+  const [registrantVisibility, setRegistrantVisibility] = useState(
+    editingEvent?.registrantVisibility || "ADMINS"
+  );
+
+  const toggleRegistration = (value) => {
+    LayoutAnimation.configureNext(LayoutAnimation.create(220, "easeInEaseOut", "opacity"));
+    setRegistrationEnabled(value);
+  };
 
 
   const handleDateChange = (event, selectedDate) => {
@@ -371,15 +459,28 @@ export function EventFormPage() {
       return;
     }
 
+    // Empty means unlimited, which the server takes as 0.
+    const capacity = registrationCapacity ? parseInt(registrationCapacity, 10) : 0;
+    if (registrationEnabled && (!Number.isFinite(capacity) || capacity < 0 || capacity > 100000)) {
+      showAlert(i18n.t("error"), i18n.t("invalidCapacity"), [{ text: i18n.t("ok") }]);
+      return;
+    }
+    const payload = {
+      ...eventData,
+      registrationEnabled,
+      registrationCapacity: capacity,
+      registrantVisibility,
+    };
+
     setSubmitting(true);
     try {
       if (editingEvent) {
-        await updateEvent(editingEvent.id, eventData);
+        await updateEvent(editingEvent.id, payload);
         showAlert(i18n.t("success"), i18n.t("updateEventSuccess"), [
           { text: i18n.t("ok") },
         ]);
       } else {
-        await createEvent(eventData);
+        await createEvent(payload);
         showAlert(i18n.t("success"), i18n.t("createEventSuccess"), [
           { text: i18n.t("ok") },
         ]);
@@ -554,6 +655,42 @@ export function EventFormPage() {
         onChangeText={(text) => handleInputChange("location", text)}
       />
 
+      {/* --- REGISTRATION --- */}
+      <View style={styles.registrationCard}>
+        <View style={styles.switchRow}>
+          <View style={styles.switchText}>
+            <Text style={styles.sectionTitle}>{i18n.t("enableRegistration")}</Text>
+            <Text style={styles.sectionHint}>{i18n.t("enableRegistrationHint")}</Text>
+          </View>
+          <Switch value={registrationEnabled} onValueChange={toggleRegistration} />
+        </View>
+
+        {registrationEnabled && (
+          <View style={styles.registrationFields}>
+            <Text style={styles.fieldLabel}>{i18n.t("registrationCapacity")}</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="number-pad"
+              placeholder={i18n.t("unlimited")}
+              value={registrationCapacity}
+              onChangeText={(text) => setRegistrationCapacity(text.replace(/[^0-9]/g, ""))}
+              maxLength={6}
+            />
+
+            <Text style={styles.fieldLabel}>{i18n.t("registrantVisibility")}</Text>
+            <SegmentedChoice
+              value={registrantVisibility}
+              onChange={setRegistrantVisibility}
+              options={[
+                { value: "ADMINS", label: i18n.t("visibilityAdmins") },
+                { value: "REGISTRANTS", label: i18n.t("visibilityRegistrants") },
+                { value: "EVERYONE", label: i18n.t("visibilityEveryone") },
+              ]}
+            />
+          </View>
+        )}
+      </View>
+
       <TouchableOpacity
         style={[styles.submitButton, submitting && { opacity: 0.6 }]}
         onPress={handleSubmit}
@@ -605,6 +742,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: "bold" },
   subtitle: { fontSize: 16, color: "#333" },
+  registrationLine: { fontSize: 14, color: "#007bff", marginTop: 4 },
   createButton: {
     backgroundColor: "#007bff",
     paddingVertical: 14,
@@ -621,6 +759,71 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     marginTop: 30,
+    marginBottom: 30,
+  },
+  registrationCard: {
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    backgroundColor: "#fff",
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  switchText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: "#888",
+    marginTop: 2,
+  },
+  registrationFields: {
+    marginTop: 14,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 6,
+  },
+  segmented: {
+    flexDirection: "row",
+    backgroundColor: "#EEEEF0",
+    borderRadius: 9,
+    padding: 2,
+    minHeight: 40,
+  },
+  segmentHighlight: {
+    position: "absolute",
+    top: 2,
+    bottom: 2,
+    left: 0,
+    borderRadius: 7,
+    backgroundColor: "#007bff",
+  },
+  segment: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  segmentText: {
+    fontSize: 14,
+    color: "#333",
+    textAlign: "center",
+  },
+  segmentTextSelected: {
+    color: "#fff",
+    fontWeight: "600",
   },
   buttonText: {
     color: "white",

@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.fyp.backend.dto.EventDto;
 import com.fyp.backend.dto.EventSummaryDto;
 import com.fyp.backend.model.Event;
+import com.fyp.backend.repository.EventRegistrationRepository;
 import com.fyp.backend.repository.EventRepository;
 
 import jakarta.annotation.PostConstruct;
@@ -44,6 +45,12 @@ public class EventService {
 
     @Autowired
     private EventRepository eventRepository;
+
+    @Autowired
+    private EventRegistrationRepository registrationRepository;
+
+    @Autowired
+    private EventRegistrationService registrationService;
 
     private Clock clock = Clock.systemUTC();
 
@@ -73,6 +80,16 @@ public class EventService {
                 .map(EventSummaryDto::from);
     }
 
+    /**
+     * As above, with each item's registration head count and whether the viewer
+     * has signed up. Two grouped queries for the whole page, not two per event.
+     */
+    public Page<EventSummaryDto> getEvents(String status, Instant from, Instant to, Pageable pageable, Long viewerId) {
+        Page<EventSummaryDto> page = getEvents(status, from, to, pageable);
+        registrationService.annotate(page.getContent(), viewerId);
+        return page;
+    }
+
     public Optional<Event> getEventById(Long id) {
         return eventRepository.findById(id);
     }
@@ -86,6 +103,8 @@ public class EventService {
                 eventDto.getEndTime(),
                 eventDto.getLocation());
         applyDateTimes(event);
+        EventRegistrationService.applySettings(event, eventDto.getRegistrationEnabled(),
+                eventDto.getRegistrationCapacity(), eventDto.getRegistrantVisibility());
         return eventRepository.save(event);
     }
 
@@ -119,6 +138,7 @@ public class EventService {
     @Transactional
     public Event updateEvent(Long id, EventDto eventDto) {
         Event event = eventRepository.findById(id).orElseThrow(() -> new RuntimeException("Event not found"));
+        Instant previousStart = event.getStartAt();
 
         event.setTitle(eventDto.getTitle());
         event.setDescription(eventDto.getDescription());
@@ -127,14 +147,25 @@ public class EventService {
         event.setEndTime(eventDto.getEndTime());
         event.setLocation(eventDto.getLocation());
         applyDateTimes(event);
+        // Absent in requests from builds that predate registration: left alone.
+        EventRegistrationService.applySettings(event, eventDto.getRegistrationEnabled(),
+                eventDto.getRegistrationCapacity(), eventDto.getRegistrantVisibility());
 
-        return eventRepository.save(event);
+        Event saved = eventRepository.save(event);
+        // Moved: anyone already reminded about the old time is reminded again.
+        if (!java.util.Objects.equals(previousStart, saved.getStartAt())) {
+            registrationRepository.clearReminders(id);
+        }
+        return saved;
     }
 
+    @Transactional
     public void deleteEvent(Long id) {
         if (!eventRepository.existsById(id)) {
             throw new RuntimeException("Event not found");
         }
+        // The foreign key cascades on PostgreSQL; this keeps other databases tidy too.
+        registrationRepository.deleteByEventId(id);
         eventRepository.deleteById(id);
     }
 

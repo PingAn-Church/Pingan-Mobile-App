@@ -133,6 +133,59 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Query(value = "DELETE FROM message_mentions WHERE user_id = :userId", nativeQuery = true)
     int deleteMentionReferencesByUserId(@Param("userId") Long userId);
 
+    // Reactions hang off messages by a plain id; a bulk JPQL delete of the
+    // messages would leave them behind anywhere the cascading key is not installed.
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM message_reactions WHERE message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId)", nativeQuery = true)
+    int deleteReactionRowsByConversationId(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM message_reactions WHERE message_id IN "
+            + "(SELECT id FROM messages WHERE conversation_id = :conversationId AND sender_id = :senderId)",
+            nativeQuery = true)
+    int deleteReactionRowsByConversationIdAndSenderId(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
+
+    // Polls hang off their conversation by id; votes, then options, then the polls.
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM poll_votes WHERE poll_id IN "
+            + "(SELECT id FROM polls WHERE conversation_id = :conversationId)", nativeQuery = true)
+    int deletePollVoteRowsByConversationId(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM poll_options WHERE poll_id IN "
+            + "(SELECT id FROM polls WHERE conversation_id = :conversationId)", nativeQuery = true)
+    int deletePollOptionRowsByConversationId(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM polls WHERE conversation_id = :conversationId", nativeQuery = true)
+    int deletePollRowsByConversationId(@Param("conversationId") Long conversationId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM poll_votes WHERE poll_id IN "
+            + "(SELECT id FROM polls WHERE conversation_id = :conversationId AND creator_id = :senderId)",
+            nativeQuery = true)
+    int deletePollVoteRowsByConversationIdAndCreator(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM poll_options WHERE poll_id IN "
+            + "(SELECT id FROM polls WHERE conversation_id = :conversationId AND creator_id = :senderId)",
+            nativeQuery = true)
+    int deletePollOptionRowsByConversationIdAndCreator(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = "DELETE FROM polls WHERE conversation_id = :conversationId AND creator_id = :senderId",
+            nativeQuery = true)
+    int deletePollRowsByConversationIdAndCreator(
+            @Param("conversationId") Long conversationId,
+            @Param("senderId") Long senderId);
+
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM Message m WHERE m.conversation.id = :conversationId")
     int deleteMessageRowsByConversationId(@Param("conversationId") Long conversationId);
@@ -150,6 +203,10 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Transactional
     default void deleteByConversationIdBulk(Long conversationId) {
         deleteMentionRowsByConversationId(conversationId);
+        deleteReactionRowsByConversationId(conversationId);
+        deletePollVoteRowsByConversationId(conversationId);
+        deletePollOptionRowsByConversationId(conversationId);
+        deletePollRowsByConversationId(conversationId);
         deleteMessageRowsByConversationId(conversationId);
     }
 
@@ -157,6 +214,10 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     @Transactional
     default void deleteByConversationIdAndSenderIdBulk(Long conversationId, Long senderId) {
         deleteMentionRowsByConversationIdAndSenderId(conversationId, senderId);
+        deleteReactionRowsByConversationIdAndSenderId(conversationId, senderId);
+        deletePollVoteRowsByConversationIdAndCreator(conversationId, senderId);
+        deletePollOptionRowsByConversationIdAndCreator(conversationId, senderId);
+        deletePollRowsByConversationIdAndCreator(conversationId, senderId);
         deleteMessageRowsByConversationIdAndSenderId(conversationId, senderId);
     }
 

@@ -28,7 +28,11 @@ import com.fyp.backend.repository.CourseEnrollmentRepository;
 import com.fyp.backend.repository.CourseRatingRepository;
 import com.fyp.backend.repository.CourseRepository;
 import com.fyp.backend.repository.CourseWishlistRepository;
+import com.fyp.backend.repository.EventRegistrationRepository;
 import com.fyp.backend.repository.EventRepository;
+import com.fyp.backend.repository.MessageReactionRepository;
+import com.fyp.backend.repository.PollOptionRepository;
+import com.fyp.backend.repository.PollVoteRepository;
 import com.fyp.backend.repository.FormApplicationRepository;
 import com.fyp.backend.repository.GroupConversationRepository;
 import com.fyp.backend.repository.LearningGoalRepository;
@@ -95,7 +99,11 @@ public class UserAccountDeletionService {
     @Autowired private ThreadContentCleanupService threadContentCleanupService;
 
     // Events / forms
+    @Autowired private MessageReactionRepository messageReactionRepository;
+    @Autowired private PollVoteRepository pollVoteRepository;
+    @Autowired private PollOptionRepository pollOptionRepository;
     @Autowired private EventRepository eventRepository;
+    @Autowired private EventRegistrationRepository eventRegistrationRepository;
     @Autowired private FormApplicationRepository formApplicationRepository;
 
     // E-learning
@@ -201,6 +209,11 @@ public class UserAccountDeletionService {
         messageDeliveryStatusRepository.deleteByUserId(userId);
         conversationReadStateRepository.deleteByUserId(userId);
         messageRepository.deleteMentionReferencesByUserId(userId);
+        messageReactionRepository.deleteByUserId(userId);
+        // Their votes, and the sign-up entries they added (with any votes on those).
+        pollVoteRepository.deleteByUserId(userId);
+        pollVoteRepository.deleteByOptionCreatedBy(userId);
+        pollOptionRepository.deleteByCreatedById(userId);
 
         // Delete authored topics first because that also removes their replies.
         // Then query again for this user's replies on topics owned by other users.
@@ -221,6 +234,7 @@ public class UserAccountDeletionService {
         userBlockRepository.deleteByBlockerIdOrBlockedId(userId, userId);
         formApplicationRepository.deleteByContactIgnoreCase(email);
         scrubEventCheckins(userId);
+        eventRegistrationRepository.deleteByUserId(userId);
         anonymizeReports(userId);
         detachAuthoredCourses(userId);
         deleteLearningRows(userId);

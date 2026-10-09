@@ -420,6 +420,111 @@ export const setConversationMuteStatus = async (conversationId, conversationType
   }
 };
 
+// Adds (on) or removes the viewer's emoji on a message. Resolves to the message
+// as the viewer should now see it — reactions included, with `mine` filled in.
+export const toggleReaction = async (messageId, emoji, on) => {
+  const token = await getAuthToken();
+  const response = await axios.put(apiUrl(`/chat/reactions`), null, {
+    params: { messageId, emoji, on },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Polls and sign-up sheets. Creating one posts the message that carries it and
+// resolves to that message; every other call resolves to the poll's message as
+// the caller now sees it (their own choices filled in), which the chat replaces.
+export const createPoll = async (conversationType, payload) => {
+  const token = await getAuthToken();
+  const response = await axios.post(apiUrl(`/chat/polls`), payload, {
+    params: { conversationType },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const votePoll = async (pollId, optionIds) => {
+  const token = await getAuthToken();
+  const response = await axios.put(
+    apiUrl(`/chat/polls/${pollId}/votes`),
+    { optionIds },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
+export const addPollEntry = async (pollId, note) => {
+  const token = await getAuthToken();
+  const response = await axios.post(
+    apiUrl(`/chat/polls/${pollId}/entries`),
+    { note: note || null },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
+export const removePollEntry = async (pollId) => {
+  const token = await getAuthToken();
+  const response = await axios.delete(apiUrl(`/chat/polls/${pollId}/entries`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const closePoll = async (pollId) => {
+  const token = await getAuthToken();
+  const response = await axios.post(apiUrl(`/chat/polls/${pollId}/close`), null, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const getPollVoters = async (pollId, optionId) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/polls/${pollId}/options/${optionId}/voters`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Array.isArray(response.data) ? response.data : [];
+};
+
+// Group notice: one pinned message per group, admins only. Each resolves to the
+// conversation with its `notice` attached (null after unpinning).
+export const pinGroupNotice = async (conversationId, messageId) => {
+  const token = await getAuthToken();
+  const response = await axios.put(apiUrl(`/chat/groups/${conversationId}/notice`), null, {
+    params: { messageId },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const unpinGroupNotice = async (conversationId) => {
+  const token = await getAuthToken();
+  const response = await axios.delete(apiUrl(`/chat/groups/${conversationId}/notice`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// { read, total } — how many members have read up to the notice.
+export const getGroupNoticeReaders = async (conversationId) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/groups/${conversationId}/notice/readers`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Who reacted to a message with one emoji: [{ id, firstName, lastName, profileImage, bot, displayNameZh }].
+export const getReactionUsers = async (messageId, emoji) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/reactions/users`), {
+    params: { messageId, emoji },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Array.isArray(response.data) ? response.data : [];
+};
+
 export const deleteConversationFromDatabase = async (conversationId) => {
   const token = await getAuthToken();
   if (!token) throw new Error("No token found.");

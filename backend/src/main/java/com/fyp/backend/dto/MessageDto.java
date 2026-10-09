@@ -46,6 +46,26 @@ public class MessageDto {
     private boolean edited = false;
     private boolean deleted = false;
     private boolean reported = false;
+    // The event an "event" message shares. Sent by the client to name the event
+    // (the server checks it and writes the body itself); null on everything else.
+    private Long sharedEventId;
+    // The sticker a "sticker" message shows, as a StickerCatalog id ("basic.praying").
+    // Sent by the client to name the sticker; the server checks it and writes the
+    // body (the sticker's fallback emoji) itself. Null on everything else.
+    private String stickerId;
+    // Replying: the client names the message it answers here; the server checks
+    // it sits in the same conversation. Comes back on every stored reply too.
+    private Long replyToMessageId;
+    // The quoted message as this reader may see it — server-filled, never sent by
+    // a client. Absent on a message that replies to nothing.
+    private ReplyPreviewDto replyTo;
+    // Emoji tallies, filled in by MessageReactionService for a page of history
+    // and on every re-broadcast of the message. Empty on a fresh message.
+    private List<ReactionSummaryDto> reactions = new ArrayList<>();
+    // The poll a "poll" message carries, filled in by PollService for a page of
+    // history and on every re-broadcast; null on every other message. On the way
+    // in it names a freshly created poll for ChatService.createPoll to bind.
+    private PollDto poll;
 
     // ✅ Change from Map<Long, String> to Map<String, String> to ensure proper JSON conversion
     private Map<String, String> deliveryStatus;
@@ -61,6 +81,11 @@ public class MessageDto {
                 || (message.getSender() != null && viewer.getId().equals(message.getSender().getId()))
                 || viewer.isAdmin();
         this.content = canViewReportedContent ? message.getContent() : null;
+        this.sharedEventId = canViewReportedContent ? message.getSharedEventId() : null;
+        this.stickerId = canViewReportedContent ? message.getStickerId() : null;
+        Message quoted = message.getReplyTo();
+        this.replyToMessageId = quoted == null ? null : quoted.getId();
+        this.replyTo = ReplyPreviewDto.of(quoted, viewer);
         this.type = message.getType();
         this.timestamp = message.getTimestamp().toString();
         this.conversationId = message.getConversation().getId();
@@ -111,14 +136,14 @@ public class MessageDto {
         return message.getConversation() instanceof GroupConversation group && group.isAppLevel();
     }
 
-    private String displayFirstName(User user) {
+    public static String displayFirstName(User user) {
         if (user == null) {
             return "Unknown";
         }
         return user.isDeletedAccount() ? "Deleted" : user.getFirstName();
     }
 
-    private String displayLastName(User user) {
+    public static String displayLastName(User user) {
         if (user == null) {
             return "User";
         }

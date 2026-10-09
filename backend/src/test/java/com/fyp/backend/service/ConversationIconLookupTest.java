@@ -25,7 +25,7 @@ class ConversationIconLookupTest {
 
     private ConversationService service() {
         return new ConversationService(groupConversationRepository, null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null);
     }
 
     @Test

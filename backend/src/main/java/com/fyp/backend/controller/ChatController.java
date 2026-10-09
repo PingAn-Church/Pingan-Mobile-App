@@ -1,14 +1,18 @@
 package com.fyp.backend.controller;
 
 import com.fyp.backend.dto.ConversationDto;
+import com.fyp.backend.dto.CreatePollRequest;
 import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.dto.UserSummaryDto;
 import com.fyp.backend.model.GroupConversation;
 import com.fyp.backend.model.Message;
+import com.fyp.backend.model.MessageKind;
 import com.fyp.backend.service.AppGroupChatService;
 import com.fyp.backend.service.ChatService;
 import com.fyp.backend.service.ConversationMuteService;
 import com.fyp.backend.service.ConversationService;
+import com.fyp.backend.service.MessageReactionService;
+import com.fyp.backend.service.PollService;
 import com.fyp.backend.service.UserService;
 import com.fyp.backend.util.JwtUtil;
 import com.fyp.backend.util.Pagination;
@@ -37,17 +41,23 @@ public class ChatController {
     private final JwtUtil jwtUtil;
     private final ConversationMuteService conversationMuteService;
     private final AppGroupChatService appGroupChatService;
+    private final MessageReactionService messageReactionService;
+    private final PollService pollService;
 
     @Autowired
     public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil,
                           UserService userService, ConversationMuteService conversationMuteService,
-                          AppGroupChatService appGroupChatService) {
+                          AppGroupChatService appGroupChatService,
+                          MessageReactionService messageReactionService,
+                          PollService pollService) {
         this.conversationService = conversationService;
         this.chatService = chatService;
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.conversationMuteService = conversationMuteService;
         this.appGroupChatService = appGroupChatService;
+        this.messageReactionService = messageReactionService;
+        this.pollService = pollService;
     }
 
     // Fetch user's conversations
@@ -217,10 +227,15 @@ public class ChatController {
 //            return ResponseEntity.badRequest().body("Message content cannot be empty.");
 //        }
 
-        // NEW - allow image messages
-        if ((messageDto.getType() == null || messageDto.getType().equals("text")) &&
+        // Only words need a body; media carries a URL and a share carries an id.
+        MessageKind kind = MessageKind.of(messageDto.getType());
+        if (kind.requiresContent() &&
                 (messageDto.getContent() == null || messageDto.getContent().trim().isEmpty())) {
             return ResponseEntity.badRequest().body("Message content cannot be empty.");
+        }
+        // A group notice is posted by the pin action, never typed.
+        if (!kind.clientMaySend()) {
+            return ResponseEntity.badRequest().body("This kind of message cannot be sent directly.");
         }
 
         try {
@@ -286,6 +301,191 @@ public class ChatController {
         try {
             conversationMuteService.setMuted(userId, conversationId, conversationType, muted);
             return ResponseEntity.ok(Map.of("muted", muted));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /**
+     * Adds (on=true) or withdraws the caller's emoji on a message. Answers the
+     * message as the caller now sees it, tallies included; everyone else in the
+     * conversation gets the same message re-broadcast over the socket.
+     */
+    @PutMapping("/reactions")
+    public ResponseEntity<?> toggleReaction(@RequestParam Long messageId,
+                                            @RequestParam String emoji,
+                                            @RequestParam boolean on,
+                                            HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(messageReactionService.toggle(messageId, userId, emoji, on));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Who reacted to a message with one emoji; participants of the conversation only. */
+    @GetMapping("/reactions/users")
+    public ResponseEntity<?> reactionUsers(@RequestParam Long messageId,
+                                           @RequestParam String emoji,
+                                           HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(messageReactionService.reactors(messageId, emoji, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // --- Polls and sign-up sheets -------------------------------------------------
+
+    /** Creates a poll and posts the message carrying it; answers that message. */
+    @PostMapping("/polls")
+    public ResponseEntity<?> createPoll(@RequestParam String conversationType,
+                                        @RequestBody CreatePollRequest body,
+                                        HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(chatService.createPoll(conversationType, userId, body));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Sets the caller's choices to exactly {@code optionIds} (empty to withdraw). Answers the poll's message. */
+    @PutMapping("/polls/{pollId}/votes")
+    public ResponseEntity<?> vote(@PathVariable Long pollId,
+                                  @RequestBody Map<String, List<Long>> body,
+                                  HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            List<Long> optionIds = body == null ? List.of() : body.getOrDefault("optionIds", List.of());
+            return ResponseEntity.ok(pollService.vote(pollId, userId, optionIds));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Adds the caller to a sign-up sheet; body may carry {@code text} and {@code note}. */
+    @PostMapping("/polls/{pollId}/entries")
+    public ResponseEntity<?> addEntry(@PathVariable Long pollId,
+                                      @RequestBody(required = false) Map<String, String> body,
+                                      HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            String text = body == null ? null : body.get("text");
+            String note = body == null ? null : body.get("note");
+            return ResponseEntity.ok(pollService.addEntry(pollId, userId, text, note));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Takes the caller off a sign-up sheet. */
+    @DeleteMapping("/polls/{pollId}/entries")
+    public ResponseEntity<?> removeEntry(@PathVariable Long pollId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(pollService.removeEntry(pollId, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Ends the poll early; the creator or a group admin. */
+    @PostMapping("/polls/{pollId}/close")
+    public ResponseEntity<?> closePoll(@PathVariable Long pollId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(pollService.close(pollId, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** Who chose an option; not on anonymous polls. */
+    @GetMapping("/polls/{pollId}/options/{optionId}/voters")
+    public ResponseEntity<?> pollVoters(@PathVariable Long pollId,
+                                        @PathVariable Long optionId,
+                                        HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(pollService.voters(pollId, optionId, userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // --- Group notice (one pinned message per group; admins only) -----------------
+
+    /** Pins a message as the group notice; answers the conversation with its notice attached. */
+    @PutMapping("/groups/{conversationId}/notice")
+    public ResponseEntity<?> pinGroupNotice(@PathVariable Long conversationId,
+                                            @RequestParam Long messageId,
+                                            HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(conversationService.pinMessage(conversationId, messageId, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/groups/{conversationId}/notice")
+    public ResponseEntity<?> unpinGroupNotice(@PathVariable Long conversationId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(conversationService.unpinMessage(conversationId, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /** {@code {read, total}}: how many members have read up to the notice. Admins only. */
+    @GetMapping("/groups/{conversationId}/notice/readers")
+    public ResponseEntity<?> groupNoticeReaders(@PathVariable Long conversationId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(conversationService.noticeReaders(conversationId, userId));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

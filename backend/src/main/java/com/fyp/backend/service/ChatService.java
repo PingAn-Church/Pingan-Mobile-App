@@ -1,10 +1,15 @@
 package com.fyp.backend.service;
 
+import com.fyp.backend.dto.CreatePollRequest;
 import com.fyp.backend.dto.MessageDto;
+import com.fyp.backend.dto.PollDto;
+import com.fyp.backend.dto.ReactionSummaryDto;
+import com.fyp.backend.dto.ReplyPreviewDto;
 import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.FanoutPublisher;
 import com.fyp.backend.repository.*;
+import com.fyp.backend.util.InlineMarkup;
 import com.fyp.backend.util.Pagination;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
@@ -46,6 +51,9 @@ public class ChatService {
     private final PushMessages pushMessages;
     private final ConversationReadStateService conversationReadStateService;
     private final AssistantAccountService assistantAccountService;
+    private final EventRepository eventRepository;
+    private final MessageReactionService reactionService;
+    private final PollService pollService;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -59,7 +67,10 @@ public class ChatService {
                        ContentSanitizer contentSanitizer,
                        PushMessages pushMessages,
                        ConversationReadStateService conversationReadStateService,
-                       AssistantAccountService assistantAccountService) {
+                       AssistantAccountService assistantAccountService,
+                       EventRepository eventRepository,
+                       MessageReactionService reactionService,
+                       PollService pollService) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -73,6 +84,9 @@ public class ChatService {
         this.pushMessages = pushMessages;
         this.conversationReadStateService = conversationReadStateService;
         this.assistantAccountService = assistantAccountService;
+        this.eventRepository = eventRepository;
+        this.reactionService = reactionService;
+        this.pollService = pollService;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -185,6 +199,15 @@ public class ChatService {
                 .map(message -> new MessageDto(message, viewer))
                 .collect(Collectors.toList());
 
+        // Reaction tallies for the whole page in two grouped queries, with the
+        // viewer's own marked.
+        List<Long> messageIds = messages.stream().map(MessageDto::getMessageId).toList();
+        Map<Long, List<ReactionSummaryDto>> tallies = reactionService.summaries(messageIds, userId);
+        messages.forEach(dto -> dto.setReactions(tallies.getOrDefault(dto.getMessageId(), List.of())));
+        // Likewise the polls behind any "poll" messages on the page.
+        Map<Long, PollDto> polls = pollService.summaries(messageIds, userId);
+        messages.forEach(dto -> dto.setPoll(polls.get(dto.getMessageId())));
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("messages", messages);
         result.put("nextCursor", nextCursor);
@@ -194,26 +217,12 @@ public class ChatService {
 
 
     private List<String> getDestination(String conversationType, MessageDto savedMessage) {
-        List<String> destinations = new ArrayList<>();
-
-        if ("group".equals(conversationType)) {
-            // For group conversations, send to the conversation topic
-            destinations.add("/topic/conversation-" + savedMessage.getConversationId());
-        } else if ("private".equals(conversationType)) {
-            // For private conversations, send to both the sender and each recipient
-            destinations.add("/user/" + savedMessage.getSenderId() + "/queue/messages"); // To the sender
-
-            // To the recipients
-            for (Long recipientId : savedMessage.getRecipientIds()) {
-                destinations.add("/user/" + recipientId + "/queue/messages");
-            }
-        }
-
-        return destinations;
+        return ChatDestinations.forMessage(conversationType, savedMessage);
     }
 
     public void broadcastMessageAfterCommit(Message message) {
         MessageDto dto = new MessageDto(message);
+        dto.setReactions(reactionService.summariesFor(message.getId(), null));
         List<String> destinations = getDestination(message.getConversationType(), dto);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -243,26 +252,82 @@ public class ChatService {
     }
 
     /**
-     * The push body. Text messages carry the sender's own words through
-     * untouched; the media placeholders are ours to write, so they follow the
-     * recipient's language.
+     * The push body. Text messages carry the sender's own words through, minus
+     * the inline markers a notification cannot draw; the media placeholders are
+     * ours to write, so they follow the recipient's language.
      */
     private LocalizedText getPushNotificationBody(MessageDto messageDto) {
         if (messageDto == null) {
             return pushMessages.text("push.chat.newMessage");
         }
 
-        String messageType = messageDto.getType() == null ? "" : messageDto.getType().trim().toLowerCase();
-        return switch (messageType) {
-            case "voice" -> pushMessages.text("push.chat.voice");
-            case "image" -> pushMessages.text("push.chat.photo");
-            default -> {
-                String content = messageDto.getContent();
-                yield (content == null || content.trim().isEmpty())
-                        ? pushMessages.text("push.chat.newMessage")
-                        : pushMessages.literal(content);
-            }
-        };
+        MessageKind kind = MessageKind.of(messageDto.getType());
+        if (kind == MessageKind.EVENT) {
+            return pushMessages.text(kind.pushBodyKey(), sharedEventTitle(messageDto));
+        }
+        // "[Sticker] 🙏": the label in the reader's language, then the fallback emoji.
+        if (kind == MessageKind.STICKER) {
+            return pushMessages.text(kind.pushBodyKey(),
+                    messageDto.getContent() == null ? "" : messageDto.getContent());
+        }
+        if (kind.pushBodyKey() != null) {
+            return pushMessages.text(kind.pushBodyKey());
+        }
+        // Words go out as typed, minus the *markers* a notification cannot draw.
+        String content = InlineMarkup.strip(messageDto.getContent());
+        return content.trim().isEmpty()
+                ? pushMessages.text("push.chat.newMessage")
+                : pushMessages.literal(content);
+    }
+
+    /**
+     * The message a reply quotes. Checked here because the id comes from the
+     * client: it must exist and sit in this same conversation, or a message
+     * could quote something from a chat its sender was never part of.
+     */
+    private Message resolveReplyTarget(Long replyToMessageId, Conversation conversation) {
+        if (replyToMessageId == null) {
+            return null;
+        }
+        Message quoted = messageRepository.findById(replyToMessageId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "The message you are replying to no longer exists."));
+        if (quoted.getConversation() == null
+                || !quoted.getConversation().getId().equals(conversation.getId())) {
+            throw new IllegalArgumentException("You can only reply to a message in this conversation.");
+        }
+        return quoted;
+    }
+
+    /**
+     * The quoted message's author as a push recipient, or null when there is
+     * nobody to tell: replying to yourself, or to the assistant, or to somebody
+     * who has since left the conversation.
+     */
+    private Long replyRecipient(Message message, Conversation conversation, User sender) {
+        Message quoted = message.getReplyTo();
+        if (quoted == null || quoted.getSender() == null) {
+            return null;
+        }
+        // A pin quotes the message it pins; that is an announcement, not an answer.
+        if (MessageKind.of(message.getType()) == MessageKind.NOTICE) {
+            return null;
+        }
+        User author = quoted.getSender();
+        if (author.getId().equals(sender.getId()) || author.isBot()) {
+            return null;
+        }
+        boolean participant = conversation.getParticipants().stream()
+                .anyMatch(u -> u.getId().equals(author.getId()));
+        return participant ? author.getId() : null;
+    }
+
+    /** The shared event's title for the push body, read inside the send transaction. */
+    private String sharedEventTitle(MessageDto messageDto) {
+        Long eventId = messageDto.getSharedEventId();
+        String title = eventId == null ? null
+                : eventRepository.findById(eventId).map(Event::getTitle).orElse(null);
+        return title == null ? "" : title.trim();
     }
 
     /**
@@ -428,6 +493,11 @@ public class ChatService {
         Message message = new Message(outgoing, conversation, assistant, timestamp.toString());
         message.setConversationType("group");
         message.setRespondsToMessageId(triggerMessageId);
+        // The answer also quotes the question, so in a busy group it sits under
+        // what it answers. The mention above still carries the push.
+        if (triggerMessageId != null) {
+            message.setReplyTo(messageRepository.findById(triggerMessageId).orElse(null));
+        }
         sanitiseMentions(message, conversation, assistant, "group");
 
         // Not wrapped in a try/catch: a violation here means two workers raced past
@@ -460,6 +530,138 @@ public class ChatService {
         return savedMessage;
     }
 
+    /**
+     * Turns an event share request into the message that is stored.
+     *
+     * The client names the event; everything else is ours. The id is checked
+     * against a real event, and the body is written here as one language-neutral
+     * line — "📅 Title · 2026-10-04 10:00 AM · Hall" — rather than accepted from
+     * the client. That line is what every reader without the card sees: builds
+     * that predate event shares draw an unknown type as a text bubble, and it is
+     * also the chat-list preview, the copy text and what the assistant reads. The
+     * card itself loads the live event by id, so an edited event never shows the
+     * stale line to anyone who has the card.
+     *
+     * The id may also arrive as the body, for a client that only fills content.
+     */
+    private void prepareEventShare(MessageDto messageDto) {
+        Long eventId = messageDto.getSharedEventId();
+        if (eventId == null && messageDto.getContent() != null) {
+            try {
+                eventId = Long.parseLong(messageDto.getContent().trim());
+            } catch (NumberFormatException ignored) {
+                // falls through to the missing-id error below
+            }
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("An event share must name an event.");
+        }
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("That event no longer exists."));
+
+        messageDto.setType(MessageKind.EVENT.type());
+        messageDto.setSharedEventId(event.getId());
+        messageDto.setContent(eventShareText(event));
+        messageDto.setMentionedUserIds(new ArrayList<>());
+        messageDto.setMentionsEveryone(false);
+    }
+
+    /**
+     * Turns a sticker send into the message that is stored.
+     *
+     * The client names the sticker; the body is ours — the catalog's emoji for
+     * it. That body is what every reader without the picture sees: a build that
+     * predates stickers draws an unknown type as a text bubble, and it is also
+     * the chat-list preview, the quote in a reply and the tail of the push. An
+     * id the catalog does not know is refused rather than stored, so a message
+     * can never point at a picture nobody has.
+     */
+    private void prepareSticker(MessageDto messageDto) {
+        StickerCatalog.Sticker sticker = StickerCatalog.find(messageDto.getStickerId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown sticker."));
+        messageDto.setType(MessageKind.STICKER.type());
+        messageDto.setStickerId(sticker.id());
+        messageDto.setContent(sticker.emoji());
+        messageDto.setSharedEventId(null);
+        messageDto.setMentionedUserIds(new ArrayList<>());
+        messageDto.setMentionsEveryone(false);
+    }
+
+    static String eventShareText(Event event) {
+        StringBuilder text = new StringBuilder("📅 ");
+        text.append(event.getTitle() == null ? "" : event.getTitle().trim());
+        String when = ((event.getDate() == null ? "" : event.getDate().trim()) + " "
+                + (event.getStartTime() == null ? "" : event.getStartTime().trim())).trim();
+        if (!when.isEmpty()) {
+            text.append(" · ").append(when);
+        }
+        if (event.getLocation() != null && !event.getLocation().isBlank()) {
+            text.append(" · ").append(event.getLocation().trim());
+        }
+        return text.toString();
+    }
+
+    /**
+     * Posts the "📌" line that announces a pinned message, as a message from the
+     * admin who pinned it. Server-written and quoting the pinned message, so a
+     * build without the banner still sees what was pinned; pushed as "Group
+     * notice" by the ordinary fan-out. The body is language-neutral: an excerpt
+     * of the pinned words, or the media placeholder for a pinned photo or voice.
+     */
+    public MessageDto postGroupNotice(Long conversationId, User admin, Message pinned) {
+        // Words (and the server-written lines of a share or a poll) are quoted as
+        // they stand; a photo or voice note becomes its placeholder.
+        MessageKind pinnedKind = MessageKind.of(pinned.getType());
+        String body = pinnedKind.hasMediaBody()
+                ? pinnedKind.readable(pinned.getContent())
+                : ReplyPreviewDto.excerpt(pinned.getContent());
+
+        MessageDto notice = new MessageDto();
+        notice.setConversationId(conversationId);
+        notice.setSenderId(admin.getId());
+        notice.setConversationType("group");
+        notice.setType(MessageKind.NOTICE.type());
+        notice.setReplyToMessageId(pinned.getId());
+        notice.setContent("📌 " + (body == null ? "" : body));
+        return sendMessageAndBroadcast(notice, "group");
+    }
+
+    /**
+     * Creates a poll (or sign-up sheet) and posts the message that carries it.
+     *
+     * The poll row is stored first, then the message goes out through the
+     * ordinary send path — same participant check, same fan-out and push — with
+     * a server-written body ("📊 question", "📝 question" for a sign-up sheet)
+     * that a build without the card shows as text. Once the message has an id
+     * the two are bound, and the outgoing copy carries the poll.
+     *
+     * Groups only: two people voting in a private chat is a conversation.
+     */
+    @Transactional
+    public MessageDto createPoll(String conversationType, Long creatorId, CreatePollRequest request) {
+        if (request == null || request.getConversationId() == null) {
+            throw new IllegalArgumentException("Which conversation?");
+        }
+        Conversation conversation = getConversationByTypeAndId(request.getConversationId(), conversationType);
+        if (!(conversation instanceof GroupConversation)) {
+            throw new IllegalArgumentException("Polls can only be created in a group.");
+        }
+        checkUserIsParticipant(conversation, creatorId);
+
+        Poll poll = pollService.create(conversation.getId(), creatorId, request);
+
+        MessageDto outgoing = new MessageDto();
+        outgoing.setConversationId(conversation.getId());
+        outgoing.setSenderId(creatorId);
+        outgoing.setConversationType(conversationType);
+        outgoing.setType(MessageKind.POLL.type());
+        outgoing.setContent((poll.isSignup() ? "📝 " : "📊 ") + poll.getQuestion());
+        PollDto handle = new PollDto();
+        handle.setId(poll.getId());
+        outgoing.setPoll(handle);
+        return sendMessageAndBroadcast(outgoing, conversationType);
+    }
+
     @Transactional
     public MessageDto sendMessageAndBroadcast(MessageDto messageDto, String conversationType) {
         Conversation conversation = getConversationByTypeAndId(messageDto.getConversationId(), conversationType);
@@ -480,13 +682,31 @@ public class ChatService {
             }
         }
 
-        // Objectionable-word filter — only text bodies; voice/image content is a media URL.
-        if (!"voice".equalsIgnoreCase(messageDto.getType()) && !"image".equalsIgnoreCase(messageDto.getType())) {
-            messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
+        MessageKind kind = MessageKind.of(messageDto.getType());
+        // Only a sticker carries a sticker id.
+        if (kind != MessageKind.STICKER) {
+            messageDto.setStickerId(null);
+        }
+        if (kind == MessageKind.EVENT) {
+            // Server-written from the event itself, so there is nothing of the
+            // sender's to filter — see prepareEventShare.
+            prepareEventShare(messageDto);
+        } else if (kind == MessageKind.STICKER) {
+            // Likewise server-written, from the catalog — see prepareSticker.
+            prepareSticker(messageDto);
+        } else {
+            // Only an event share may point at an event.
+            messageDto.setSharedEventId(null);
+            // Objectionable-word filter — only the sender's own words. A media body
+            // is a URL, and a notice was written by the server (postGroupNotice).
+            if (!kind.hasMediaBody() && !kind.serverWritesBody()) {
+                messageDto.setContent(contentSanitizer.mask(messageDto.getContent()));
+            }
         }
 
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         Message message = new Message(messageDto, conversation, sender, timestamp.toString());
+        message.setReplyTo(resolveReplyTarget(messageDto.getReplyToMessageId(), conversation));
         // What the sender asked for, kept from before sanitiseMentions trims it: the
         // assistant summons check reads this so a stripped assistant mention can be
         // recognised and logged instead of vanishing without a trace.
@@ -499,6 +719,14 @@ public class ChatService {
         createDeliveryStatuses(conversation, sender, message, timestamp);
 
         MessageDto savedMessage = buildResponseDto(message, conversation);
+        // A poll created through createPoll rode in on the DTO; now that the
+        // message has an id, bind them and put the poll on the outgoing copy.
+        if (kind == MessageKind.POLL) {
+            if (messageDto.getPoll() != null && messageDto.getPoll().getId() != null) {
+                pollService.attachMessage(messageDto.getPoll().getId(), message.getId());
+            }
+            savedMessage.setPoll(pollService.summaryForMessage(message.getId(), null));
+        }
         LocalizedText notificationTitle = getPushNotificationTitle(conversationType, sender, savedMessage.getConversationId());
         LocalizedText notificationBody = getPushNotificationBody(savedMessage);
         LocalizedText senderName = pushMessages.personName(sender.getFirstName(), sender.getLastName());
@@ -506,7 +734,15 @@ public class ChatService {
         // Mentioned people get their own push — one that names who called them and
         // is not silenced by a mute — so they are split out of the ordinary fan-out
         // rather than being notified twice.
-        List<Long> mentionedRecipients = resolveMentionedRecipients(message, conversation, sender);
+        List<Long> mentionedRecipients = new ArrayList<>(resolveMentionedRecipients(message, conversation, sender));
+        // The person being replied to is told the same way: named, and past a
+        // mute. When nobody else was called out the push is worded as a reply; a
+        // message that also @-mentions people keeps the mention wording for all.
+        Long repliedTo = replyRecipient(message, conversation, sender);
+        final boolean wordedAsReply = repliedTo != null && mentionedRecipients.isEmpty();
+        if (repliedTo != null && !mentionedRecipients.contains(repliedTo)) {
+            mentionedRecipients.add(repliedTo);
+        }
         List<Long> allRecipients = conversation.getParticipants().stream()
                 .map(User::getId)
                 .filter(id -> !id.equals(sender.getId()))
@@ -516,7 +752,8 @@ public class ChatService {
                 .filter(id -> !mentionedRecipientIds.contains(id))
                 .collect(Collectors.toList());
         LocalizedText mentionedBody = language -> pushMessages.get(
-                language, "push.chat.mentionedYou", senderName.render(language));
+                language, wordedAsReply ? "push.chat.repliedToYou" : "push.chat.mentionedYou",
+                senderName.render(language));
 
         // Whether this message summons the assistant — see summonsAssistant for the
         // id-first, text-fallback rules and why refusals are logged.
@@ -642,8 +879,10 @@ public class ChatService {
             throw new IllegalArgumentException("You can only edit your own messages.");
         }
 
-        if ("image".equalsIgnoreCase(message.getType())) {
-            throw new IllegalArgumentException("Image messages cannot be edited.");
+        // Media bodies are URLs and a share's body is server-written, so only
+        // words can be edited — see MessageKind.
+        if (!MessageKind.of(message.getType()).isEditable()) {
+            throw new IllegalArgumentException("Only text messages can be edited.");
         }
         if (Boolean.TRUE.equals(message.getReported())) {
             throw new ContentUnderReviewException();
@@ -655,6 +894,9 @@ public class ChatService {
 
         MessageDto updatedMessageDto = new MessageDto(message);
         updatedMessageDto.setEdited(true);
+        // Carried on every re-broadcast, or the client would take an edit as
+        // "no reactions" and wipe the tallies it was showing.
+        updatedMessageDto.setReactions(reactionService.summariesFor(messageId, null));
         List<String> destinations = getDestination(conversationType, updatedMessageDto);
 
         // ✅ Defer broadcasting
@@ -689,14 +931,15 @@ public class ChatService {
         MessageDto deletedMessageDto = new MessageDto(message);
         deletedMessageDto.setDeleted(true);
 
-        boolean hasManagedMedia = "image".equalsIgnoreCase(message.getType())
-                || "voice".equalsIgnoreCase(message.getType());
+        boolean hasManagedMedia = MessageKind.of(message.getType()).hasMediaBody();
         String mediaContent = message.getContent();
         int metadataSeparator = mediaContent == null ? -1 : mediaContent.indexOf('|');
         String mediaUrl = metadataSeparator >= 0
                 ? mediaContent.substring(0, metadataSeparator)
                 : mediaContent;
 
+        reactionService.removeAllFor(messageId);
+        pollService.removeForMessage(messageId);
         messageRepository.delete(message);
         List<String> destinations = getDestination(message.getConversationType(), deletedMessageDto);
 
