@@ -230,7 +230,7 @@ class PollServiceTest {
         service.removeEntry(7L, 1L);
 
         verify(votes).deleteByOptionId(55L);
-        verify(options).delete(mine);
+        verify(options).deleteById(55L);
     }
 
     @Test

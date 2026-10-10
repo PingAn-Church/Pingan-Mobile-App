@@ -263,11 +263,16 @@ public class PollService {
         User leaver = requireParticipant(message, userId);
         requireOpen(poll);
         optionRepository.findByPollIdAndCreatedById(pollId, userId).ifPresent(entry -> {
+            // A bulk delete (clearAutomatically) — it detaches everything loaded so
+            // far, the entry included, hence the delete by id rather than by entity.
             voteRepository.deleteByOptionId(entry.getId());
-            optionRepository.delete(entry);
+            optionRepository.deleteById(entry.getId());
             optionRepository.flush();
         });
-        return rebroadcast(poll, message, leaver);
+        // The message is read again: the detached copy from above cannot load its
+        // lazy fields (mentions) when the DTO is built. Without an entry to remove
+        // nothing was detached and this is a cache hit.
+        return rebroadcast(poll, messageOf(poll), leaver);
     }
 
     /** Ends the poll early. The creator may, and so may an admin of the group it is in. */
