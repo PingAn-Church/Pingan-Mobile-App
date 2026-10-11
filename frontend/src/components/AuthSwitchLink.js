@@ -1,9 +1,13 @@
 import React from "react";
-import { Keyboard, StyleSheet, Text, TouchableOpacity } from "react-native";
+import { Keyboard, TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import i18n from "../../i18n";
+import { makeStyles } from "../theme";
+import { AppText } from "./ui";
 
+// "New to us? Register here" / "Already have an account? Log in here".
 export default function AuthSwitchLink({ promptKey, actionKey, routeName }) {
+  const styles = useStyles();
   const navigation = useNavigation();
 
   const switchScreen = () => {
@@ -18,28 +22,24 @@ export default function AuthSwitchLink({ promptKey, actionKey, routeName }) {
       accessibilityRole="link"
       accessibilityLabel={`${i18n.t(promptKey)} ${i18n.t(actionKey)}`}
     >
-      <Text style={styles.prompt}>
+      <AppText variant="secondary" style={styles.prompt}>
         {i18n.t(promptKey)}{" "}
-        <Text style={styles.action}>{i18n.t(actionKey)}</Text>
-      </Text>
+        <AppText variant="link" size="sm" weight="bold">
+          {i18n.t(actionKey)}
+        </AppText>
+      </AppText>
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   link: {
-    minHeight: 44,
+    minHeight: t.sizes.minTouchTarget,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: t.spacing.md,
   },
   prompt: {
-    color: "#555",
-    fontSize: 14,
     textAlign: "center",
   },
-  action: {
-    color: "#007AFF",
-    fontWeight: "700",
-  },
-});
+}));

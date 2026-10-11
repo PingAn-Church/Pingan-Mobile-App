@@ -4,4 +4,15 @@ export const components = {
     padding: 16,
     borderWidth: 1,
   },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    disabledOpacity: 0.6,
+  },
+  input: {
+    padding: 10,
+    borderWidth: 1,
+    codeFontSize: 22, // one-time code boxes (Reset Password, Verify)
+    codeLetterSpacing: 8,
+  },
 };

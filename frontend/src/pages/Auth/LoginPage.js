@@ -1,14 +1,5 @@
 import React, { useState, useContext, useEffect } from "react";
-import {
-  View,
-  TextInput,
-  Keyboard,
-  StyleSheet,
-  TouchableWithoutFeedback,
-  TouchableOpacity,
-  Text,
-  ActivityIndicator,
-} from "react-native";
+import { View, Keyboard, TouchableWithoutFeedback } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { loginUser } from "../../service/AuthService";
 import { useNavigation } from "@react-navigation/native";
@@ -20,9 +11,11 @@ import { useNotification } from "../../context/NotificationContext";
 import { showAlert } from "../../utils/showAlert";
 import GuestContinueLink from "../../components/GuestContinueLink";
 import AuthSwitchLink from "../../components/AuthSwitchLink";
-import PressToRevealPasswordInput from "../../components/PressToRevealPasswordInput";
+import { makeStyles } from "../../theme";
+import { Button, PasswordField, TextField, TextLink } from "../../components/ui";
 
 const LoginPage = () => {
+  const styles = useStyles();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -116,42 +109,33 @@ const LoginPage = () => {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.formContainer}>
-          <TextInput
+          <TextField
+            size="lg"
             placeholder={i18n.t("email")}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
-            style={styles.input}
+            style={styles.field}
             autoCapitalize="none"
           />
-          <PressToRevealPasswordInput
+          <PasswordField
             placeholder={i18n.t("password")}
             value={password}
             onChangeText={setPassword}
-            containerStyle={styles.passwordInputContainer}
+            containerStyle={styles.field}
             autoCapitalize="none"
           />
 
-          <TouchableOpacity
+          <TextLink
+            size="lg"
             onPress={() => navigation.navigate("ForgotPassword")}
+            style={styles.forgotPassword}
           >
-            <Text style={styles.forgotPasswordText}>
-              {i18n.t("forgotPassword")}
-            </Text>
-          </TouchableOpacity>
+            {i18n.t("forgotPassword")}
+          </TextLink>
 
           <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, submitting && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>{i18n.t("login")}</Text>
-              )}
-            </TouchableOpacity>
+            <Button title={i18n.t("login")} onPress={handleLogin} loading={submitting} />
           </View>
           <AuthSwitchLink
             promptKey="newToUs"
@@ -166,6 +150,7 @@ const LoginPage = () => {
 };
 
 export function ForgotPasswordPage() {
+  const styles = useStyles();
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const navigation = useNavigation();
@@ -227,25 +212,20 @@ export function ForgotPasswordPage() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.formContainer}>
-          <TextInput
+          <TextField
+            size="lg"
             placeholder={i18n.t("enterEmail")}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
-            style={styles.input}
+            style={styles.field}
           />
           <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, submitting && styles.buttonDisabled]}
+            <Button
+              title={i18n.t("resetPassword")}
               onPress={handleForgotPassword}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>{i18n.t("resetPassword")}</Text>
-              )}
-            </TouchableOpacity>
+              loading={submitting}
+            />
           </View>
         </View>
       </TouchableWithoutFeedback>
@@ -253,60 +233,37 @@ export function ForgotPasswordPage() {
   );
 }
 
-const styles = StyleSheet.create({
+// Shared by LoginPage and ForgotPasswordPage. The look of the fields, button and
+// link comes from the ui components; these styles are layout only.
+const FORM_MAX_WIDTH = 480; // keeps the form a comfortable width on tablets/desktop
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
   },
   contentContainer: {
     flexGrow: 1,
-    padding: 20,
+    padding: t.spacing.lg,
   },
   formContainer: {
     flex: 1,
     justifyContent: "center",
     width: "100%",
-    // Keep the form a comfortable width on tablets/desktop.
-    maxWidth: 480,
+    maxWidth: FORM_MAX_WIDTH,
     alignSelf: "center",
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    marginBottom: 20,
-    borderRadius: 5,
-    fontSize: 18,
+  field: {
+    marginBottom: t.spacing.lg,
   },
-  passwordInputContainer: {
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: "#007bff",
-    paddingVertical: 12,
-    borderRadius: 5,
-    alignSelf: "stretch",
-    marginVertical: 10,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+  forgotPassword: {
+    alignSelf: "flex-end",
+    marginBottom: t.spacing.md,
   },
   buttonContainer: {
-    marginTop: 15,
-    marginBottom: 12,
+    marginTop: t.spacing.xl,
+    marginBottom: t.spacing.lg,
     width: "100%",
   },
-  forgotPasswordText: {
-    color: "#007AFF",
-    textAlign: "right",
-    fontSize: 18,
-    marginBottom: 15,
-  },
-});
+}));
 
 export default LoginPage;

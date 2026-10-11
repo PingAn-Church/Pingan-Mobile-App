@@ -40,4 +40,6 @@ export const textVariants = {
   // Links are single-line, so no lineHeight: on some Android phones (e.g. Samsung)
   // a fixed lineHeight on semibold text clips the last character ("View all →").
   link: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: "primary" },
+  // Button labels are single-line too (same Android clipping reason).
+  button: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: "onPrimary" },
 };

@@ -30,22 +30,17 @@
 //   }
 
 import React, { useContext, useEffect } from "react";
-import {
-  Button,
-  View,
-  Text,
-  SafeAreaView,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-} from "react-native";
+import { View, SafeAreaView, Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { UserContext } from "../../context/UserContext";
 import { useState } from "react";
 import i18n from "../../../i18n";
 import logo from "../../../assets/logo.jpg";
+import { makeStyles } from "../../theme";
+import { Button, Heading } from "../../components/ui";
 
 export default function WelcomePage() {
+  const styles = useStyles();
   const navigation = useNavigation();
   const { user, isGuest, loading } = useContext(UserContext);
   const [logoUrl, setLogoUrl] = useState(null);
@@ -66,69 +61,59 @@ export default function WelcomePage() {
   return (
     <SafeAreaView style={styles.container}>
       <Image source={logo} style={styles.circleImage} />
-      <Text style={styles.title}>{i18n.t("welcome")}</Text>
+      <Heading level={1} style={styles.title}>
+        {i18n.t("welcome")}
+      </Heading>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.button}
+        <Button
+          title={i18n.t("register")}
           onPress={() => navigation.navigate("Register")}
-        >
-          <Text style={styles.buttonText}>{i18n.t("register")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={styles.button}
+        />
+        <Button
+          title={i18n.t("login")}
           onPress={() => navigation.navigate("Login")}
-        >
-          <Text style={styles.buttonText}>{i18n.t("login")}</Text>
-        </TouchableOpacity>
+          style={styles.button}
+        />
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+// Layout only. No background colour: like Login and Register, this screen uses
+// the navigator's background so all three sign-in screens match.
+const LOGO_SIZE = 160;
+const BUTTONS_MAX_WIDTH = 480; // keeps the buttons a comfortable width on tablets/desktop
+const BUTTONS_TOP_GAP = 80;
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
-    backgroundColor: "#f5f5f5",
+    padding: t.spacing.lg,
   },
   circleImage: {
-    width: 160,
-    height: 160,
-    borderRadius: 100,
-    marginBottom: 20,
-    backgroundColor: "#d3d3d3",
-    justifyContent: "center",
-    alignItems: "center",
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: t.radius.full,
+    marginBottom: t.spacing.lg,
+    backgroundColor: t.colors.placeholder,
   },
   title: {
-    fontSize: 24,
-    marginBottom: 30,
-    fontWeight: "bold",
+    marginBottom: t.spacing["2xl"],
     textAlign: "center",
   },
-  button: {
-    backgroundColor: "#007bff",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    alignSelf: "stretch",
-    marginHorizontal: 20,
-    marginVertical: 10,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
   buttonContainer: {
-    marginTop: 80,
+    marginTop: BUTTONS_TOP_GAP,
     width: "100%",
-    // Keep the buttons a comfortable width on tablets/desktop.
-    maxWidth: 480,
+    maxWidth: BUTTONS_MAX_WIDTH,
     alignSelf: "center",
   },
-});
+  button: {
+    marginHorizontal: t.spacing.lg,
+    marginVertical: t.spacing.md,
+    width: "auto",
+  },
+}));

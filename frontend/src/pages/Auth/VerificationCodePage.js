@@ -1,11 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
+import { View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { sendVerificationCode, verifyCode } from "../../service/AuthService";
 import { UserContext } from "../../context/UserContext";
@@ -13,10 +7,13 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { useNotification } from "../../context/NotificationContext";
 import i18n from "../../../i18n";
 import { showAlert } from "../../utils/showAlert";
+import { makeStyles } from "../../theme";
+import { AppText, Button, Heading, PasswordField, TextField, TextLink } from "../../components/ui";
 
 const RESEND_SECONDS = 60;
 
 export default function VerificationCodePage() {
+  const styles = useStyles();
   const navigation = useNavigation();
   const route = useRoute();
   const email = route.params?.email ?? "";
@@ -112,82 +109,56 @@ export default function VerificationCodePage() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>{i18n.t("verificationCodeTitle")}</Text>
-      <Text style={styles.subtitle}>
+      <Heading level={1} style={styles.heading}>
+        {i18n.t("verificationCodeTitle")}
+      </Heading>
+      <AppText variant="secondary" style={styles.subtitle}>
         {i18n.t("verificationCodeSubtitle")} {email}
-      </Text>
+      </AppText>
 
-      <TextInput
+      <TextField
+        variant="code"
         placeholder={i18n.t("enterVerificationCode")}
         value={code}
         onChangeText={setCode}
         keyboardType="number-pad"
         maxLength={6}
-        style={styles.input}
+        style={styles.field}
         autoFocus
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleVerify} disabled={verifying}>
-        <Text style={styles.buttonText}>{verifying ? i18n.t("verifying") : i18n.t("verify")}</Text>
-      </TouchableOpacity>
+      <Button title={i18n.t("verify")} onPress={handleVerify} loading={verifying} />
 
-      <TouchableOpacity onPress={() => requestCode(false)} disabled={cooldown > 0}>
-        <Text style={[styles.resendText, cooldown > 0 && styles.resendDisabled]}>
-          {cooldown > 0
-            ? i18n.t("resendIn").replace("{seconds}", String(cooldown))
-            : i18n.t("resendCode")}
-        </Text>
-      </TouchableOpacity>
+      <TextLink onPress={() => requestCode(false)} disabled={cooldown > 0} style={styles.resend}>
+        {cooldown > 0
+          ? i18n.t("resendIn").replace("{seconds}", String(cooldown))
+          : i18n.t("resendCode")}
+      </TextLink>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+// Layout only — the look of the heading, fields, button and link comes from the
+// ui components.
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    padding: 24,
+    padding: t.spacing.xl,
     justifyContent: "center",
   },
   heading: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: t.spacing.sm,
     textAlign: "center",
   },
   subtitle: {
-    fontSize: 15,
-    color: "#666",
     textAlign: "center",
-    marginBottom: 28,
+    marginBottom: t.spacing.xl,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 12,
-    borderRadius: 5,
-    fontSize: 22,
-    letterSpacing: 8,
-    textAlign: "center",
-    marginBottom: 20,
+  field: {
+    marginBottom: t.spacing.lg,
   },
-  button: {
-    backgroundColor: "#007bff",
-    paddingVertical: 14,
-    borderRadius: 5,
-    alignItems: "center",
+  resend: {
+    alignSelf: "center",
+    marginTop: t.spacing.md,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  resendText: {
-    color: "#007AFF",
-    textAlign: "center",
-    fontSize: 16,
-    marginTop: 20,
-  },
-  resendDisabled: {
-    color: "#aaa",
-  },
-});
+}));

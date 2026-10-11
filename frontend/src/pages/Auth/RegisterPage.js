@@ -1,14 +1,5 @@
 import React, { useEffect, useContext, useState } from "react";
-import {
-  View,
-  TextInput,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  Text,
-  ActivityIndicator,
-  Keyboard,
-} from "react-native";
+import { View, Image, TouchableOpacity, Keyboard } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,10 +15,13 @@ import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert"
 import GuestContinueLink from "../../components/GuestContinueLink";
 import AuthSwitchLink from "../../components/AuthSwitchLink";
-import PressToRevealPasswordInput from "../../components/PressToRevealPasswordInput";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, PasswordField, TextField } from "../../components/ui";
 import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
 
 export default function RegisterPage() {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -200,43 +194,44 @@ export default function RegisterPage() {
           {profileImage ? (
             <Image source={{ uri: profileImage }} style={styles.image} />
           ) : (
-            <Ionicons name="person-circle" size={100} color="#6e6e6e" />
+            <Ionicons name="person-circle" size={AVATAR_SIZE} color={colors.textSecondary} />
           )}
 
           <View style={styles.imageContainer}>
-            <TouchableOpacity style={styles.button} onPress={pickImage}>
-              <Text style={styles.imageText}>{i18n.t("pickProfilePicture")}</Text>
-            </TouchableOpacity>
+            <Button size="md" title={i18n.t("pickProfilePicture")} onPress={pickImage} />
           </View>
         </View>
 
-        <TextInput
+        <TextField
+          size="lg"
           placeholder={i18n.t("firstName")}
           value={firstName}
           onChangeText={setFirstName}
-          style={styles.input}
+          style={styles.field}
           autoCapitalize="none"
         />
-        <TextInput
+        <TextField
+          size="lg"
           placeholder={i18n.t("lastName")}
           value={lastName}
           onChangeText={setLastName}
-          style={styles.input}
+          style={styles.field}
           autoCapitalize="none"
         />
-        <TextInput
+        <TextField
+          size="lg"
           placeholder={i18n.t("email")}
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
-          style={styles.input}
+          style={styles.field}
           autoCapitalize="none"
         />
-        <PressToRevealPasswordInput
+        <PasswordField
           placeholder={i18n.t("password")}
           value={password}
           onChangeText={setPassword}
-          containerStyle={styles.passwordInputContainer}
+          containerStyle={styles.field}
           autoCapitalize="none"
         />
 
@@ -249,34 +244,38 @@ export default function RegisterPage() {
           >
             <Ionicons
               name={termsAccepted ? "checkbox" : "square-outline"}
-              size={23}
-              color={termsAccepted ? "#007bff" : "#555"}
+              size={sizes.icon.lg}
+              color={termsAccepted ? colors.primary : colors.textSecondary}
             />
           </TouchableOpacity>
-          <Text style={styles.termsAgreeText}>
-            <Text onPress={() => setTermsAccepted((accepted) => !accepted)}>
+          <AppText variant="secondary" color="textBody" style={styles.termsAgreeText}>
+            <AppText
+              variant="secondary"
+              color="textBody"
+              onPress={() => setTermsAccepted((accepted) => !accepted)}
+            >
               {termsCopy.agreePrefix}
-            </Text>
-            <Text style={styles.termsLink} onPress={openTerms}>
+            </AppText>
+            <AppText
+              variant="link"
+              size="sm"
+              weight="bold"
+              style={styles.termsLink}
+              onPress={openTerms}
+              accessibilityRole="link"
+            >
               {termsCopy.linkText}
-            </Text>
-          </Text>
+            </AppText>
+          </AppText>
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.button, (submitting || uploading) && styles.buttonDisabled]}
+          <Button
+            title={uploading ? i18n.t("uploading") : i18n.t("register")}
             onPress={handleRegister}
-            disabled={submitting || uploading}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {uploading ? i18n.t("uploading") : i18n.t("register")}
-              </Text>
-            )}
-          </TouchableOpacity>
+            loading={submitting}
+            disabled={uploading}
+          />
         </View>
         <AuthSwitchLink
           promptKey="alreadyHaveAccount"
@@ -291,93 +290,62 @@ export default function RegisterPage() {
   );
 }
 
-const styles = StyleSheet.create({
+// Layout only — the look of fields, buttons and links comes from the ui components.
+const FORM_MAX_WIDTH = 560; // keeps the form a comfortable width on tablets/desktop
+const AVATAR_SIZE = 100;
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    padding: 20,
+    padding: t.spacing.lg,
   },
-  // Keep the form a comfortable width on tablets/desktop.
   formContent: {
     width: "100%",
-    maxWidth: 560,
+    maxWidth: FORM_MAX_WIDTH,
     alignSelf: "center",
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    marginBottom: 10,
-    marginTop: 10,
-    borderRadius: 5,
-    fontSize: 18,
-  },
-  passwordInputContainer: {
-    marginBottom: 10,
-    marginTop: 10,
+  // Same field spacing as Login.
+  field: {
+    marginBottom: t.spacing.lg,
   },
   image: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginVertical: 10,
-  },
-  button: {
-    backgroundColor: "#007bff",
-    paddingVertical: 12,
-    borderRadius: 5,
-    alignSelf: "stretch",
-    marginVertical: 10,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  buttonContainer: {
-    marginTop: 8,
-    marginBottom: 12,
-    width: "100%",
-  },
-  imageText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: t.radius.full,
+    marginVertical: t.spacing.md,
   },
   imageContainer: {
-    marginTop: 5,
+    marginTop: t.spacing.xs,
     width: "50%",
   },
   profileContainer: {
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: t.spacing.lg,
   },
   termsRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: t.spacing.sm,
+    marginBottom: t.spacing.xs,
   },
   checkboxButton: {
-    paddingVertical: 6,
-    paddingRight: 8,
+    minHeight: t.sizes.minTouchTarget,
+    justifyContent: "center",
+    paddingRight: t.spacing.sm,
   },
   termsAgreeText: {
     flex: 1,
-    color: "#333",
-    fontSize: 14,
-    lineHeight: 20,
   },
   termsLink: {
-    color: "#007bff",
-    fontWeight: "700",
     textDecorationLine: "underline",
   },
-});
+  buttonContainer: {
+    marginTop: t.spacing.md,
+    marginBottom: t.spacing.md,
+    width: "100%",
+  },
+}));
 
 /* ================= Marked as unused & deprecated ================= */
 /* ============ S3 is only used by mystry fyp student's project ============ */
