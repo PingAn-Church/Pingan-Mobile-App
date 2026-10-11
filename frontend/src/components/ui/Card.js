@@ -6,10 +6,12 @@ import { makeStyles } from "../../theme";
 //   variant  "subtle" (light grey) | "default" (white)
 //   elevated adds the card shadow
 //   padded   adds the standard inner padding (turn off for edge-to-edge images)
+//   accent   adds a coloured stripe down the left edge (list items like events)
 export default function Card({
   variant = "subtle",
   elevated = false,
   padded = true,
+  accent = false,
   onPress,
   style,
   children,
@@ -21,6 +23,7 @@ export default function Card({
     styles[variant],
     padded && styles.padded,
     elevated && styles.elevated,
+    accent && styles.accent,
     style,
   ];
 
@@ -48,4 +51,8 @@ const useStyles = makeStyles((t) => ({
   default: { backgroundColor: t.colors.background },
   padded: { padding: t.components.card.padding },
   elevated: t.shadows.card,
+  accent: {
+    borderLeftWidth: t.components.card.accentWidth,
+    borderLeftColor: t.colors.primary,
+  },
 }));

@@ -18,10 +18,13 @@ export const colors = {
   background: "#FFFFFF",
   surface: "#FFFFFF",
   surfaceSubtle: "#F8F9FA",
+  surfaceMuted: "#F0F0F0", // segmented tab bar background
   border: "#CCCCCC", // input fields
   borderSubtle: "#E5E7EB", // cards
   placeholder: "#EEEEEE", // image loading background
   media: "#000000", // video player background
+  overlay: "rgba(0, 0, 0, 0.6)", // buttons drawn on top of photos
+  overlayBorder: "rgba(255, 255, 255, 0.3)",
 
   // Navigation bar (kept as today until the tab colour is signed off)
   navActive: "blue",

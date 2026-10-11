@@ -1,10 +1,8 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
 import {
   View,
-  Text,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   Platform,
   useWindowDimensions,
@@ -21,6 +19,8 @@ import {
   MEDIA_LIBRARY_PERMISSION_DENIED,
   downloadImageToLibrary,
 } from "../../utils/mediaLibrary";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Card } from "../../components/ui";
 
 const EVENT_PAGE_SIZE = 20;
 const PHOTO_PAGE_SIZE = 30;
@@ -51,6 +51,8 @@ const emptyPage = () => ({
 });
 
 export default function MyActivityPage() {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const [activeTab, setActiveTab] = useState("Upcoming");
   const [upcomingEvents, setUpcomingEvents] = useState(emptyPage);
   const [pastEvents, setPastEvents] = useState(emptyPage);
@@ -141,7 +143,11 @@ export default function MyActivityPage() {
   );
 
   if (!user || !user.verifiedUser) {
-    return <Text style={styles.noText}>{i18n.t("notVerified")}</Text>;
+    return (
+      <AppText variant="body" color="textSecondary" style={styles.noText}>
+        {i18n.t("notVerified")}
+      </AppText>
+    );
   }
 
   const formatDate = (dateString) => {
@@ -177,27 +183,32 @@ export default function MyActivityPage() {
           key={tab}
           style={[styles.tab, activeTab === tab && styles.tabActive]}
           onPress={() => setActiveTab(tab)}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === tab }}
         >
-          <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+          <AppText
+            variant="bodyLarge"
+            color={activeTab === tab ? "onPrimary" : "textPrimary"}
+            weight={activeTab === tab ? "bold" : undefined}
+          >
             {tab === "Upcoming" ? i18n.t("upcoming") : tab === "Past" ? i18n.t("past") : i18n.t("photos")}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       ))}
     </View>
   );
 
   const renderEvent = ({ item }) => (
-    <TouchableOpacity
+    <Card
+      accent
       style={styles.activityCard}
       onPress={() => navigation.navigate("Events Detail", { eventId: item.id })}
     >
-      <View style={styles.activityInfo}>
-        <Text style={styles.activityTitle}>{item.title}</Text>
-        <Text style={styles.activityDetails}>{formatDate(item.date)}</Text>
-        <Text style={styles.activityDetails}>{item.startTime + " - " + item.endTime}</Text>
-        <Text style={styles.activityDetails}>{item.location}</Text>
-      </View>
-    </TouchableOpacity>
+      <AppText variant="cardTitle">{item.title}</AppText>
+      <AppText variant="bodyLarge">{formatDate(item.date)}</AppText>
+      <AppText variant="bodyLarge">{item.startTime + " - " + item.endTime}</AppText>
+      <AppText variant="bodyLarge">{item.location}</AppText>
+    </Card>
   );
 
   const renderPhoto = ({ item }) => (
@@ -218,8 +229,13 @@ export default function MyActivityPage() {
         resizeMode="contain"
         onError={() => console.error("Error loading image:", item)}
       />
-      <TouchableOpacity style={styles.downloadButton} onPress={() => downloadImage(item)}>
-        <Ionicons name="download-outline" size={20} color="white" />
+      <TouchableOpacity
+        style={styles.downloadButton}
+        onPress={() => downloadImage(item)}
+        accessibilityRole="button"
+        accessibilityLabel={i18n.t("download")}
+      >
+        <Ionicons name="download-outline" size={sizes.icon.md} color={colors.onPrimary} />
       </TouchableOpacity>
     </View>
   );
@@ -240,13 +256,18 @@ export default function MyActivityPage() {
       onEndReachedThreshold={0.3}
       ListFooterComponent={
         pageForTab.loading ? (
-          <ActivityIndicator style={{ marginVertical: 18 }} />
+          <ActivityIndicator style={styles.loadingMore} />
         ) : tabErrors[activeTab] && pageForTab.items.length > 0 ? (
           <View style={styles.errorState}>
-            <Text style={styles.noText}>{i18n.t("loadActivityFailed")}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={() => loadTab(activeTab, false)}>
-              <Text style={styles.retryText}>{i18n.t("tryAgain")}</Text>
-            </TouchableOpacity>
+            <AppText variant="body" color="textSecondary" style={styles.noText}>
+              {i18n.t("loadActivityFailed")}
+            </AppText>
+            <Button
+              size="md"
+              fullWidth={false}
+              title={i18n.t("tryAgain")}
+              onPress={() => loadTab(activeTab, false)}
+            />
           </View>
         ) : null
       }
@@ -254,15 +275,20 @@ export default function MyActivityPage() {
         !pageForTab.loading ? (
           tabErrors[activeTab] ? (
             <View style={styles.errorState}>
-              <Text style={styles.noText}>{i18n.t("loadActivityFailed")}</Text>
-              <TouchableOpacity style={styles.retryButton} onPress={() => loadTab(activeTab, true)}>
-                <Text style={styles.retryText}>{i18n.t("tryAgain")}</Text>
-              </TouchableOpacity>
+            <AppText variant="body" color="textSecondary" style={styles.noText}>
+              {i18n.t("loadActivityFailed")}
+            </AppText>
+            <Button
+              size="md"
+              fullWidth={false}
+              title={i18n.t("tryAgain")}
+              onPress={() => loadTab(activeTab, true)}
+            />
             </View>
           ) : (
-            <Text style={styles.noText}>
+            <AppText variant="body" color="textSecondary" style={styles.noText}>
               {activeTab === "Photos" ? i18n.t("noPhotos") : i18n.t("noEvents")}
-            </Text>
+            </AppText>
           )
         ) : null
       }
@@ -270,89 +296,63 @@ export default function MyActivityPage() {
   );
 }
 
-const styles = StyleSheet.create({
+// Layout only — text, cards and buttons get their look from the ui components.
+const PHOTO_MAX_WIDTH = 400;
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: t.colors.background,
   },
   listContent: {
-    paddingBottom: 30,
+    paddingBottom: t.spacing["2xl"],
   },
+
+  // Upcoming / Past / Photos switcher
   tabContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: 10,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 10,
-    padding: 5,
-    marginHorizontal: 20,
-    marginTop: 10,
+    backgroundColor: t.colors.surfaceMuted,
+    borderRadius: t.radius.card,
+    padding: t.spacing.xs,
+    marginHorizontal: t.spacing.lg,
+    marginTop: t.spacing.md,
+    marginBottom: t.spacing.md,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    minHeight: t.sizes.minTouchTarget,
     alignItems: "center",
-    borderRadius: 5,
+    justifyContent: "center",
+    borderRadius: t.radius.control,
   },
   tabActive: {
-    backgroundColor: "#007AFF",
+    backgroundColor: t.colors.primary,
   },
-  tabText: {
-    fontSize: 18,
-    color: "black",
-  },
-  tabTextActive: {
-    color: "white",
-    fontWeight: "bold",
-  },
+
+  // Event list — look comes from <Card accent>
   activityCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
-    marginHorizontal: 20,
-    borderLeftWidth: 5,
-    borderLeftColor: "#007AFF",
+    marginBottom: t.spacing.md,
+    marginHorizontal: t.spacing.lg,
   },
-  activityInfo: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  activityDetails: {
-    fontSize: 18,
-    color: "#555",
-  },
+
   noText: {
     textAlign: "center",
-    fontSize: 18,
-    color: "gray",
-    marginTop: 20,
-    marginBottom: 20,
+    marginVertical: t.spacing.lg,
   },
   errorState: {
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: t.spacing.lg,
   },
-  retryButton: {
-    backgroundColor: "#007AFF",
-    borderRadius: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+  loadingMore: {
+    marginVertical: t.spacing.base,
   },
-  retryText: {
-    color: "white",
-    fontWeight: "600",
-  },
-  // Width follows the live column count (see numColumns), not the platform,
-  // so rotation/resize can move between 2 and 3 columns without overflow.
+
+  // Photos grid. Width follows the live column count (see numColumns), not the
+  // platform, so rotation/resize can move between 2 and 3 columns without overflow.
   imageContainer: {
     aspectRatio: 1,
-    marginBottom: 15,
+    marginBottom: t.spacing.base,
     marginHorizontal: "1%",
     position: "relative",
   },
@@ -361,22 +361,25 @@ const styles = StyleSheet.create({
   },
   imageContainerThreeCol: {
     width: "31%",
-    maxWidth: 400,
+    maxWidth: PHOTO_MAX_WIDTH,
   },
   downloadButton: {
     position: "absolute",
-    bottom: 8,
-    right: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    padding: 8,
-    borderRadius: 20,
+    bottom: t.spacing.sm,
+    right: t.spacing.sm,
+    minWidth: t.sizes.minTouchTarget,
+    minHeight: t.sizes.minTouchTarget,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: t.colors.overlay,
+    borderRadius: t.radius.full,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    borderColor: t.colors.overlayBorder,
   },
   image: {
     width: "100%",
     height: "100%",
-    borderRadius: 12,
-    backgroundColor: "#eee",
+    borderRadius: t.radius.card,
+    backgroundColor: t.colors.placeholder,
   },
-});
+}));

@@ -3,6 +3,7 @@ export const components = {
   card: {
     padding: 16,
     borderWidth: 1,
+    accentWidth: 4, // coloured stripe on the left of an "accent" card
   },
   button: {
     paddingVertical: 12,

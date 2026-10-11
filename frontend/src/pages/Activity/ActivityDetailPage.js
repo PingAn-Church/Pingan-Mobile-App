@@ -1,14 +1,6 @@
 import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ScrollView,
-  FlatList,
-} from "react-native";
+import { View, FlatList } from "react-native";
 import { getEventById, checkInToEvent } from "../../service/EventService";
 import { getUserById } from "../../service/UserService";
 import { useRoute } from "@react-navigation/native";
@@ -18,8 +10,12 @@ import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Heading } from "../../components/ui";
 
 export default function ActivityDetailPage() {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const route = useRoute();
   const { eventId } = route.params;
   const [event, setEvent] = useState(null);
@@ -154,36 +150,50 @@ export default function ActivityDetailPage() {
   };
 
   if (!user || !user.verifiedUser) {
-    return <Text style={styles.noText}>{i18n.t("notVerified")}</Text>;
+    return (
+      <AppText variant="bodyLarge" color="textSecondary" style={styles.message}>
+        {i18n.t("notVerified")}
+      </AppText>
+    );
   }
 
   if (loading) {
-    return <Text style={styles.loading}>{i18n.t("loadingEventDetails")}</Text>;
+    return (
+      <AppText variant="bodyLarge" style={styles.message}>
+        {i18n.t("loadingEventDetails")}
+      </AppText>
+    );
   }
 
   if (!event) {
-    return <Text style={styles.error}>{i18n.t("eventNotFound")}</Text>;
+    return (
+      <AppText variant="bodyLarge" color="danger" style={styles.message}>
+        {i18n.t("eventNotFound")}
+      </AppText>
+    );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{event.title}</Text>
+      <Heading level={1} style={styles.title}>
+        {event.title}
+      </Heading>
 
       <View style={styles.infoContainer}>
-        <FontAwesome name="info-circle" size={30} color="#007AFF" />
-        <Text style={styles.description}>{event.description}</Text>
+        <FontAwesome name="info-circle" size={sizes.icon.xl} color={colors.primary} />
+        <AppText variant="bodyLarge" style={styles.infoText}>{event.description}</AppText>
       </View>
 
       <View style={styles.infoContainer}>
-        <Ionicons name="calendar-outline" size={30} color="#007AFF" />
-        <Text style={styles.detail}>
+        <Ionicons name="calendar-outline" size={sizes.icon.xl} color={colors.primary} />
+        <AppText variant="bodyLarge" style={styles.infoText}>
           {event.date} | {event.startTime + " - " + event.endTime}
-        </Text>
+        </AppText>
       </View>
 
       <View style={styles.infoContainer}>
-        <Ionicons name="location-outline" size={30} color="#007AFF" />
-        <Text style={styles.detail}>{event.location}</Text>
+        <Ionicons name="location-outline" size={sizes.icon.xl} color={colors.primary} />
+        <AppText variant="bodyLarge" style={styles.infoText}>{event.location}</AppText>
       </View>
 
       {isPastEvent || userCheckedIn ? (
@@ -194,12 +204,12 @@ export default function ActivityDetailPage() {
                 ? "checkmark-circle-outline"
                 : "close-circle-outline"
             }
-            size={30}
-            color={userCheckedIn ? "green" : "red"}
+            size={sizes.icon.xl}
+            color={userCheckedIn ? colors.success : colors.danger}
           />
-          <Text style={styles.detail}>
+          <AppText variant="bodyLarge" style={styles.infoText}>
             {userCheckedIn ? i18n.t("checkedIn") : i18n.t("notCheckedIn")}
-          </Text>
+          </AppText>
         </View>
       ) : (
         ""
@@ -207,15 +217,17 @@ export default function ActivityDetailPage() {
 
       {!canCheckIn && !isPastEvent && (
         <View style={styles.infoContainer}>
-          <Ionicons name={"close-circle-outline"} size={30} color={"gray"} />
-          <Text style={styles.detail}>{i18n.t("checkInNotice")}</Text>
+          <Ionicons name="close-circle-outline" size={sizes.icon.xl} color={colors.textSecondary} />
+          <AppText variant="bodyLarge" style={styles.infoText}>{i18n.t("checkInNotice")}</AppText>
         </View>
       )}
 
       <View style={styles.adminContainer}>
         {checkedInUsers.length > 0 ? (
           <>
-            <Text style={styles.adminHeader}>{i18n.t("checkedInUsers")}</Text>
+            <Heading level={2} style={styles.adminHeader}>
+              {i18n.t("checkedInUsers")}
+            </Heading>
             <FlatList
               data={checkedInUsers}
               keyExtractor={(item) =>
@@ -225,8 +237,8 @@ export default function ActivityDetailPage() {
                 <View style={styles.userContainer}>
                   <Ionicons
                     name="person-outline"
-                    size={20}
-                    style={styles.userIcon}
+                    size={sizes.icon.md}
+                    color={colors.textPrimary}
                   />
                   <UserIdentity
                     user={item}
@@ -238,135 +250,92 @@ export default function ActivityDetailPage() {
             />
           </>
         ) : (
-          <Text style={styles.noCheckedIn}>{i18n.t("noCheckedInUsers")}</Text>
+          <AppText variant="body" color="textSecondary" style={styles.noCheckedIn}>
+            {i18n.t("noCheckedInUsers")}
+          </AppText>
         )}
       </View>
 
       {canCheckIn &&
         !userCheckedIn &&
         (user.id ? (
-          <TouchableOpacity
-            style={styles.checkInButton}
+          <Button
+            icon="checkmark-circle"
+            title={i18n.t("checkIn")}
             onPress={handleCheckIn}
-          >
-            <Ionicons name="checkmark-circle" size={30} color="white" />
-            <Text style={styles.buttonText}>{i18n.t("checkIn")}</Text>
-          </TouchableOpacity>
+            style={styles.checkInButton}
+          />
         ) : (
           <View style={styles.bottomInfo}>
-            <FontAwesome name="exclamation-circle" size={30} color="red" />
-            <Text style={styles.warningText}>{i18n.t("loginToCheckIn")}</Text>
+            <FontAwesome name="exclamation-circle" size={sizes.icon.xl} color={colors.danger} />
+            <AppText variant="bodyLarge" color="danger" style={styles.infoText}>
+              {i18n.t("loginToCheckIn")}
+            </AppText>
           </View>
         ))}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+// Layout only — text, icons and the button get their look from the theme.
+const useStyles = makeStyles((t) => ({
   container: {
-    flex: 1, // Ensures full height
-    backgroundColor: "#fff",
-    padding: 20,
+    flex: 1,
+    backgroundColor: t.colors.background,
+    padding: t.spacing.lg,
   },
-  scrollContainer: {
-    padding: 20,
-  },
-  loading: {
-    fontSize: 18,
+  message: {
     textAlign: "center",
-    marginTop: 20,
-  },
-  error: {
-    fontSize: 18,
-    textAlign: "center",
-    marginTop: 20,
-    color: "red",
+    marginTop: t.spacing.lg,
   },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: t.spacing.md,
     textAlign: "center",
   },
   infoContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 20,
-    marginRight: 20,
+    marginTop: t.spacing.lg,
+    marginRight: t.spacing.lg,
   },
-  description: {
-    fontSize: 18,
-    color: "#555",
-    marginLeft: 10,
-    lineHeight: 26,
-  },
-  detail: {
-    fontSize: 18,
-    marginLeft: 10,
-  },
-  warningText: {
-    fontSize: 18,
-    color: "red",
-    marginLeft: 10,
+  infoText: {
+    marginLeft: t.spacing.md,
   },
   bottomInfo: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
-    backgroundColor: "#f8f8f8",
+    paddingVertical: t.spacing.md,
+    backgroundColor: t.colors.surfaceSubtle,
     borderTopWidth: 1,
-    borderTopColor: "#ddd",
+    borderTopColor: t.colors.borderSubtle,
   },
+  // Pinned to the bottom of the screen.
   checkInButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#007AFF",
-    padding: 15,
-    borderRadius: 8,
-    justifyContent: "center",
     position: "absolute",
-    bottom: 30,
-    left: 20,
-    right: 20,
-  },
-  buttonText: {
-    fontSize: 18,
-    color: "white",
-    marginLeft: 8,
-    fontWeight: "bold",
+    bottom: t.spacing["2xl"],
+    left: t.spacing.lg,
+    right: t.spacing.lg,
   },
   noCheckedIn: {
-    fontSize: 16,
-    color: "gray",
     textAlign: "center",
-    marginTop: 10,
+    marginTop: t.spacing.md,
   },
   adminContainer: {
-    marginTop: 25,
-    padding: 10,
-    borderRadius: 10,
-    paddingLeft: 5,
+    marginTop: t.spacing.xl,
+    padding: t.spacing.md,
+    paddingLeft: t.spacing.xs,
   },
   adminHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
+    marginBottom: t.spacing.md,
   },
   userText: {
-    fontSize: 18,
-    paddingLeft: 10,
+    fontSize: t.typography.fontSize.lg,
+    paddingLeft: t.spacing.md,
   },
   userContainer: {
-    flexDirection: "row", // Ensures horizontal alignment
-    alignItems: "center", // Align icon & text vertically in the center
-    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: t.spacing.xs,
   },
-  noText: {
-    textAlign: "center",
-    fontSize: 18,
-    color: "gray",
-    marginTop: 20,
-    marginBottom: 20,
-  },
-});
+}));
