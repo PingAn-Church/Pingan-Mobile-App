@@ -8,22 +8,12 @@ import React, {
 } from "react";
 import {
   SafeAreaView,
-  Text,
   View,
-  StyleSheet,
   ActivityIndicator,
   FlatList,
-  Alert,
   StatusBar,
   TouchableOpacity,
-  Image,
-  Button,
-  Modal,
-  TextInput,
-  ScrollView,
-  KeyboardAvoidingView,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { UserContext } from "../../context/UserContext";
 import {
   getUserById,
@@ -38,8 +28,6 @@ import {
   uploadFileToOSS,
 } from "../../service/OSSService";
 import { getStompClient } from "../../service/WebSocketService";
-import defaultProfileImage from "../../../assets/user.png";
-import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -47,8 +35,12 @@ import {
   groupDisplayName,
 } from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Avatar, Card, TextField } from "../../components/ui";
 
 const ChatHomePage = () => {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, loading, userStatus } = useContext(UserContext);
   const {
     conversations,
@@ -319,25 +311,26 @@ const ChatHomePage = () => {
         <TouchableOpacity
           style={styles.conversationCard}
           onPress={() => navigation.navigate("ThreadHomePage")}
+          accessibilityRole="button"
         >
           <View style={styles.profileContainer}>
-            <View style={[styles.profileImage, styles.iconAvatar, styles.topicsAvatar]}>
-              <Ionicons name="documents" size={24} color="#ffffff" />
-            </View>
+            <Avatar icon="documents" color="chat.topicsAvatar" style={styles.avatar} />
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.groupName}>{i18n.t("topicsThreadsOverview")}</Text>
-            <Text style={styles.recentMessage} numberOfLines={1}>
+            <AppText variant="body" color="textPrimary" weight="semibold">
+              {i18n.t("topicsThreadsOverview")}
+            </AppText>
+            <AppText variant="secondary" numberOfLines={1}>
               {i18n.t("topicsThreadsSubtitle")}
-            </Text>
+            </AppText>
           </View>
           {/* Counts replies in topics this user follows. Topics nobody follows
               never contribute, so this stays at zero unless somebody opted in. */}
           {topicUnread > 0 && (
             <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>
+              <AppText variant="caption" color="onPrimary" weight="bold">
                 {topicUnread > 99 ? "99+" : topicUnread}
-              </Text>
+              </AppText>
             </View>
           )}
         </TouchableOpacity>
@@ -396,22 +389,21 @@ const ChatHomePage = () => {
       <TouchableOpacity
         style={styles.conversationCard}
         onPress={() => handleChat(item)}
+        accessibilityRole="button"
       >
         {/* Profile Image & Online Indicator */}
         <View style={styles.profileContainer}>
           {item.appLevel && !rawIconUri ? (
             // The church-wide group has no photo until an admin sets one, and the
             // default single-person avatar would read as a private chat.
-            <View style={[styles.profileImage, styles.iconAvatar]}>
-              <Ionicons name="people" size={26} color="#ffffff" />
-            </View>
+            <Avatar icon="people" style={styles.avatar} />
           ) : (
-            <CachedImage
+            <Avatar
               uri={rawIconUri}
               type={isGroupIcon ? "group" : "profile"}
-              conversationId={isGroupIcon ? item.conversationId : undefined}
-              fallbackSource={defaultProfileImage}
-              style={styles.profileImage}
+              conversationId={item.conversationId}
+              bordered
+              style={styles.avatar}
             />
           )}
 
@@ -421,46 +413,61 @@ const ChatHomePage = () => {
           {/* Online Count Badge for Group Chat */}
           {!isPrivateChat && onlineCount > 0 && (
             <View style={styles.groupOnlineIndicator}>
-              <Text style={styles.groupOnlineText}>{onlineCount}</Text>
+              <AppText
+                variant="caption"
+                color="onPrimary"
+                weight="bold"
+                style={styles.groupOnlineText}
+              >
+                {onlineCount}
+              </AppText>
             </View>
           )}
         </View>
 
         {/* Chat Name & Last Message */}
         <View style={styles.textContainer}>
-          <Text style={styles.groupName}>{title}</Text>
+          <AppText variant="body" color="textPrimary" weight="semibold">
+            {title}
+          </AppText>
 
-          <Text style={styles.recentMessage} numberOfLines={1}>
+          {/* Nested text repeats variant="secondary" so it keeps the line's size. */}
+          <AppText variant="secondary" numberOfLines={1}>
             {/* Someone called you out by name in here and you haven't read it.
                 Worth spotting at a glance even in a busy — or muted — group,
                 where the unread count alone says nothing about urgency. */}
-            {item.mentioned && <Text style={styles.mentionMarker}>[@] </Text>}
+            {item.mentioned && (
+              <AppText variant="secondary" weight="bold" style={styles.mentionMarker}>
+                [@]{" "}
+              </AppText>
+            )}
             {lastMessage ? (
               <>
                 {!!lastMessage.senderFullName && (
-                  <Text style={styles.participantName}>
+                  <AppText variant="secondary" color="primary" weight="semibold">
                     {lastMessage.senderFullName}:{" "}
-                  </Text>
+                  </AppText>
                 )}
                 {lastMessage.previewContent}{" "}
-                {/* <Text style={styles.deliveryStatus}>({lastMessage.deliveryStatusIcon})</Text> */}
                 {String(lastMessage.senderId) === String(user.id) &&
                   !!lastMessage.deliveryStatusIcon && (
-                    <Text style={styles.deliveryStatus}>
+                    <AppText variant="caption" color="textDisabled">
                       ({lastMessage.deliveryStatusIcon})
-                    </Text>
+                    </AppText>
                   )}
               </>
             ) : (
-              <Text>{i18n.t("noMsg")}</Text>
+              i18n.t("noMsg")
             )}
-          </Text>
+          </AppText>
         </View>
 
         {/* Unread Message Badge */}
         {unreadCount > 0 && (
           <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+            <AppText variant="caption" color="onPrimary" weight="bold">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </AppText>
           </View>
         )}
       </TouchableOpacity>
@@ -471,10 +478,12 @@ const ChatHomePage = () => {
     return (
       <SafeAreaView style={styles.loaderScreen}>
         <StatusBar barStyle="dark-content" />
-        <View style={styles.loaderCard}>
-          <ActivityIndicator size="small" color="#8E8E93" />
-          <Text style={styles.loaderText}>{i18n.t("loadingChat")}</Text>
-        </View>
+        <Card variant="default" elevated padded={false} style={styles.loaderCard}>
+          <ActivityIndicator size="small" color={colors.textSecondary} />
+          <AppText variant="secondary" weight="semibold" style={styles.loaderText}>
+            {i18n.t("loadingChat")}
+          </AppText>
+        </Card>
       </SafeAreaView>
     );
   }
@@ -483,7 +492,7 @@ const ChatHomePage = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.searchBarWrapper}>
-        <TextInput
+        <TextField
           style={styles.searchBar}
           placeholder={i18n.t("searchConversations")}
           value={searchQuery}
@@ -495,7 +504,9 @@ const ChatHomePage = () => {
         keyExtractor={(item) => item.conversationId.toString()}
         renderItem={renderConversationItem}
         ListEmptyComponent={
-          <Text style={styles.noConversations}>{i18n.t("noMsg")}</Text>
+          <AppText variant="body" color="textSecondary" style={styles.noConversations}>
+            {i18n.t("noMsg")}
+          </AppText>
         }
         refreshing={refreshing}
         onRefresh={handleRefresh}
@@ -504,171 +515,123 @@ const ChatHomePage = () => {
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => navigation.navigate("NewChat")}
+        accessibilityRole="button"
+        accessibilityLabel={i18n.t("newChat")}
       >
-        <Text style={styles.addButtonText}>+</Text>
+        <AppText variant="button" style={styles.addButtonText}>
+          +
+        </AppText>
       </TouchableOpacity>
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
+// Layout only — text, avatars and the loader card get their look from the ui components.
+const FAB_SIZE = 60;
+const FAB_LABEL_SIZE = 32; // bold "+" — thicker than the add icon
+const BADGE_SIZE = 22; // unread count pill
+const ONLINE_DOT_SIZE = 12; // private chat presence dot
+const GROUP_ONLINE_SIZE = 18; // group online count bubble
+const INDICATOR_BORDER = 2; // white ring that separates a dot from the avatar
+
+const useStyles = makeStyles((t) => ({
   loaderScreen: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: t.colors.backgroundMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   loaderCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.98)",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    paddingVertical: t.spacing.md,
+    paddingHorizontal: t.spacing.base,
   },
   loaderText: {
-    marginLeft: 10,
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#6B7280",
+    marginLeft: t.spacing.sm,
   },
   container: {
     flex: 1,
-    backgroundColor: "#f1f5f9", // soft, modern contrast background
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    backgroundColor: t.colors.backgroundMuted,
+    paddingHorizontal: t.spacing.base,
+    paddingTop: t.spacing.base,
   },
   searchBarWrapper: {
-    backgroundColor: "#ffffff",
-    borderRadius: 10,
-    paddingHorizontal: 12, // match conversationCard horizontal padding
-    paddingVertical: 10,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radius.card,
+    paddingHorizontal: t.spacing.md, // match conversationCard horizontal padding
+    paddingVertical: t.spacing.sm,
   },
   searchBar: {
     // minHeight, not height: a fixed box clips the text at large system fonts.
-    minHeight: 44,
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    fontSize: 16,
+    minHeight: t.sizes.minTouchTarget,
+    backgroundColor: t.colors.surface,
   },
 
   conversationCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    backgroundColor: t.colors.surface,
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb", // subtle divider
+    borderBottomColor: t.colors.borderSubtle,
   },
   profileContainer: {
     position: "relative",
   },
-  profileImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 27, // 👈 circular
-    marginRight: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  // Stand-in avatar for rows that represent a place rather than a person.
-  iconAvatar: {
-    backgroundColor: "#3b82f6",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 0,
-  },
-  // Threads are a different kind of place from a chat, so the row reads as one.
-  topicsAvatar: {
-    backgroundColor: "#0F766E",
+  avatar: {
+    marginRight: t.spacing.md,
   },
   textContainer: {
     flex: 1,
     justifyContent: "center",
   },
-  groupName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 2,
-  },
-  recentMessage: {
-    fontSize: 14,
-    color: "#6b7280",
-    lineHeight: 22,
-  },
-  participantName: {
-    fontWeight: "500",
-    color: "#3b82f6",
-  },
   mentionMarker: {
-    color: "#f97316",
-    fontWeight: "800",
-  },
-  deliveryStatus: {
-    fontSize: 12,
-    color: "#9ca3af",
+    color: t.colors.chat.mention,
   },
   unreadBadge: {
-    backgroundColor: "#ef4444",
-    borderRadius: 10,
-    minWidth: 22,
-    height: 22,
+    backgroundColor: t.colors.badge,
+    borderRadius: t.radius.full,
+    minWidth: BADGE_SIZE,
+    height: BADGE_SIZE,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 6,
-    marginLeft: 8,
-  },
-  unreadText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 12,
+    paddingHorizontal: t.spacing.xs,
+    marginLeft: t.spacing.sm,
   },
   onlineIndicator: {
     position: "absolute",
-    bottom: 4,
-    right: 4,
-    width: 12,
-    height: 12,
-    backgroundColor: "#10b981", // green online dot
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#ffffff",
+    bottom: t.spacing.xs,
+    right: t.spacing.xs,
+    width: ONLINE_DOT_SIZE,
+    height: ONLINE_DOT_SIZE,
+    backgroundColor: t.colors.chat.online,
+    borderRadius: t.radius.full,
+    borderWidth: INDICATOR_BORDER,
+    borderColor: t.colors.surface,
   },
   groupOnlineIndicator: {
     position: "absolute",
-    bottom: 5,
-    right: 5,
-    width: 18,
-    height: 18,
-    backgroundColor: "#10b981",
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: "#ffffff",
+    bottom: t.spacing.xs,
+    right: t.spacing.xs,
+    width: GROUP_ONLINE_SIZE,
+    height: GROUP_ONLINE_SIZE,
+    backgroundColor: t.colors.chat.online,
+    borderRadius: t.radius.full,
+    borderWidth: INDICATOR_BORDER,
+    borderColor: t.colors.surface,
     justifyContent: "center",
     alignItems: "center",
   },
+  // The bubble is only 14pt inside its ring, so the caption's 18pt line height
+  // would clip the number.
   groupOnlineText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "bold",
+    lineHeight: t.typography.fontSize.xs,
   },
   noConversations: {
-    fontSize: 16,
-    color: "#9ca3af",
     textAlign: "center",
-    marginTop: 40,
+    marginTop: t.spacing["3xl"],
   },
   addButton: {
     position: "absolute",
@@ -676,25 +639,19 @@ const styles = StyleSheet.create({
     // (no position:absolute on tabBarStyle), so this 24 is already measured from
     // just above it. Adding the tab bar height on top lifted the button by a
     // second bar's worth.
-    bottom: 24,
-    right: 24,
-    backgroundColor: "#3b82f6",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    bottom: t.spacing.xl,
+    right: t.spacing.xl,
+    backgroundColor: t.colors.primary,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: t.radius.full,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    ...t.shadows.card,
   },
   addButtonText: {
-    fontSize: 32,
-    color: "#ffffff",
-    fontWeight: "bold",
+    fontSize: FAB_LABEL_SIZE,
   },
-});
+}));
 
 export default ChatHomePage;

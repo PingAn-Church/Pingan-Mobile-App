@@ -44,14 +44,10 @@ import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect } from "react";
 import {
   View,
-  Text,
-  TextInput,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   SafeAreaView,
-  Alert,
 } from "react-native";
 import { startPrivateChat } from "../../service/UserService";
 import { UserContext } from "../../context/UserContext";
@@ -63,8 +59,12 @@ import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
 import { getBlockStatus, unblockUser } from "../../service/BlockService";
 import { confirmAction } from "../../utils/confirmAction";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Heading, TextField } from "../../components/ui";
 
 const NewChatScreen = () => {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useContext(UserContext);
   const navigation = useNavigation();
   const { conversations } = useContext(ChatContext);
@@ -127,19 +127,22 @@ const NewChatScreen = () => {
     <TouchableOpacity
       style={styles.userRow}
       onPress={() => handleStartPrivateChat(item)}
+      accessibilityRole="button"
     >
-      <Text style={styles.userName}>
+      <AppText variant="body" color="textPrimary">
         {formatName(item.firstName, item.lastName)}
-      </Text>
+      </AppText>
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>{i18n.t("startNewChat")}</Text>
+      <Heading level={2} style={styles.header}>
+        {i18n.t("startNewChat")}
+      </Heading>
 
       <View style={styles.searchBar}>
-        <TextInput
+        <TextField
           style={styles.searchInput}
           placeholder={i18n.t("searchUsers")}
           value={query}
@@ -150,7 +153,7 @@ const NewChatScreen = () => {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#007aff" style={{ marginTop: 20 }} />
+        <ActivityIndicator size="large" color={colors.primary} style={styles.loading} />
       ) : (
         <FlatList
           data={results}
@@ -158,11 +161,13 @@ const NewChatScreen = () => {
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>{i18n.t("noUsersFound")}</Text>
+            <AppText variant="body" color="textSecondary" style={styles.emptyText}>
+              {i18n.t("noUsersFound")}
+            </AppText>
           }
           ListFooterComponent={
             loadingMore ? (
-              <ActivityIndicator color="#007aff" style={{ marginVertical: 16 }} />
+              <ActivityIndicator color={colors.primary} style={styles.loadingMore} />
             ) : (
               <View style={styles.separator} />
             )
@@ -173,73 +178,64 @@ const NewChatScreen = () => {
         />
       )}
 
-      <TouchableOpacity
-        style={styles.groupButton}
+      <Button
+        size="md"
+        title={`+ ${i18n.t("createGroup")}`}
+        accessibilityLabel={i18n.t("createGroup")}
         onPress={() => navigation.navigate("NewGroup")}
-      >
-        <Text style={styles.groupButtonText}>+ {i18n.t("createGroup")}</Text>
-      </TouchableOpacity>
+        style={styles.groupButton}
+      />
     </SafeAreaView>
   );
 };
 
 export default NewChatScreen;
 
-const styles = StyleSheet.create({
+// Layout only — text, the search field and the button get their look from the ui components.
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: t.colors.background,
   },
   header: {
-    fontSize: 20,
-    fontWeight: "600",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
+    borderBottomColor: t.colors.borderSubtle,
+    backgroundColor: t.colors.background,
   },
   searchBar: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.md,
   },
+  // Filled search box (no border), unlike the outlined standard TextField.
   searchInput: {
-    backgroundColor: "#f1f5f9",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
+    backgroundColor: t.colors.backgroundMuted,
+    borderWidth: 0,
+    borderRadius: t.radius.card,
+    paddingHorizontal: t.spacing.md,
+  },
+  loading: {
+    marginTop: t.spacing.lg,
+  },
+  loadingMore: {
+    marginVertical: t.spacing.base,
   },
   emptyText: {
     textAlign: "center",
-    color: "#9ca3af",
-    marginTop: 24,
-    fontSize: 15,
+    marginTop: t.spacing.xl,
   },
   userRow: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: "#ffffff",
-  },
-  userName: {
-    fontSize: 16,
-    color: "#1f2937",
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.lg,
+    backgroundColor: t.colors.surface,
   },
   separator: {
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: t.colors.borderSubtle,
     marginLeft: 0, // Full-width border
   },
   groupButton: {
-    margin: 20,
-    alignItems: "center",
-    backgroundColor: "#3b82f6",
-    paddingVertical: 14,
-    borderRadius: 10,
+    margin: t.spacing.lg,
   },
-  groupButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
+}));

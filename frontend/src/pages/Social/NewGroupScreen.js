@@ -2,15 +2,11 @@ import { showAlert } from "../../utils/showAlert";
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
   FlatList,
   TouchableOpacity,
   Image,
-  StyleSheet,
   ActivityIndicator,
   SafeAreaView,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -27,8 +23,12 @@ import useUserSearch from "../../hooks/useUserSearch";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Heading, TextField } from "../../components/ui";
 
 const NewGroupScreen = () => {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [groupName, setGroupName] = useState("");
   const [selectedParticipants, setSelectedParticipants] = useState([]);
   const [groupImage, setGroupImage] = useState(null);
@@ -163,10 +163,12 @@ const NewGroupScreen = () => {
           styles.userRow,
           isSelected && styles.userRowSelected, // 👈 conditional highlight
         ]}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: isSelected }}
       >
-        <Text style={styles.userText}>
+        <AppText variant="body" color="textPrimary">
           {formatName(item.firstName, item.lastName)}
-        </Text>
+        </AppText>
         {Platform.OS === "web" && (
           <View
             style={[
@@ -174,7 +176,16 @@ const NewGroupScreen = () => {
               isSelected ? styles.userSelectBoxChecked : null,
             ]}
           >
-            {isSelected ? <Text style={styles.userSelectCheckmark}>✓</Text> : null}
+            {isSelected ? (
+              <AppText
+                variant="caption"
+                color="onPrimary"
+                weight="bold"
+                style={styles.userSelectCheckmark}
+              >
+                ✓
+              </AppText>
+            ) : null}
           </View>
         )}
       </TouchableOpacity>
@@ -183,13 +194,15 @@ const NewGroupScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>{i18n.t("createNewGroup")}</Text>
+      <Heading level={2} style={styles.header}>
+        {i18n.t("createNewGroup")}
+      </Heading>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
+        style={styles.keyboardArea}
       >
-        <TextInput
+        <TextField
           style={styles.input}
           placeholder={i18n.t("groupName")}
           value={groupName}
@@ -199,8 +212,8 @@ const NewGroupScreen = () => {
         {uploadingGroupImage ? (
           <ActivityIndicator
             size="large"
-            color="#007aff"
-            style={{ marginVertical: 10 }}
+            color={colors.primary}
+            style={styles.uploading}
           />
         ) : (
           groupImage && (
@@ -208,12 +221,15 @@ const NewGroupScreen = () => {
           )
         )}
 
-        <TouchableOpacity style={styles.imageButton} onPress={pickGroupImage}>
-          <Text style={styles.imageButtonText}>{i18n.t("pickGroupImage")}</Text>
-        </TouchableOpacity>
+        <Button
+          size="md"
+          title={i18n.t("pickGroupImage")}
+          onPress={pickGroupImage}
+          style={styles.imageButton}
+        />
 
         <View style={styles.searchBar}>
-          <TextInput
+          <TextField
             style={styles.searchInput}
             placeholder={i18n.t("searchUsers")}
             value={query}
@@ -230,12 +246,14 @@ const NewGroupScreen = () => {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             loading ? null : (
-              <Text style={styles.emptyText}>{i18n.t("noUsersFound")}</Text>
+              <AppText variant="body" color="textSecondary" style={styles.emptyText}>
+                {i18n.t("noUsersFound")}
+              </AppText>
             )
           }
           ListFooterComponent={
             loadingMore ? (
-              <ActivityIndicator color="#007aff" style={{ marginVertical: 16 }} />
+              <ActivityIndicator color={colors.primary} style={styles.loadingMore} />
             ) : (
               <View style={styles.separator} />
             )
@@ -246,23 +264,21 @@ const NewGroupScreen = () => {
         />
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.button, submitting && { opacity: 0.6 }]}
+          <Button
+            size="md"
+            fullWidth={false}
+            title={i18n.t("createGroup")}
+            loading={submitting}
             onPress={handleCreateGroup}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>{i18n.t("createGroup")}</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.button}
+            style={styles.rowButton}
+          />
+          <Button
+            size="md"
+            fullWidth={false}
+            title={i18n.t("cancel")}
             onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.buttonText}>{i18n.t("cancel")}</Text>
-          </TouchableOpacity>
+            style={styles.rowButton}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -271,126 +287,106 @@ const NewGroupScreen = () => {
 
 export default NewGroupScreen;
 
-const styles = StyleSheet.create({
+// Layout only — text, inputs and buttons get their look from the ui components.
+const PREVIEW_SIZE = 100; // picked group photo
+const CHECKBOX_SIZE = 20; // web-only select box on each person
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: t.colors.background,
   },
   header: {
-    fontSize: 20,
-    fontWeight: "600",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: t.colors.borderSubtle,
+  },
+  keyboardArea: {
+    flex: 1,
   },
   input: {
     // minHeight, not height: a fixed box clips the text at large system fonts.
-    minHeight: 44,
-    marginHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    fontSize: 16,
+    minHeight: t.sizes.minTouchTarget,
+    marginHorizontal: t.spacing.lg,
+    marginTop: t.spacing.md,
+    marginBottom: t.spacing.sm,
   },
-  imageButton: {
-    marginHorizontal: 20,
-    marginBottom: 10,
-    backgroundColor: "#3b82f6",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  imageButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "500",
+  uploading: {
+    marginVertical: t.spacing.sm,
   },
   image: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    marginVertical: 12,
+    width: PREVIEW_SIZE,
+    height: PREVIEW_SIZE,
+    borderRadius: t.radius.card,
+    marginVertical: t.spacing.md,
     alignSelf: "center", // ✅ centers the image horizontally
   },
-  searchBar: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  imageButton: {
+    marginHorizontal: t.spacing.lg,
+    marginBottom: t.spacing.sm,
   },
+  searchBar: {
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.md,
+  },
+  // Filled search box (no border), unlike the outlined standard TextField —
+  // matches NewChatScreen.
   searchInput: {
-    backgroundColor: "#f1f5f9",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
+    backgroundColor: t.colors.backgroundMuted,
+    borderWidth: 0,
+    borderRadius: t.radius.card,
+    paddingHorizontal: t.spacing.md,
   },
   emptyText: {
     textAlign: "center",
-    color: "#9ca3af",
-    marginTop: 24,
-    fontSize: 15,
+    marginTop: t.spacing.xl,
+  },
+  loadingMore: {
+    marginVertical: t.spacing.base,
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: "#ffffff",
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.lg,
+    backgroundColor: t.colors.surface,
   },
-  userText: {
-    fontSize: 16,
-    color: "#1f2937",
+  userRowSelected: {
+    backgroundColor: t.colors.surfaceSelected,
   },
   separator: {
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: t.colors.borderSubtle,
     marginLeft: 0,
   },
   buttonRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    gap: t.spacing.md,
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.lg,
   },
-  button: {
+  rowButton: {
     flex: 1,
-    backgroundColor: "#007aff",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginHorizontal: 6,
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  userRowSelected: {
-    backgroundColor: "#f0f8ff", // light blue background for selected
   },
   userSelectBox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
+    width: CHECKBOX_SIZE,
+    height: CHECKBOX_SIZE,
+    borderRadius: t.radius.control,
     borderWidth: 1,
-    borderColor: "#C9CED8",
-    backgroundColor: "#FFFFFF",
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 10,
+    marginLeft: t.spacing.sm,
   },
   userSelectBoxChecked: {
-    backgroundColor: "#0A84FF",
-    borderColor: "#0A84FF",
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
+
   userSelectCheckmark: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 12,
+    lineHeight: t.typography.fontSize.xs,
   },
-});
+}));
