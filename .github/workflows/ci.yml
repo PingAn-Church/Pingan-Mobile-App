@@ -161,6 +161,9 @@ jobs:
       - name: Check inline markup rules
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-inline-markup.mjs
 
+      - name: Check link detection rules
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-links.mjs
+
       - name: Export Expo web build
         run: npx expo export --platform web --output-dir dist
 

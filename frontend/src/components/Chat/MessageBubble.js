@@ -16,8 +16,10 @@ import defaultProfileImage from "../../../assets/user.png";
 import appIcon from "../../../assets/icon.png";
 import i18n from "../../../i18n";
 import CachedImage from "../CachedImage";
-import { spanStyle } from "../RichText";
-import { parseInlineMarkup, stripInlineMarkup } from "../../utils/inlineMarkup";
+import RichText, { spanStyle } from "../RichText";
+import { stripInlineMarkup } from "../../utils/inlineMarkup";
+import { parseMarkupAndLinks } from "../../utils/links";
+import { openLink } from "../../utils/openLink";
 import { kindOf, messagePreview } from "../../utils/messageKinds";
 import { displayEmoji } from "../../utils/reactions";
 import { stickerForMessage, stickerLabel } from "../../utils/stickers";
@@ -320,9 +322,15 @@ export default function MessageBubble({
         })()
       ) : isNotice ? (
         <View style={styles.messageContentContainer}>
-          <Text selectable style={[styles.content, styles.noticeContent]}>
-            {String(item.content || "").replace(/^📌\s*/, "")}
-          </Text>
+          {/* A notice carries its links too; that is often the point of one. */}
+          <RichText
+            selectable
+            links
+            linkStyle={styles.linkInReceived}
+            onLinkLongPress={Platform.OS === "web" ? undefined : longPress}
+            style={[styles.content, styles.noticeContent]}
+            text={String(item.content || "").replace(/^📌\s*/, "")}
+          />
         </View>
       ) : (
         <View style={styles.messageContentContainer}>
@@ -333,37 +341,53 @@ export default function MessageBubble({
               isMe ? styles.contentSent : styles.contentReceived,
             ]}
           >
-            {/* Markup outside, mentions inside: "*see @Name*" is bold with the
-                name still highlighted within it. */}
-            {parseInlineMarkup(item.content).map((span, spanIndex) => (
-              <Text key={spanIndex} style={spanStyle(span)}>
-                {splitOnMentions(span.text, mentionLabels).map((part, partIndex) =>
-                  part.isMention ? (
-                    <Text
-                      key={partIndex}
-                      style={isMe ? styles.mentionInSent : styles.mentionInReceived}
-                    >
-                      {part.text}
-                    </Text>
-                  ) : (
-                    part.text
-                  )
-                )}
-              </Text>
-            ))}
+            {/* Links outermost, then markup, then mentions: a link's own _ and *
+                are never markers, a link inside *bold* stays bold, and
+                "*see @Name*" is bold with the name still highlighted within it. */}
+            {parseMarkupAndLinks(item.content).map((span, spanIndex) =>
+              span.url ? (
+                <Text
+                  key={spanIndex}
+                  style={[spanStyle(span), isMe ? styles.linkInSent : styles.linkInReceived]}
+                  onPress={() => openLink(span.url)}
+                  // The link would otherwise swallow the long-press that opens the menu.
+                  onLongPress={Platform.OS === "web" ? undefined : longPress}
+                  accessibilityRole="link"
+                >
+                  {span.text}
+                </Text>
+              ) : (
+                <Text key={spanIndex} style={spanStyle(span)}>
+                  {splitOnMentions(span.text, mentionLabels).map((part, partIndex) =>
+                    part.isMention ? (
+                      <Text
+                        key={partIndex}
+                        style={isMe ? styles.mentionInSent : styles.mentionInReceived}
+                      >
+                        {part.text}
+                      </Text>
+                    ) : (
+                      part.text
+                    )
+                  )}
+                </Text>
+              )
+            )}
           </Text>
 
           {showTranslation && (
             <View style={styles.translationContainer}>
               <View style={styles.translationDivider} />
-              <Text
+              <RichText
+                links
+                linkStyle={isMe ? styles.linkInSent : styles.linkInReceived}
+                onLinkLongPress={Platform.OS === "web" ? undefined : longPress}
                 style={[
                   styles.translatedText,
                   isMe ? styles.contentSent : styles.contentReceived,
                 ]}
-              >
-                {translation.text}
-              </Text>
+                text={translation.text}
+              />
             </View>
           )}
         </View>
@@ -772,6 +796,9 @@ const styles = StyleSheet.create({
   },
   mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
   mentionInReceived: { fontWeight: "700", color: "#C2410C" },
+  // A link keeps to its bubble: pale on the sender's blue, the system blue on grey.
+  linkInSent: { color: "#DCEBFF", textDecorationLine: "underline" },
+  linkInReceived: { color: "#0A84FF", textDecorationLine: "underline" },
   content: {
     fontSize: webFontSize(16),
     lineHeight: Platform.OS === "web" ? 24 : 21,

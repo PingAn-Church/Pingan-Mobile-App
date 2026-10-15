@@ -140,7 +140,7 @@ export default function PollCard({
         )}
       </View>
 
-      <RichText style={styles.question}>{poll.question}</RichText>
+      <RichText links style={styles.question}>{poll.question}</RichText>
 
       {isSignup ? (
         <View style={styles.list}>

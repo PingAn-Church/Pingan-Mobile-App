@@ -313,6 +313,7 @@
   "cancelRegistration": "取消报名",
   "cancelRegistrationConfirm": "确定要取消报名吗？",
   "eventActionFailed": "操作失败，请稍后再试",
+  "linkOpenFailed": "无法打开此链接",
   "registrants": "报名名单",
   "noRegistrants": "暂时还没有人报名",
   "registrantsVisibleAfterRegistering": "报名后即可查看报名名单",

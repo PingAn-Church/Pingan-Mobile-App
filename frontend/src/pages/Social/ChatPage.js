@@ -32,6 +32,7 @@ import defaultProfileImage from "../../../assets/user.png";
 import appIcon from "../../../assets/icon.png";
 import CachedImage from "../../components/CachedImage";
 import { stripInlineMarkup } from "../../utils/inlineMarkup";
+import { splitOnLinks } from "../../utils/links";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -735,6 +736,26 @@ export default function ChatPage({ route }) {
     },
     [conversationType]
   );
+
+  // On a phone the box shows its text through nested <Text> runs, so a link
+  // lights up as it is typed. React Native draws TextInput children in place
+  // of `value`; the web input has no such runs and keeps `value`.
+  const composerText = useMemo(() => {
+    if (Platform.OS === "web") return null;
+    return (
+      <Text>
+        {splitOnLinks(inputText).map((part, index) =>
+          part.url ? (
+            <Text key={index} style={styles.composerLink}>
+              {part.text}
+            </Text>
+          ) : (
+            part.text
+          )
+        )}
+      </Text>
+    );
+  }, [inputText]);
 
   /**
    * The assistant, as a mention candidate — offered from the conversation rather
@@ -2740,7 +2761,7 @@ export default function ChatPage({ route }) {
         <View style={styles.inputPill}>
           <TextInput
             ref={textInputRef}
-            value={inputText}
+            value={Platform.OS === "web" ? inputText : undefined}
             onChangeText={handleInputTextChange}
             placeholder={messagingBlocked ? i18n.t("messagingBlockedPlaceholder") : i18n.t("typeMessage")}
             placeholderTextColor="#98989D"
@@ -2749,7 +2770,9 @@ export default function ChatPage({ route }) {
             editable={!messagingBlocked}
             // The keyboard and the sticker panel take the same space; typing wins.
             onFocus={() => setStickerPanelVisible(false)}
-          />
+          >
+            {composerText}
+          </TextInput>
 
           <View
             style={styles.voiceRecorderWrap}
@@ -4001,6 +4024,10 @@ const styles = StyleSheet.create({
     lineHeight: Platform.OS === "web" ? 23 : 20,
     textAlignVertical: "center",
     color: "#111113",
+  },
+  composerLink: {
+    color: "#0A84FF",
+    textDecorationLine: "underline",
   },
   editingBanner: {
     flexDirection: "row",

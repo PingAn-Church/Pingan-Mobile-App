@@ -313,6 +313,7 @@
   "cancelRegistration": "Cancel registration",
   "cancelRegistrationConfirm": "Cancel your registration for this event?",
   "eventActionFailed": "Something went wrong. Please try again.",
+  "linkOpenFailed": "Couldn't open this link.",
   "registrants": "Registrants",
   "noRegistrants": "No one has registered yet.",
   "registrantsVisibleAfterRegistering": "The registrant list is visible once you register.",
