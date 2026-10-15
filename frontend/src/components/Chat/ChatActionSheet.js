@@ -5,6 +5,7 @@ import {
   Easing,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -37,6 +38,7 @@ export default function ChatActionSheet({
   visible,
   onClose,
   onPickPhoto,
+  onTakePhoto,
   onShareEvent,
   canPostNotice = false,
   onComposeNotice,
@@ -144,6 +146,10 @@ export default function ChatActionSheet({
   // and should not open on top of a half-dismissed panel.
   const actions = [
     { key: "photo", icon: "image", tint: "#34C759", label: i18n.t("chatActionPhoto"), onPress: () => onPickPhoto?.() },
+    // A phone has a camera; the web build does not get this tile.
+    ...(onTakePhoto && Platform.OS !== "web"
+      ? [{ key: "camera", icon: "camera", tint: "#FF3B30", label: i18n.t("chatActionCamera"), onPress: () => onTakePhoto?.() }]
+      : []),
     { key: "event", icon: "calendar", tint: "#FF9500", label: i18n.t("chatActionEvent"), onPress: () => goTo("events") },
     // Groups only: a poll, or a sign-up sheet (the same thing in "add yourself" mode).
     ...(canCreatePoll

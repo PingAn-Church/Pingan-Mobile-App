@@ -86,5 +86,10 @@ export const kindOf = (messageOrType) => {
   return MESSAGE_KINDS[String(type || "text").toLowerCase()] || MESSAGE_KINDS.text;
 };
 
-/** One line standing in for the message in a conversation list or sidebar. */
-export const messagePreview = (message) => kindOf(message).preview(message);
+/**
+ * One line standing in for the message in a conversation list or sidebar. A
+ * recalled message previews as the act, whatever it used to be; its stored
+ * body is only the placeholder for builds that know nothing of recalls.
+ */
+export const messagePreview = (message) =>
+  message?.recalled ? i18n.t("chatPreviewRecalled") : kindOf(message).preview(message);

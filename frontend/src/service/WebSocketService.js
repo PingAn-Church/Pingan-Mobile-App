@@ -88,6 +88,12 @@ export const subscribeToConversation = (conversationId, onMessageReceived = null
   stompClient.subscribe(`/topic/conversation-${key}`, (msg) => {
     dispatchConversationPayload(JSON.parse(msg.body), onMessageReceived);
   });
+  // The group's read watermarks travel beside the conversation, never on it: a
+  // build that predates them would draw them as messages. See the server's
+  // ChatDestinations.readsTopic.
+  stompClient.subscribe(`/topic/conversation-${key}-reads`, (msg) => {
+    currentHandlers.onReadWatermark?.(JSON.parse(msg.body));
+  });
 };
 
 export const connectWebSocket = async (handlers = {}, onConnected = null, options = null) => {

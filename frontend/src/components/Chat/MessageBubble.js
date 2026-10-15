@@ -45,6 +45,14 @@ const SWIPE_MAX = 72;
 const isLocalOnly = (message) =>
   typeof message?.messageId === "string" && message.messageId.startsWith("local-");
 
+/** "Read by 3", "Read by all" or "no one yet", from a group message's receipt. */
+const readReceiptLabel = ({ count, total }) =>
+  total > 0 && count >= total
+    ? i18n.t("readByAll")
+    : count > 0
+      ? i18n.t("readByCount", { count })
+      : i18n.t("readByNone");
+
 /**
  * The quoted message at the top of a reply. Tapping it jumps to the original.
  * `tone` follows the bubble it sits in: on the sender's blue, on the grey of a
@@ -118,6 +126,11 @@ export default function MessageBubble({
   onClosePoll,
   onShowVoters,
   isGroupAdmin = false,
+  // A failed message of yours: sends it again from what the bubble holds.
+  onResend,
+  // Your own group message: { count, total } members past it (see ChatPage), or null.
+  readReceipt = null,
+  onShowReaders,
   canReply = true,
   highlighted = false,
 }) {
@@ -421,6 +434,40 @@ export default function MessageBubble({
           {formatDeliveryStateLabel(outgoingDeliveryState)}
         </Text>
       )}
+      {/* A group keeps no receipts; the members' read watermarks say how many
+          have read this far. Tap for who. */}
+      {readReceipt && !isPending && !isFailed && (
+        <Pressable
+          onPress={onShowReaders ? () => onShowReaders(item) : undefined}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={readReceiptLabel(readReceipt)}
+        >
+          <Text
+            style={[
+              styles.deliveryStatus,
+              isCard ? styles.imageTimestamp : styles.timestampSent,
+              isVoice ? styles.deliveryStatusVoice : null,
+              !isCard && readReceipt.total > 0 && readReceipt.count >= readReceipt.total
+                ? styles.deliveryStatusSeen
+                : null,
+            ]}
+          >
+            {readReceiptLabel(readReceipt)}
+          </Text>
+        </Pressable>
+      )}
+      {isFailed && onResend && (
+        <Pressable
+          onPress={() => onResend(item)}
+          style={styles.resendButton}
+          accessibilityRole="button"
+          accessibilityLabel={i18n.t("resend")}
+        >
+          <Ionicons name="refresh" size={12} color="#E35D5D" />
+          <Text style={styles.resendText}>{i18n.t("resend")}</Text>
+        </Pressable>
+      )}
     </TouchableOpacity>
   );
 
@@ -515,6 +562,20 @@ export default function MessageBubble({
       </View>
     </View>
   );
+
+  // A recalled message is a line, not a bubble: who took it back, centred and
+  // unsigned like a date separator, with nothing on it to press or react to.
+  if (item.recalled) {
+    return (
+      <View style={styles.recalledRow}>
+        <Text style={styles.recalledText}>
+          {isMe
+            ? i18n.t("youRecalledMessage")
+            : i18n.t("someoneRecalledMessage", { name: senderName })}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <Animated.View
@@ -636,6 +697,36 @@ const styles = StyleSheet.create({
   failedMessage: {
     borderWidth: 1,
     borderColor: "#E35D5D",
+  },
+  resendButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: "rgba(227,93,93,0.12)",
+  },
+  resendText: {
+    fontSize: webFontSize(11),
+    color: "#E35D5D",
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  recalledRow: {
+    alignItems: "center",
+    marginVertical: 6,
+    paddingHorizontal: 24,
+  },
+  recalledText: {
+    fontSize: webFontSize(12),
+    color: "#7A7A80",
+    backgroundColor: "#E5E5EA",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    textAlign: "center",
   },
   // Group chats only: an incoming message is drawn as [avatar][name over bubble],
   // so you can tell who is speaking without opening the participant list.

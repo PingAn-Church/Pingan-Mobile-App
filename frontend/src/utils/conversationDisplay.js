@@ -17,18 +17,27 @@ export const groupDisplayName = (conversation, language) => {
 };
 
 /**
- * Conversations that are always present and always first: the app-level group,
- * and (see the chat list) the Topics entry. Pinning them means a member who has
- * only just been verified still finds both waiting at the top of an otherwise
- * empty list.
+ * Conversations that sit above the rest: the app-level group, which is always
+ * present and always first (a member verified a minute ago still finds it, and
+ * the Topics entry under it, at the top of an otherwise empty list), and
+ * whatever the reader pinned there themselves.
  */
-export const isPinnedConversation = (conversation) => !!conversation?.appLevel;
+export const isPinnedConversation = (conversation) =>
+  !!conversation?.appLevel || !!conversation?.pinned;
 
-/** Sort comparator: pinned first, then most recently active. */
+/**
+ * Sort comparator: the app-level group, then what the reader pinned (the most
+ * recently pinned highest), then everything else by most recent activity.
+ */
 export const compareConversations = (a, b) => {
-  const pinnedA = isPinnedConversation(a);
-  const pinnedB = isPinnedConversation(b);
+  if (!!a?.appLevel !== !!b?.appLevel) return a?.appLevel ? -1 : 1;
+  const pinnedA = !!a?.pinned;
+  const pinnedB = !!b?.pinned;
   if (pinnedA !== pinnedB) return pinnedA ? -1 : 1;
+  if (pinnedA) {
+    const byPin = (b.pinnedAt || 0) - (a.pinnedAt || 0);
+    if (byPin) return byPin;
+  }
 
   // The server ships each conversation's newest message as `lastMessage`, so
   // ordering no longer depends on history having been loaded. Loaded history is

@@ -142,9 +142,14 @@ export const deleteMessageFromDatabase = async (messageId) => {
       }
     );
 
-    if (!response.ok) throw new Error("Failed to delete message.");
+    if (!response.ok) {
+      // 409: the recall window has closed. The caller tells the reader which it was.
+      const error = new Error("Failed to recall message.");
+      error.status = response.status;
+      throw error;
+    }
 
-    return await response.json(); // ✅ Return deleted message details
+    return await response.json(); // the message as it now stands: recalled
   } catch (error) {
     console.error("Error deleting message:", error);
     throw error;
@@ -418,6 +423,36 @@ export const setConversationMuteStatus = async (conversationId, conversationType
     console.error("Error updating mute status:", error);
     throw error;
   }
+};
+
+// Per-conversation "pin to top" of the caller's own chat list; the twin of mute.
+export const getConversationPinStatus = async (conversationId, conversationType) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/pin`), {
+    params: { conversationId, conversationType },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data; // { pinned }
+};
+
+export const setConversationPinStatus = async (conversationId, conversationType, pinned) => {
+  const token = await getAuthToken();
+  const response = await axios.put(apiUrl(`/chat/pin`), null, {
+    params: { conversationId, conversationType, pinned },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data; // { pinned }
+};
+
+// Who in a group has read up to where: { userId: lastReadMessageId }. Fetched
+// when a group is opened; READ_WATERMARK events on the group's reads topic keep
+// it current from then on.
+export const getGroupReadWatermarks = async (conversationId) => {
+  const token = await getAuthToken();
+  const response = await axios.get(apiUrl(`/chat/groups/${conversationId}/read-watermarks`), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data?.watermarks || {};
 };
 
 // Adds (on) or removes the viewer's emoji on a message. Resolves to the message

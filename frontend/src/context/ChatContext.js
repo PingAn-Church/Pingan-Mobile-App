@@ -7,7 +7,8 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { getConversations, getChatHistory } from "../service/ChatService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getConversations, getChatHistory, getGroupReadWatermarks } from "../service/ChatService";
 import { getTopicUnreadCount } from "../service/ThreadService";
 import { getOnlineUsers } from "../service/UserService";
 import { getStompClient, subscribeToConversation } from "../service/WebSocketService";
@@ -62,6 +63,77 @@ export const ChatProvider = ({ children }) => {
   // set makes the send idempotent.
   const sentDeliveryReceiptsRef = useRef(new Set());
 
+  // Unsent words per conversation, so leaving a chat half-typed loses nothing;
+  // the list row previews them as "[Draft] …". Kept on the device, per account.
+  const [drafts, setDrafts] = useState({});
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
+  const draftsKey = user?.id ? `chat.drafts.${user.id}` : null;
+  useEffect(() => {
+    let active = true;
+    setDraftsLoaded(false);
+    setDrafts({});
+    if (!draftsKey) return undefined;
+    AsyncStorage.getItem(draftsKey)
+      .then((raw) => {
+        if (active && raw) setDrafts(JSON.parse(raw));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setDraftsLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [draftsKey]);
+  useEffect(() => {
+    if (!draftsLoaded || !draftsKey) return;
+    AsyncStorage.setItem(draftsKey, JSON.stringify(drafts)).catch(() => {});
+  }, [drafts, draftsLoaded, draftsKey]);
+  const saveDraft = useCallback((conversationId, text) => {
+    const key = String(conversationId ?? "");
+    if (!key) return;
+    const value = String(text || "");
+    setDrafts((prev) => {
+      if ((prev[key] || "") === value) return prev;
+      const next = { ...prev };
+      if (value.trim()) next[key] = value;
+      else delete next[key];
+      return next;
+    });
+  }, []);
+
+  // Who in each group has read up to where: conversation id → { user id → last
+  // read message id }. Fetched when a group is opened, moved by READ_WATERMARK
+  // events, and only ever forward. Private chats keep their receipts instead.
+  const [readWatermarks, setReadWatermarks] = useState({});
+  const handleReadWatermark = (event) => {
+    if (!event || event.conversationId == null || event.userId == null) return;
+    const mark = Number(event.lastReadMessageId);
+    if (!Number.isFinite(mark)) return;
+    setReadWatermarks((prev) => {
+      const key = String(event.conversationId);
+      const current = prev[key] || {};
+      if (Number(current[String(event.userId)] || 0) >= mark) return prev;
+      return { ...prev, [key]: { ...current, [String(event.userId)]: mark } };
+    });
+  };
+  const loadReadWatermarks = useCallback(async (conversationId) => {
+    try {
+      const fresh = await getGroupReadWatermarks(conversationId);
+      setReadWatermarks((prev) => {
+        const key = String(conversationId);
+        // An event may have landed while the fetch was in flight; the higher wins.
+        const merged = { ...fresh };
+        for (const [userId, mark] of Object.entries(prev[key] || {})) {
+          if (Number(mark) > Number(merged[userId] || 0)) merged[userId] = mark;
+        }
+        return { ...prev, [key]: merged };
+      });
+    } catch (err) {
+      console.error("❌ Failed to load read watermarks:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (userReady && user?.id && user?.verifiedUser) {
       fetchInitialData();
@@ -78,6 +150,7 @@ export const ChatProvider = ({ children }) => {
   
   const resetChat = () => {
     setConversations([]);
+    setReadWatermarks({});
     setTopicUnread(0);
     setLoading(false);
   };
@@ -253,9 +326,11 @@ export const ChatProvider = ({ children }) => {
 
         // A genuinely new message from someone else bumps the unread badge live;
         // it resets to 0 when the conversation is viewed (see ChatPage read effect).
+        // A recall of a message that was never loaded here looks new too; it is not.
         const isNewIncoming =
           String(message.senderId) !== String(user?.id) &&
           !message.deleted &&
+          !message.recalled &&
           exists === -1 &&
           optimisticIndex === -1;
 
@@ -569,6 +644,18 @@ export const ChatProvider = ({ children }) => {
     );
   };
 
+  // Pinning to the top is toggled from the list row; patching it here reorders
+  // the list at once rather than on the next refetch.
+  const setConversationPinned = (conversationId, pinned) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        String(conv.conversationId) === String(conversationId)
+          ? { ...conv, pinned, pinnedAt: pinned ? Date.now() : null }
+          : conv
+      )
+    );
+  };
+
   // A group admin pinned or removed the group notice. Arrives on the group
   // topic (one send reaches the whole church-wide group), routed here by
   // eventType like moderation events are.
@@ -604,6 +691,13 @@ export const ChatProvider = ({ children }) => {
         resetChat,
         setConversations,
         setConversationMuted,
+        setConversationPinned,
+        drafts,
+        draftsLoaded,
+        saveDraft,
+        readWatermarks,
+        loadReadWatermarks,
+        handleReadWatermark,
         fetchInitialData,
         ensureHistoryLoaded,
         loadOlderMessages,

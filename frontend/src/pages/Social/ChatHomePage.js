@@ -48,6 +48,14 @@ import {
   groupDisplayName,
 } from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
+import { confirmAction } from "../../utils/confirmAction";
+import {
+  deleteConversationFromDatabase,
+  setConversationMuteStatus,
+  setConversationPinStatus,
+} from "../../service/ChatService";
+import SwipeableRow from "../../components/Chat/SwipeableRow";
+import ConversationActionSheet from "../../components/Chat/ConversationActionSheet";
 
 const ChatHomePage = () => {
   const { user, loading, userStatus } = useContext(UserContext);
@@ -59,12 +67,17 @@ const ChatHomePage = () => {
     fetchInitialData,
     topicUnread,
     refreshTopicUnread,
+    drafts,
+    setConversationMuted,
+    setConversationPinned,
   } = useContext(ChatContext);
 
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   // const [filteredConversations, setFilteredConversations] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  // The long-press sheet for one row: its title and the actions it offers.
+  const [rowSheet, setRowSheet] = useState({ visible: false, title: "", actions: [] });
 
   const showInitialLoader =
     (loading || loadingConversations || !user) && !refreshing;
@@ -308,6 +321,97 @@ const ChatHomePage = () => {
     }, 0);
   };
 
+  // --- row actions: pin, mute, delete -------------------------------------------
+  // Offered by a long-press on the row everywhere and, on a phone, by the buttons
+  // behind a swipe. Pin and mute flip at once and are put back if the server says
+  // no; delete asks first. The app-level group cannot be pinned (it is always on
+  // top) and only a private chat can be deleted from here.
+  const togglePinned = useCallback(
+    async (conversation) => {
+      const next = !conversation.pinned;
+      setConversationPinned(conversation.conversationId, next);
+      try {
+        await setConversationPinStatus(conversation.conversationId, conversation.conversationType, next);
+      } catch (error) {
+        setConversationPinned(conversation.conversationId, !next);
+        showAlert(i18n.t("error"), i18n.t("pinUpdateFailed"));
+      }
+    },
+    [setConversationPinned]
+  );
+
+  const toggleMuted = useCallback(
+    async (conversation) => {
+      const next = !conversation.muted;
+      setConversationMuted(conversation.conversationId, next);
+      try {
+        await setConversationMuteStatus(conversation.conversationId, conversation.conversationType, next);
+      } catch (error) {
+        setConversationMuted(conversation.conversationId, !next);
+        showAlert(i18n.t("error"), i18n.t("muteUpdateFailed"));
+      }
+    },
+    [setConversationMuted]
+  );
+
+  const deleteConversation = useCallback(
+    async (conversation) => {
+      const confirmed = await confirmAction({
+        title: i18n.t("deleteConvo"),
+        message: i18n.t("deletePrivateChatConfirm"),
+        confirmText: i18n.t("delete"),
+        cancelText: i18n.t("cancel"),
+        destructive: true,
+      });
+      if (!confirmed) return;
+      try {
+        await deleteConversationFromDatabase(conversation.conversationId);
+        // The server says so over the socket too; dropping the row now spares the wait.
+        setConversations((prev) =>
+          prev.filter((c) => String(c.conversationId) !== String(conversation.conversationId))
+        );
+      } catch (error) {
+        showAlert(i18n.t("error"), error?.message || i18n.t("deleteChatFailed"));
+      }
+    },
+    [setConversations]
+  );
+
+  const rowActionsFor = useCallback(
+    (conversation) => {
+      if (!conversation || conversation.isTopicsRow) return [];
+      const actions = [];
+      if (!conversation.appLevel) {
+        actions.push({
+          key: "pin",
+          icon: conversation.pinned ? "pin-outline" : "pin",
+          color: "#f97316",
+          label: i18n.t(conversation.pinned ? "unpinFromTop" : "pinToTop"),
+          onPress: () => togglePinned(conversation),
+        });
+      }
+      actions.push({
+        key: "mute",
+        icon: conversation.muted ? "notifications-outline" : "notifications-off-outline",
+        color: "#6b7280",
+        label: i18n.t(conversation.muted ? "unmuteShort" : "muteShort"),
+        onPress: () => toggleMuted(conversation),
+      });
+      if (conversation.conversationType === "private") {
+        actions.push({
+          key: "delete",
+          icon: "trash-outline",
+          color: "#ef4444",
+          destructive: true,
+          label: i18n.t("delete"),
+          onPress: () => deleteConversation(conversation),
+        });
+      }
+      return actions;
+    },
+    [togglePinned, toggleMuted, deleteConversation]
+  );
+
   const renderConversationItem = ({ item }) => {
     if (item.isTopicsRow) {
       return (
@@ -386,79 +490,109 @@ const ChatHomePage = () => {
     // Use id-based presence lookup (no emails needed client-side)
     const isOnline =
       isPrivateChat && userStatus[String(otherParticipantId)] === "online";
+    const draft = drafts?.[String(item.conversationId)] || "";
+    const rowActions = rowActionsFor(item);
 
+    // Swipe (on a phone) or hold (everywhere) for pin, mute and delete.
     return (
-      <TouchableOpacity
-        style={styles.conversationCard}
-        onPress={() => handleChat(item)}
-      >
-        {/* Profile Image & Online Indicator */}
-        <View style={styles.profileContainer}>
-          {item.appLevel && !rawIconUri ? (
-            // The church-wide group has no photo until an admin sets one, and the
-            // default single-person avatar would read as a private chat.
-            <View style={[styles.profileImage, styles.iconAvatar]}>
-              <Ionicons name="people" size={26} color="#ffffff" />
+      <SwipeableRow actions={rowActions}>
+        <TouchableOpacity
+          style={styles.conversationCard}
+          onPress={() => handleChat(item)}
+          onLongPress={
+            rowActions.length
+              ? () => setRowSheet({ visible: true, title, actions: rowActions })
+              : undefined
+          }
+          delayLongPress={350}
+        >
+          {/* Profile Image & Online Indicator */}
+          <View style={styles.profileContainer}>
+            {item.appLevel && !rawIconUri ? (
+              // The church-wide group has no photo until an admin sets one, and the
+              // default single-person avatar would read as a private chat.
+              <View style={[styles.profileImage, styles.iconAvatar]}>
+                <Ionicons name="people" size={26} color="#ffffff" />
+              </View>
+            ) : (
+              <CachedImage
+                uri={rawIconUri}
+                type={isGroupIcon ? "group" : "profile"}
+                conversationId={isGroupIcon ? item.conversationId : undefined}
+                fallbackSource={defaultProfileImage}
+                style={styles.profileImage}
+              />
+            )}
+
+            {/* Online Indicator for Private Chat */}
+            {isPrivateChat && isOnline && <View style={styles.onlineIndicator} />}
+
+            {/* Online Count Badge for Group Chat */}
+            {!isPrivateChat && onlineCount > 0 && (
+              <View style={styles.groupOnlineIndicator}>
+                <Text style={styles.groupOnlineText}>{onlineCount}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Chat Name & Last Message */}
+          <View style={styles.textContainer}>
+            <View style={styles.titleRow}>
+              {/* Pinned by the reader (the app-level group is always on top and
+                  says nothing); muted shows a struck bell. */}
+              {item.pinned && !item.appLevel && (
+                <Ionicons name="pin" size={13} color="#f97316" style={styles.titleIcon} />
+              )}
+              <Text style={styles.groupName} numberOfLines={1}>
+                {title}
+              </Text>
+              {item.muted && (
+                <Ionicons name="notifications-off-outline" size={14} color="#9ca3af" style={styles.titleIconAfter} />
+              )}
             </View>
-          ) : (
-            <CachedImage
-              uri={rawIconUri}
-              type={isGroupIcon ? "group" : "profile"}
-              conversationId={isGroupIcon ? item.conversationId : undefined}
-              fallbackSource={defaultProfileImage}
-              style={styles.profileImage}
-            />
-          )}
 
-          {/* Online Indicator for Private Chat */}
-          {isPrivateChat && isOnline && <View style={styles.onlineIndicator} />}
-
-          {/* Online Count Badge for Group Chat */}
-          {!isPrivateChat && onlineCount > 0 && (
-            <View style={styles.groupOnlineIndicator}>
-              <Text style={styles.groupOnlineText}>{onlineCount}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Chat Name & Last Message */}
-        <View style={styles.textContainer}>
-          <Text style={styles.groupName}>{title}</Text>
-
-          <Text style={styles.recentMessage} numberOfLines={1}>
-            {/* Someone called you out by name in here and you haven't read it.
-                Worth spotting at a glance even in a busy — or muted — group,
-                where the unread count alone says nothing about urgency. */}
-            {item.mentioned && <Text style={styles.mentionMarker}>[@] </Text>}
-            {lastMessage ? (
-              <>
-                {!!lastMessage.senderFullName && (
-                  <Text style={styles.participantName}>
-                    {lastMessage.senderFullName}:{" "}
-                  </Text>
-                )}
-                {lastMessage.previewContent}{" "}
-                {/* <Text style={styles.deliveryStatus}>({lastMessage.deliveryStatusIcon})</Text> */}
-                {String(lastMessage.senderId) === String(user.id) &&
-                  !!lastMessage.deliveryStatusIcon && (
-                    <Text style={styles.deliveryStatus}>
-                      ({lastMessage.deliveryStatusIcon})
+            <Text style={styles.recentMessage} numberOfLines={1}>
+              {/* Someone called you out by name in here and you haven't read it.
+                  Worth spotting at a glance even in a busy — or muted — group,
+                  where the unread count alone says nothing about urgency. */}
+              {item.mentioned && <Text style={styles.mentionMarker}>[@] </Text>}
+              {/* Unsent words outrank the last message: they are what the reader
+                  will see first when they open the chat. */}
+              {draft ? (
+                <>
+                  <Text style={styles.draftMarker}>[{i18n.t("draft")}] </Text>
+                  {draft}
+                </>
+              ) : lastMessage ? (
+                <>
+                  {!!lastMessage.senderFullName && (
+                    <Text style={styles.participantName}>
+                      {lastMessage.senderFullName}:{" "}
                     </Text>
                   )}
-              </>
-            ) : (
-              <Text>{i18n.t("noMsg")}</Text>
-            )}
-          </Text>
-        </View>
-
-        {/* Unread Message Badge */}
-        {unreadCount > 0 && (
-          <View style={styles.unreadBadge}>
-            <Text style={styles.unreadText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                  {lastMessage.previewContent}{" "}
+                  {/* <Text style={styles.deliveryStatus}>({lastMessage.deliveryStatusIcon})</Text> */}
+                  {String(lastMessage.senderId) === String(user.id) &&
+                    !!lastMessage.deliveryStatusIcon && (
+                      <Text style={styles.deliveryStatus}>
+                        ({lastMessage.deliveryStatusIcon})
+                      </Text>
+                    )}
+                </>
+              ) : (
+                <Text>{i18n.t("noMsg")}</Text>
+              )}
+            </Text>
           </View>
-        )}
-      </TouchableOpacity>
+
+          {/* Unread Message Badge */}
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </SwipeableRow>
     );
   };
 
@@ -494,6 +628,13 @@ const ChatHomePage = () => {
         }
         refreshing={refreshing}
         onRefresh={handleRefresh}
+      />
+
+      <ConversationActionSheet
+        visible={rowSheet.visible}
+        title={rowSheet.title}
+        actions={rowSheet.actions}
+        onClose={() => setRowSheet({ visible: false, title: "", actions: [] })}
       />
 
       <TouchableOpacity
@@ -592,7 +733,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  titleIcon: {
+    marginRight: 4,
+  },
+  titleIconAfter: {
+    marginLeft: 6,
+  },
   groupName: {
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: "600",
     color: "#1f2937",
@@ -610,6 +762,10 @@ const styles = StyleSheet.create({
   mentionMarker: {
     color: "#f97316",
     fontWeight: "800",
+  },
+  draftMarker: {
+    color: "#ef4444",
+    fontWeight: "700",
   },
   deliveryStatus: {
     fontSize: 12,

@@ -67,7 +67,7 @@ import {
   getPollVoters,
 } from "../../service/ChatService";
 import GroupNoticeBanner from "../../components/Chat/GroupNoticeBanner";
-import { REACTION_EMOJIS, applyOwnReaction, displayEmoji } from "../../utils/reactions";
+import { QUICK_REACTIONS, applyOwnReaction, displayEmoji } from "../../utils/reactions";
 import {
   getLocalUri as getCachedMedia,
   peekLocalUri as peekCachedMedia,
@@ -98,6 +98,8 @@ import ImageViewer from "../../components/ImageViewer";
 import ComposerActionButton from "../../components/Chat/ComposerActionButton";
 import ChatActionSheet from "../../components/Chat/ChatActionSheet";
 import ComposerStickerButton from "../../components/Chat/ComposerStickerButton";
+import EmojiPickerSheet from "../../components/Chat/EmojiPickerSheet";
+import ReadersSheet from "../../components/Chat/ReadersSheet";
 import StickerPanel, { stickerPanelHeight } from "../../components/Chat/StickerPanel";
 import MessageBubble from "../../components/Chat/MessageBubble";
 import { kindOf, messagePreview } from "../../utils/messageKinds";
@@ -171,6 +173,16 @@ const dedupeHistoryByMessageId = (history = []) => {
 };
 const isLocalOnlyMessage = (message) =>
   typeof message?.messageId === "string" && message.messageId.startsWith("local-");
+// The server's chat.recall-window, mirrored so the menu offers "Recall" only
+// while it can still succeed; the server has the final say (409 past it).
+const RECALL_WINDOW_MS = 2 * 60 * 1000;
+const canRecall = (message) =>
+  !!message &&
+  !message.recalled &&
+  !isLocalOnlyMessage(message) &&
+  Date.now() - getMessageDate(message).getTime() <= RECALL_WINDOW_MS;
+// Up to this many photos in one go, each its own message, in the order picked.
+const MAX_PHOTOS_PER_SEND = 9;
 const getVoiceUploadConfig = (audioUri) => {
   const cleanUri = String(audioUri || "").split("?")[0].split("#")[0];
   const extension = cleanUri.includes(".")
@@ -313,6 +325,11 @@ export default function ChatPage({ route }) {
     setConversationMuted,
     loadOlderMessages,
     ensureHistoryLoaded,
+    drafts,
+    draftsLoaded,
+    saveDraft,
+    readWatermarks,
+    loadReadWatermarks,
   } = useContext(ChatContext);
   const { language } = useContext(LanguageContext);
   const navigation = useNavigation();
@@ -381,6 +398,10 @@ export default function ChatPage({ route }) {
   // the message because ChatImage may be showing a local or cached file rather
   // than message.content, and the viewer should show exactly what the bubble did.
   const [imageViewer, setImageViewer] = useState({ visible: false, message: null, uri: null });
+  // The full emoji palette, opened from the "+" on the long-press menu.
+  const [emojiPicker, setEmojiPicker] = useState({ visible: false, message: null });
+  // Who has read one of your group messages, opened from its "read by n".
+  const [readersSheet, setReadersSheet] = useState({ visible: false, message: null });
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const webDesktopSidebarWidth = windowWidth > 1600 ? 600 : windowWidth > 1400 ? 400 : 300;
@@ -756,6 +777,80 @@ export default function ChatPage({ route }) {
       </Text>
     );
   }, [inputText]);
+
+  // Drafts: whatever is in the box when the chat is left comes back with it.
+  // Saved a moment after typing stops and once more on the way out — not while
+  // a message is being edited, when the box holds that message instead.
+  const inputTextRef = useRef(inputText);
+  inputTextRef.current = inputText;
+  const editingRef = useRef(!!editingMessage);
+  editingRef.current = !!editingMessage;
+  useEffect(() => {
+    if (!conversationId) return undefined;
+    if (draftsLoaded) setInputText(drafts[String(conversationId)] || "");
+    return () => {
+      if (!editingRef.current) saveDraft(conversationId, inputTextRef.current);
+    };
+    // Restores on open only; `drafts` changing underneath must not retype the box.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+  useEffect(() => {
+    // The stored drafts arrived after this chat opened (a cold start straight into it).
+    if (draftsLoaded && conversationId && !inputTextRef.current) {
+      const stored = drafts[String(conversationId)];
+      if (stored) setInputText(stored);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftsLoaded]);
+  useEffect(() => {
+    if (!conversationId || editingMessage) return undefined;
+    const timer = setTimeout(() => saveDraft(conversationId, inputText), 400);
+    return () => clearTimeout(timer);
+  }, [inputText, conversationId, editingMessage, saveDraft]);
+
+  // A group's read watermarks, once per open; READ_WATERMARK events move them after.
+  useEffect(() => {
+    if (conversationType !== "group" || !conversationId) return;
+    loadReadWatermarks(conversationId);
+  }, [conversationId, conversationType, loadReadWatermarks]);
+
+  // "Read by n" under your own group messages: the members whose watermark has
+  // passed the message, out of everyone but you. The church-wide group ships no
+  // roster, so its total comes from the member count the server sends instead.
+  const groupWatermarks =
+    conversationType === "group" ? readWatermarks[String(conversationId)] || null : null;
+  const otherMemberCount = participants.length
+    ? participants.length - 1
+    : Math.max(0, (conversation?.participantCount || 0) - 1);
+  const readReceiptFor = useCallback(
+    (message) => {
+      if (!groupWatermarks || !message || message.recalled || isLocalOnlyMessage(message)) return null;
+      if (String(message.senderId) !== String(currentUser?.id)) return null;
+      const id = Number(message.messageId);
+      if (!Number.isFinite(id)) return null;
+      let count = 0;
+      for (const [userId, mark] of Object.entries(groupWatermarks)) {
+        if (String(userId) !== String(currentUser?.id) && Number(mark) >= id) count += 1;
+      }
+      return { count, total: otherMemberCount };
+    },
+    [groupWatermarks, currentUser?.id, otherMemberCount]
+  );
+  const readersFor = (message) => {
+    const empty = { readers: [], unreaders: [], readCount: 0, total: 0, rosterHidden: false };
+    if (!message || !groupWatermarks) return empty;
+    const id = Number(message.messageId);
+    const others = participants.filter((p) => String(p.id) !== String(currentUser?.id));
+    const hasRead = (p) => Number(groupWatermarks[String(p.id)] || 0) >= id;
+    const receipt = readReceiptFor(message) || { count: 0, total: otherMemberCount };
+    return {
+      readers: others.filter(hasRead),
+      unreaders: others.filter((p) => !hasRead(p)),
+      readCount: receipt.count,
+      total: receipt.total,
+      rosterHidden: !!conversation?.appLevel,
+    };
+  };
 
   /**
    * The assistant, as a mention candidate — offered from the conversation rather
@@ -1438,13 +1533,27 @@ export default function ChatPage({ route }) {
     if (sendingTextLockRef.current || isSendingText) return;
 
     const trimmed = inputText.trim();
-    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const createdAt = new Date().toISOString();
     const mentions = resolveOutgoingMentions(trimmed);
     const quoted = replyingTo;
     // Composing a group notice: pin this message once the server has it.
     const pinAfterSend = noticeMode && isGroupAdmin;
     setNoticeMode(false);
+    setInputText("");
+    clearPendingMentions();
+    setReplyingTo(null);
+    await sendTextMessage(trimmed, { quoted, mentions, pinAfterSend });
+  };
+
+  /**
+   * Sends words: an optimistic bubble first, the server's copy in its place once
+   * it answers. The composer calls this and so does resendMessage, which is why
+   * the quote and the mentions come in as arguments rather than being read off
+   * the composer.
+   */
+  const sendTextMessage = async (trimmed, { quoted = null, mentions = {}, pinAfterSend = false } = {}) => {
+    if (!trimmed || !currentUser?.id || !conversationId || !conversationType) return;
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
 
     const optimisticMessage = {
       ...mentions,
@@ -1466,9 +1575,6 @@ export default function ChatPage({ route }) {
     };
 
     appendOptimisticMessage(optimisticMessage);
-    setInputText("");
-    clearPendingMentions();
-    setReplyingTo(null);
     setAckTimeout(localId);
 
     const chatMessage = {
@@ -1516,6 +1622,53 @@ export default function ChatPage({ route }) {
     }
   };
 
+  /**
+   * Sends a failed message again from what its bubble still holds — the words,
+   * the local photo or recording (skipping the upload if that part succeeded),
+   * the sticker or the event. The failed bubble goes and a fresh pending one
+   * takes its place, so a second failure is as visible as the first.
+   */
+  const resendMessage = async (message) => {
+    if (!message?.failed || !isLocalOnlyMessage(message)) return;
+    clearAckTimeout(message.localId || message.messageId);
+    updateConversationHistory((history) =>
+      history.filter((msg) => String(msg.messageId) !== String(message.messageId))
+    );
+    const quoted = message.replyTo ? { ...message.replyTo, messageId: message.replyToMessageId } : null;
+    switch (kindOf(message).bubble) {
+      case "text":
+        await sendTextMessage(String(message.content || ""), {
+          quoted,
+          mentions: {
+            mentionedUserIds: message.mentionedUserIds || [],
+            mentionsEveryone: !!message.mentionsEveryone,
+          },
+        });
+        return;
+      case "image":
+        await sendImageAsset(message.localPreviewUri || message.content, quoted, {
+          uploadedUrl: message.uploadedObjectKey || null,
+        });
+        return;
+      case "voice": {
+        const duration = Number(String(message.content || "").split("|")[1]) || 0;
+        await handleVoiceRecordingComplete(message.localAudioUri, duration, {
+          quoted,
+          uploadedUrl: message.uploadedObjectKey || null,
+        });
+        return;
+      }
+      case "sticker":
+        await sendSticker({ id: message.stickerId, emoji: message.content }, { quoted });
+        return;
+      case "event":
+        await shareEvent({ id: message.sharedEventId }, { fallbackText: message.content });
+        return;
+      default:
+        showAlert(i18n.t("error"), i18n.t("eventActionFailed"));
+    }
+  };
+
   const handleDeleteMessage = async (message) => {
     if (!message?.messageId) return;
 
@@ -1531,17 +1684,37 @@ export default function ChatPage({ route }) {
       return;
     }
 
+    // Recalled, not removed: the line stays as "you recalled a message" for
+    // everyone, so it turns into that here first and is put back if the server
+    // refuses — because the window has closed, or for any other reason.
     const snapshot = message;
-    updateConversationHistory((history) => history.filter((msg) => String(msg.messageId) !== String(message.messageId)));
+    const key = String(message.messageId);
+    updateConversationHistory((history) =>
+      history.map((msg) =>
+        String(msg.messageId) === key ? { ...msg, recalled: true, reactions: [], poll: null } : msg
+      )
+    );
 
     try {
-      await deleteMessageFromDatabase(message.messageId, conversationId, conversationType);
+      const recalled = await deleteMessageFromDatabase(message.messageId, conversationId, conversationType);
+      if (recalled?.messageId) {
+        updateConversationHistory((history) =>
+          history.map((msg) =>
+            String(msg.messageId) === key ? { ...msg, ...recalled, pending: false, failed: false } : msg
+          )
+        );
+      }
     } catch (error) {
-      updateConversationHistory((history) => [...history, snapshot].sort(sortByTimeAscending));
+      updateConversationHistory((history) =>
+        history.map((msg) => (String(msg.messageId) === key ? snapshot : msg))
+      );
       if (snapshotTranslation) {
         setTranslations((prev) => ({ ...prev, [messageIdKey]: snapshotTranslation }));
       }
-      showAlert("Error", "Could not delete message");
+      showAlert(
+        i18n.t("error"),
+        i18n.t(error?.status === 409 ? "recallWindowClosed" : "recallFailed")
+      );
     }
   };
 
@@ -1865,23 +2038,61 @@ export default function ChatPage({ route }) {
 
   // (chat image rendering lives in the module-level <ChatImage> component above)
 
-  const pickAndSendImage = async () => {
+  const pickAndSendImages = async () => {
     if (messagingBlocked) return;
     if (!currentUser?.id || !conversationId || !conversationType) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 1,
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_PHOTOS_PER_SEND,
+      orderedSelection: true,
     });
 
     if (result.canceled) return;
 
-    const imageUri = result.assets[0].uri;
-    const localId = `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const createdAt = new Date().toISOString();
-    // A photo sent while replying quotes the same message the words would have.
+    // Photos sent while replying: the first quotes the message the words would
+    // have, the rest follow it. One after another, so they land in the order picked.
     const quoted = replyingTo;
     setReplyingTo(null);
+    const uris = (result.assets || [])
+      .map((asset) => asset?.uri)
+      .filter(Boolean)
+      .slice(0, MAX_PHOTOS_PER_SEND);
+    for (let index = 0; index < uris.length; index += 1) {
+      await sendImageAsset(uris[index], index === 0 ? quoted : null);
+    }
+  };
+
+  const takeAndSendPhoto = async () => {
+    if (messagingBlocked) return;
+    if (!currentUser?.id || !conversationId || !conversationType) return;
+
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission?.granted) {
+      showAlert(i18n.t("error"), i18n.t("needCameraAccess"));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.85 });
+    if (result.canceled) return;
+
+    const uri = result.assets?.[0]?.uri;
+    if (!uri) return;
+    const quoted = replyingTo;
+    setReplyingTo(null);
+    await sendImageAsset(uri, quoted);
+  };
+
+  /**
+   * Sends one photo: an optimistic bubble showing the local file, the upload,
+   * then the message naming the uploaded object. `uploadedUrl` skips the upload
+   * when a resend already has one.
+   */
+  const sendImageAsset = async (imageUri, quoted = null, { uploadedUrl: alreadyUploaded = null } = {}) => {
+    if (!imageUri || !currentUser?.id || !conversationId || !conversationType) return;
+    const localId = `local-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
 
     appendOptimisticMessage({
       ...replyFieldsFor(quoted),
@@ -1904,11 +2115,13 @@ export default function ChatPage({ route }) {
 
     setAckTimeout(localId);
 
-    let uploadedUrl = null;
+    let uploadedUrl = alreadyUploaded;
     try {
-      const fileName = `chat_${Date.now()}.jpg`;
-      const uploadUrl = await getConversationUploadUrl(fileName, conversationId);
-      uploadedUrl = await uploadFileToOSS(imageUri, uploadUrl);
+      if (!uploadedUrl) {
+        const fileName = `chat_${Date.now()}.jpg`;
+        const uploadUrl = await getConversationUploadUrl(fileName, conversationId);
+        uploadedUrl = await uploadFileToOSS(imageUri, uploadUrl);
+      }
 
       updateConversationHistory((history) =>
         history.map((msg) =>
@@ -1946,8 +2159,11 @@ export default function ChatPage({ route }) {
           }
         }
       }
+      // The upload (if any) was cleaned up above, so a resend starts from the local file.
       updateConversationHistory((history) =>
-        history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
+        history.map((msg) =>
+          msg.localId === localId ? { ...msg, pending: false, failed: true, uploadedObjectKey: null } : msg
+        )
       );
       clearAckTimeout(localId);
       showAlert("Error", "Image failed to send");
@@ -1974,14 +2190,14 @@ export default function ChatPage({ route }) {
    * optimistic bubble matches the server's echo, and a server that predates
    * stickers still stores something every build can show.
    */
-  const sendSticker = async (sticker) => {
+  const sendSticker = async (sticker, options = {}) => {
     if (messagingBlocked || !sticker?.id) return;
     if (!currentUser?.id || !conversationId || !conversationType) return;
 
     const localId = `local-sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
     // A sticker sent while replying quotes the same message the words would have.
-    const quoted = replyingTo;
+    const quoted = options.quoted !== undefined ? options.quoted : replyingTo;
     setReplyingTo(null);
 
     appendOptimisticMessage({
@@ -2044,7 +2260,12 @@ export default function ChatPage({ route }) {
   // away first rather than opening it over a half-dismissed panel.
   const pickPhotoFromSheet = () => {
     setActionSheetVisible(false);
-    setTimeout(pickAndSendImage, 250);
+    setTimeout(pickAndSendImages, 250);
+  };
+
+  const takePhotoFromSheet = () => {
+    setActionSheetVisible(false);
+    setTimeout(takeAndSendPhoto, 250);
   };
 
   /**
@@ -2052,16 +2273,19 @@ export default function ChatPage({ route }) {
    * server will write, and the card fills in from the live event as soon as it
    * is on screen. The server checks the event exists and writes the body.
    */
-  const shareEvent = async (event) => {
+  const shareEvent = async (event, options = {}) => {
     setActionSheetVisible(false);
     if (messagingBlocked || !event?.id) return;
     if (!currentUser?.id || !conversationId || !conversationType) return;
 
     const localId = `local-event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const createdAt = new Date().toISOString();
-    const fallbackText = ["📅 " + (event.title || ""), [event.date, event.startTime].filter(Boolean).join(" "), event.location]
-      .filter(Boolean)
-      .join(" · ");
+    // A resend has only the stored line, which is what the server wrote anyway.
+    const fallbackText =
+      options.fallbackText ||
+      ["📅 " + (event.title || ""), [event.date, event.startTime].filter(Boolean).join(" "), event.location]
+        .filter(Boolean)
+        .join(" · ");
 
     appendOptimisticMessage({
       localId,
@@ -2111,7 +2335,8 @@ export default function ChatPage({ route }) {
     }
   };
 
-  const handleVoiceRecordingComplete = async (audioUri, duration) => {
+  // `options` is for resendMessage: the quote to keep, and the upload to reuse.
+  const handleVoiceRecordingComplete = async (audioUri, duration, options = {}) => {
     if (messagingBlocked) return;
     if (!currentUser?.id || !conversationId || !conversationType || !audioUri) return;
     if (sendingVoiceLockRef.current) return;
@@ -2122,7 +2347,7 @@ export default function ChatPage({ route }) {
     const parsedDuration = Number(duration);
     const durationInSeconds = Number.isFinite(parsedDuration) ? Math.max(0, Math.floor(parsedDuration)) : 0;
     const localVoiceContent = `${audioUri}|${durationInSeconds}`;
-    const quoted = replyingTo;
+    const quoted = options.quoted !== undefined ? options.quoted : replyingTo;
     setReplyingTo(null);
 
     appendOptimisticMessage({
@@ -2131,6 +2356,8 @@ export default function ChatPage({ route }) {
       clientMessageId: localId,
       messageId: localId,
       content: localVoiceContent,
+      // Kept so a failed recording can be sent again from the file on this device.
+      localAudioUri: audioUri,
       conversationId,
       conversationType,
       senderId: currentUser.id,
@@ -2145,18 +2372,20 @@ export default function ChatPage({ route }) {
 
     setAckTimeout(localId);
 
-    let uploadedUrl = null;
+    let uploadedUrl = options.uploadedUrl || null;
     try {
-      const { contentType: voiceContentType, fileExtension: voiceFileExtension } = getVoiceUploadConfig(audioUri);
-      const fileName = `voice_${conversationId}_${Date.now()}.${voiceFileExtension}`;
-      const uploadUrl = await getConversationUploadUrl(fileName, conversationId, voiceContentType);
-      uploadedUrl = await uploadFileToOSS(audioUri, uploadUrl, voiceContentType);
+      if (!uploadedUrl) {
+        const { contentType: voiceContentType, fileExtension: voiceFileExtension } = getVoiceUploadConfig(audioUri);
+        const fileName = `voice_${conversationId}_${Date.now()}.${voiceFileExtension}`;
+        const uploadUrl = await getConversationUploadUrl(fileName, conversationId, voiceContentType);
+        uploadedUrl = await uploadFileToOSS(audioUri, uploadUrl, voiceContentType);
+      }
       const voiceContent = `${uploadedUrl}|${durationInSeconds}`;
 
       updateConversationHistory((history) =>
         history.map((msg) =>
           msg.localId === localId
-            ? { ...msg, content: voiceContent }
+            ? { ...msg, content: voiceContent, uploadedObjectKey: uploadedUrl }
             : msg
         )
       );
@@ -2190,7 +2419,9 @@ export default function ChatPage({ route }) {
         }
       }
       updateConversationHistory((history) =>
-        history.map((msg) => (msg.localId === localId ? { ...msg, pending: false, failed: true } : msg))
+        history.map((msg) =>
+          msg.localId === localId ? { ...msg, pending: false, failed: true, uploadedObjectKey: null } : msg
+        )
       );
       clearAckTimeout(localId);
       showAlert("Error", `Voice message failed to send.\n${error?.message || "Unknown upload error."}`);
@@ -2215,7 +2446,7 @@ export default function ChatPage({ route }) {
   const contextMessageIdKey = String(contextMessage?.messageId || "");
   // Translations are keyed on the words without their *markers* (see requestTranslation).
   const contextSourceContent = stripInlineMarkup(contextMessage?.content).trim();
-  const contextCanCopy = contextKind.canCopy;
+  const contextCanCopy = contextKind.canCopy && !contextMessage?.recalled;
   const contextCanDownload = contextKind.canDownload;
   const contextTargetLanguage = resolveTargetTranslationLanguage(
     contextSourceContent,
@@ -2226,7 +2457,8 @@ export default function ChatPage({ route }) {
     isTranslationEnabled &&
     contextKind.canTranslate &&
     !!contextMessageIdKey &&
-    !!contextSourceContent;
+    !!contextSourceContent &&
+    !contextMessage?.recalled;
   const contextHasVisibleTranslation =
     contextCanTranslate &&
     contextTranslation?.visible &&
@@ -2239,6 +2471,7 @@ export default function ChatPage({ route }) {
     contextMessage.senderId !== currentUser?.id &&
     !contextMessage.pending &&
     !contextMessage.failed &&
+    !contextMessage.recalled &&
     !isLocalOnlyMessage(contextMessage);
   // Anything real can be answered — yours or theirs, words or media.
   const contextCanReply =
@@ -2246,9 +2479,16 @@ export default function ChatPage({ route }) {
     !messagingBlocked &&
     !contextMessage.pending &&
     !contextMessage.failed &&
+    !contextMessage.recalled &&
     !isLocalOnlyMessage(contextMessage);
   // Group admins pin any real message as the notice — except a "📌" line itself.
   const contextCanPin = contextCanReply && isGroupAdmin && contextKind.bubble !== "notice";
+  const contextIsOwn = !!contextMessage && contextMessage.senderId === currentUser?.id;
+  // Your own message, still inside the recall window.
+  const contextCanRecall = contextIsOwn && !contextMessage?.pending && canRecall(contextMessage);
+  // A message that never left this device: it can be sent again, or dropped.
+  const contextIsLocalFailed =
+    contextIsOwn && !!contextMessage?.failed && isLocalOnlyMessage(contextMessage);
 
   // Actions offered along the bottom of the full-screen photo. Same operations the
   // context menu exposes for an image, minus edit and translate, which are text-only.
@@ -2294,18 +2534,22 @@ export default function ChatPage({ route }) {
       },
     });
 
-    if (isOwn && !target.pending) {
+    // Recall while the server still allows it; a photo that never left this
+    // device is simply removed.
+    const localFailed = isOwn && !!target.failed && isLocalOnlyMessage(target);
+    if ((isOwn && !target.pending && canRecall(target)) || localFailed) {
+      const recalling = !localFailed;
       items.push({
         key: "delete",
-        icon: "trash-outline",
-        label: i18n.t("delete"),
+        icon: recalling ? "arrow-undo-outline" : "trash-outline",
+        label: i18n.t(recalling ? "recallMessage" : "delete"),
         destructive: true,
         onPress: async () => {
           closeImageViewer();
           const confirmed = await confirmAction({
-            title: i18n.t("delete"),
-            message: i18n.t("areYouSure"),
-            confirmText: i18n.t("delete"),
+            title: i18n.t(recalling ? "recallMessage" : "delete"),
+            message: i18n.t(recalling ? "recallConfirm" : "areYouSure"),
+            confirmText: i18n.t(recalling ? "recallMessage" : "delete"),
             cancelText: i18n.t("cancel"),
             destructive: true,
           });
@@ -2813,6 +3057,7 @@ export default function ChatPage({ route }) {
         visible={actionSheetVisible}
         onClose={() => setActionSheetVisible(false)}
         onPickPhoto={pickPhotoFromSheet}
+        onTakePhoto={takePhotoFromSheet}
         onShareEvent={shareEvent}
         canPostNotice={isGroupAdmin}
         onComposeNotice={beginNotice}
@@ -2899,6 +3144,9 @@ export default function ChatPage({ route }) {
               onQuotePress={scrollToMessage}
               onToggleReaction={messagingBlocked ? undefined : handleToggleReaction}
               onShowReactors={showReactors}
+              onResend={resendMessage}
+              readReceipt={readReceiptFor(item)}
+              onShowReaders={(message) => setReadersSheet({ visible: true, message })}
               onVote={messagingBlocked ? undefined : handleVote}
               onSignUp={messagingBlocked ? undefined : handleSignUp}
               onLeaveSignUp={messagingBlocked ? undefined : handleLeaveSignUp}
@@ -2926,11 +3174,11 @@ export default function ChatPage({ route }) {
               })
             }
           >
-            {/* The fixed emoji set, across the top of the menu. A lit one is
-                already yours; pressing it again withdraws it. */}
+            {/* The quick emojis across the top of the menu, and "+" for the whole
+                palette. A lit one is already yours; pressing it again withdraws it. */}
             {contextCanReply && (
               <View style={styles.reactionPicker}>
-                {REACTION_EMOJIS.map(({ key, display }) => {
+                {QUICK_REACTIONS.map((key) => {
                   const mine = (contextMessage?.reactions || []).some(
                     (tally) => tally?.emoji === key && tally?.mine
                   );
@@ -2940,13 +3188,25 @@ export default function ChatPage({ route }) {
                       onPress={() => handleToggleReaction(contextMessage, key, !mine)}
                       style={[styles.reactionPickerItem, mine && styles.reactionPickerItemMine]}
                       accessibilityRole="button"
-                      accessibilityLabel={display}
+                      accessibilityLabel={displayEmoji(key)}
                       accessibilityState={{ selected: mine }}
                     >
-                      <Text style={styles.reactionPickerEmoji}>{display}</Text>
+                      <Text style={styles.reactionPickerEmoji}>{displayEmoji(key)}</Text>
                     </Pressable>
                   );
                 })}
+                <Pressable
+                  onPress={() => {
+                    const selected = contextMessage;
+                    closeContextMenu();
+                    setEmojiPicker({ visible: true, message: selected });
+                  }}
+                  style={styles.reactionPickerItem}
+                  accessibilityRole="button"
+                  accessibilityLabel={i18n.t("moreReactions")}
+                >
+                  <Ionicons name="add-circle-outline" size={26} color="#8E8E93" />
+                </Pressable>
               </View>
             )}
 
@@ -3039,6 +3299,7 @@ export default function ChatPage({ route }) {
             {contextMenu.message?.senderId === currentUser?.id &&
               contextKind.canEdit &&
               !contextMenu.message?.pending &&
+              !contextMenu.message?.recalled &&
               !isLocalOnlyMessage(contextMenu.message) && (
                 <TouchableOpacity
                   style={styles.contextMenuItem}
@@ -3049,34 +3310,45 @@ export default function ChatPage({ route }) {
                 </TouchableOpacity>
               )}
 
-            {contextMenu.message?.senderId === currentUser?.id &&
-              !contextMenu.message?.pending && (
-                <TouchableOpacity
-                  style={styles.contextMenuItem}
-                  onPress={async () => {
-                    const selected = contextMenu.message;
-                    closeContextMenu();
-                    const confirmed = await confirmAction({
-                      title: i18n.t("delete"),
-                      message: i18n.t("areYouSure"),
-                      confirmText: i18n.t("delete"),
-                      cancelText: i18n.t("cancel"),
-                      destructive: true,
-                    });
-                    if (!confirmed) return;
-                    await handleDeleteMessage(selected);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.contextMenuItemText,
-                      styles.contextMenuDangerText,
-                    ]}
-                  >
-                    {i18n.t("delete")}
-                  </Text>
-                </TouchableOpacity>
-              )}
+            {contextIsLocalFailed && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => {
+                  const selected = contextMenu.message;
+                  closeContextMenu();
+                  resendMessage(selected);
+                }}
+              >
+                <Text style={styles.contextMenuItemText}>{i18n.t("resend")}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Your own message: "Recall" while the server still allows it (it
+                becomes a placeholder for everyone); a failed one is simply
+                removed from this device, since nobody else ever saw it. */}
+            {(contextCanRecall || contextIsLocalFailed) && (
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={async () => {
+                  const selected = contextMenu.message;
+                  const recalling = canRecall(selected);
+                  closeContextMenu();
+                  const confirmed = await confirmAction({
+                    title: i18n.t(recalling ? "recallMessage" : "delete"),
+                    message: i18n.t(recalling ? "recallConfirm" : "areYouSure"),
+                    confirmText: i18n.t(recalling ? "recallMessage" : "delete"),
+                    cancelText: i18n.t("cancel"),
+                    destructive: true,
+                  });
+                  if (!confirmed) return;
+                  await handleDeleteMessage(selected);
+                }}
+              >
+                <Text style={[styles.contextMenuItemText, styles.contextMenuDangerText]}>
+                  {i18n.t(contextCanRecall ? "recallMessage" : "delete")}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {contextCanReport && (
               <TouchableOpacity
@@ -3100,6 +3372,23 @@ export default function ChatPage({ route }) {
           </View>
         </View>
       </Modal>
+
+      <EmojiPickerSheet
+        visible={emojiPicker.visible}
+        selected={(emojiPicker.message?.reactions || []).filter((tally) => tally?.mine).map((tally) => tally.emoji)}
+        onClose={() => setEmojiPicker({ visible: false, message: null })}
+        onPick={(emoji, on) => {
+          const target = emojiPicker.message;
+          setEmojiPicker({ visible: false, message: null });
+          if (target) handleToggleReaction(target, emoji, on);
+        }}
+      />
+
+      <ReadersSheet
+        visible={readersSheet.visible}
+        onClose={() => setReadersSheet({ visible: false, message: null })}
+        {...readersFor(readersSheet.message)}
+      />
 
       <ImageViewer
         visible={imageViewer.visible}
