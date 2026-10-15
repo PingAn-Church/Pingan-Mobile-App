@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -43,11 +44,8 @@ import com.fyp.backend.repository.UserRepository;
 @Service
 public class MessageReactionService {
 
-    /**
-     * Canonical forms (no U+FE0F variation selector), in display order. The
-     * client shows the presentation form; see {@link #canonical}.
-     */
-    public static final List<String> ALLOWED = List.of("🙏", "❤", "👍");
+    /** Most code points a single emoji may run to; the family and flag sequences stay well inside it. */
+    private static final int MAX_EMOJI_CODE_POINTS = 8;
 
     /** Cap on the "who reacted" list; past this the number is the answer. */
     static final int MAX_REACTORS = 200;
@@ -83,6 +81,64 @@ public class MessageReactionService {
     }
 
     /**
+     * Whether the text is exactly one emoji: a pictograph with whatever skin tone,
+     * gender or joined sequence it carries (👍, 🙏🏽, 👨‍👩‍👧), a flag (🇨🇳) or a
+     * keycap (1️⃣). Letters, words, a bare digit and two emojis side by side are
+     * not. Java 21's emoji properties do the character-level work.
+     */
+    public static boolean isSingleEmoji(String emoji) {
+        if (emoji == null || emoji.isEmpty()) {
+            return false;
+        }
+        int[] codePoints = emoji.codePoints().toArray();
+        if (codePoints.length > MAX_EMOJI_CODE_POINTS) {
+            return false;
+        }
+        int pictographs = 0;
+        int digits = 0;
+        int regionalIndicators = 0;
+        boolean keycap = false;
+        boolean joined = false;
+        for (int cp : codePoints) {
+            if (cp == 0x200D) { // zero-width joiner: the next pictograph belongs to this one
+                joined = true;
+                continue;
+            }
+            if (cp == 0xFE0F || cp == 0xFE0E || Character.isEmojiModifier(cp)
+                    || (cp >= 0xE0020 && cp <= 0xE007F)) { // presentation selectors, skin tones, flag tags
+                continue;
+            }
+            if (cp == 0x20E3) { // combining enclosing keycap
+                keycap = true;
+                continue;
+            }
+            if (cp >= 0x1F1E6 && cp <= 0x1F1FF) { // regional indicators: two make a flag
+                regionalIndicators++;
+                continue;
+            }
+            if (cp == '#' || cp == '*' || (cp >= '0' && cp <= '9')) { // only an emoji under a keycap
+                digits++;
+                continue;
+            }
+            if (Character.isExtendedPictographic(cp) || Character.isEmojiPresentation(cp)) {
+                if (!joined) {
+                    pictographs++;
+                }
+                joined = false;
+                continue;
+            }
+            return false; // a letter, a space, punctuation: not an emoji at all
+        }
+        if (digits > 0) {
+            return digits == 1 && keycap && pictographs == 0 && regionalIndicators == 0;
+        }
+        if (regionalIndicators > 0) {
+            return regionalIndicators == 2 && pictographs == 0;
+        }
+        return pictographs == 1;
+    }
+
+    /**
      * Adds ({@code on}) or removes the viewer's reaction, idempotently, and
      * re-broadcasts the message with its tallies once the change commits.
      *
@@ -91,8 +147,8 @@ public class MessageReactionService {
     @Transactional
     public MessageDto toggle(Long messageId, Long userId, String rawEmoji, boolean on) {
         String emoji = canonical(rawEmoji);
-        if (!ALLOWED.contains(emoji)) {
-            throw new IllegalArgumentException("That reaction is not available.");
+        if (!isSingleEmoji(emoji)) {
+            throw new IllegalArgumentException("A reaction is a single emoji.");
         }
         Message message = messageRepository.findById(messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
@@ -148,8 +204,9 @@ public class MessageReactionService {
 
     /**
      * Tallies for a page of messages in two grouped queries, keyed by message id.
-     * Emojis come out in {@link #ALLOWED} order. Messages nobody reacted to are
-     * absent; callers default to an empty list.
+     * Emojis come out in the order they first appeared on the message, so a tally
+     * keeps its place as later ones join. Messages nobody reacted to are absent;
+     * callers default to an empty list.
      *
      * @param viewerId whose {@code mine} to fill in, or null for a broadcast
      */
@@ -157,10 +214,12 @@ public class MessageReactionService {
         if (messageIds == null || messageIds.isEmpty()) {
             return Map.of();
         }
-        Map<Long, Map<String, Long>> counts = new HashMap<>();
+        // message id → emoji → [count, id of the first reaction], in first-seen order
+        Map<Long, Map<String, long[]>> counts = new HashMap<>();
         for (Object[] row : reactionRepository.countByMessageIds(messageIds)) {
-            counts.computeIfAbsent((Long) row[0], ignored -> new HashMap<>())
-                    .put((String) row[1], ((Number) row[2]).longValue());
+            counts.computeIfAbsent((Long) row[0], ignored -> new LinkedHashMap<>())
+                    .put((String) row[1], new long[] {
+                            ((Number) row[2]).longValue(), ((Number) row[3]).longValue() });
         }
         Set<String> mine = new HashSet<>();
         if (viewerId != null) {
@@ -170,14 +229,16 @@ public class MessageReactionService {
         }
 
         Map<Long, List<ReactionSummaryDto>> result = new LinkedHashMap<>();
-        for (Map.Entry<Long, Map<String, Long>> entry : counts.entrySet()) {
+        for (Map.Entry<Long, Map<String, long[]>> entry : counts.entrySet()) {
             List<ReactionSummaryDto> tallies = new ArrayList<>();
-            for (String emoji : ALLOWED) {
-                Long count = entry.getValue().get(emoji);
-                if (count == null || count == 0) continue;
-                Boolean isMine = viewerId == null ? null : mine.contains(entry.getKey() + ":" + emoji);
-                tallies.add(new ReactionSummaryDto(emoji, count, isMine));
-            }
+            entry.getValue().entrySet().stream()
+                    .filter(tally -> tally.getValue()[0] > 0)
+                    .sorted(Comparator.comparingLong(tally -> tally.getValue()[1]))
+                    .forEach(tally -> {
+                        String emoji = tally.getKey();
+                        Boolean isMine = viewerId == null ? null : mine.contains(entry.getKey() + ":" + emoji);
+                        tallies.add(new ReactionSummaryDto(emoji, tally.getValue()[0], isMine));
+                    });
             if (!tallies.isEmpty()) {
                 result.put(entry.getKey(), tallies);
             }

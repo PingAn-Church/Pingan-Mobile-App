@@ -1,6 +1,7 @@
 package com.fyp.backend.repository;
 
 import java.util.Optional;
+import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -15,6 +16,9 @@ public interface ConversationReadStateRepository extends JpaRepository<Conversat
         ConversationReadStateRepositoryCustom {
 
     Optional<ConversationReadState> findByConversationIdAndUserId(Long conversationId, Long userId);
+
+    /** Every member's watermark in one conversation — who has read up to where. */
+    List<ConversationReadState> findByConversationId(Long conversationId);
 
     long countByUserId(Long userId);
 

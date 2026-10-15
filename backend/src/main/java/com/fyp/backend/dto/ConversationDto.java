@@ -55,6 +55,10 @@ public class ConversationDto {
     // Whether the logged-in user muted this conversation. Ships with the list so the
     // app can total up unread across conversations without a mute call per row.
     private boolean muted = false;
+    // Whether the logged-in user pinned this conversation to the top of their list,
+    // and when (epoch millis) — the most recently pinned sits highest. Additive.
+    private boolean pinned = false;
+    private Long pinnedAt;
     // True when something unread in here calls this user out by name. Drives the
     // orange [@] on the row: a mention is worth spotting even in a busy or muted
     // conversation, where the plain unread count says nothing about urgency.

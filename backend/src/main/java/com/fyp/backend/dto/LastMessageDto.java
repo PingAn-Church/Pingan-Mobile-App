@@ -33,6 +33,8 @@ public class LastMessageDto {
     private String content;
     private String timestamp;
     private boolean reported = false;
+    // The newest message was taken back; the row previews "X recalled a message".
+    private boolean recalled = false;
     private Map<String, String> deliveryStatus = Map.of();
 
     /**
@@ -54,6 +56,7 @@ public class LastMessageDto {
         this.type = message.getType();
         this.timestamp = message.getTimestamp().toString();
         this.reported = Boolean.TRUE.equals(message.getReported());
+        this.recalled = message.getRecalledAt() != null;
 
         boolean canViewReportedContent = viewer == null
                 || !this.reported

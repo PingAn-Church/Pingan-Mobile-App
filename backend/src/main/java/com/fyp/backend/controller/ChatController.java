@@ -10,6 +10,7 @@ import com.fyp.backend.model.MessageKind;
 import com.fyp.backend.service.AppGroupChatService;
 import com.fyp.backend.service.ChatService;
 import com.fyp.backend.service.ConversationMuteService;
+import com.fyp.backend.service.ConversationPinService;
 import com.fyp.backend.service.ConversationService;
 import com.fyp.backend.service.MessageReactionService;
 import com.fyp.backend.service.PollService;
@@ -40,6 +41,7 @@ public class ChatController {
     private final UserService userService;
     private final JwtUtil jwtUtil;
     private final ConversationMuteService conversationMuteService;
+    private final ConversationPinService conversationPinService;
     private final AppGroupChatService appGroupChatService;
     private final MessageReactionService messageReactionService;
     private final PollService pollService;
@@ -47,6 +49,7 @@ public class ChatController {
     @Autowired
     public ChatController(ConversationService conversationService, ChatService chatService, JwtUtil jwtUtil,
                           UserService userService, ConversationMuteService conversationMuteService,
+                          ConversationPinService conversationPinService,
                           AppGroupChatService appGroupChatService,
                           MessageReactionService messageReactionService,
                           PollService pollService) {
@@ -55,6 +58,7 @@ public class ChatController {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.conversationMuteService = conversationMuteService;
+        this.conversationPinService = conversationPinService;
         this.appGroupChatService = appGroupChatService;
         this.messageReactionService = messageReactionService;
         this.pollService = pollService;
@@ -306,6 +310,54 @@ public class ChatController {
         }
     }
 
+    // Per-conversation "pin to top" of the logged-in user's own chat list.
+    @GetMapping("/pin")
+    public ResponseEntity<?> getPinStatus(@RequestParam Long conversationId,
+                                          @RequestParam String conversationType,
+                                          HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        return ResponseEntity.ok(Map.of(
+                "pinned", conversationPinService.isPinned(userId, conversationId, conversationType)));
+    }
+
+    @PutMapping("/pin")
+    public ResponseEntity<?> setPinStatus(@RequestParam Long conversationId,
+                                          @RequestParam String conversationType,
+                                          @RequestParam boolean pinned,
+                                          HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            conversationPinService.setPinned(userId, conversationId, conversationType, pinned);
+            return ResponseEntity.ok(Map.of("pinned", pinned));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    /**
+     * Who in a group has read up to where: member id → id of the last message they
+     * have read. Opening a group fetches this once; READ_WATERMARK events on the
+     * group's reads topic keep it current. Participants only.
+     */
+    @GetMapping("/groups/{conversationId}/read-watermarks")
+    public ResponseEntity<?> groupReadWatermarks(@PathVariable Long conversationId, HttpServletRequest request) {
+        Long userId = userService.getUserIdFromToken(request.getHeader("Authorization"));
+        if (userId == null) {
+            return ResponseEntity.status(403).body("Unauthorized access");
+        }
+        try {
+            return ResponseEntity.ok(Map.of("watermarks", chatService.groupReadWatermarks(conversationId, userId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     /**
      * Adds (on=true) or withdraws the caller's emoji on a message. Answers the
      * message as the caller now sees it, tallies included; everyone else in the
@@ -545,9 +597,15 @@ public class ChatController {
             return ResponseEntity.status(403).body(null);
         }
 
-        // ✅ Delete message from DB and broadcast the deletion
-        MessageDto deletedMessageDto = chatService.deleteMessageAndBroadcast(messageId);
-        return ResponseEntity.ok(deletedMessageDto);
+        // Takes the message back for everyone (ChatService.recallMessageAndBroadcast).
+        // Still answered at /deleteMessage: builds that call it to "delete" drop the
+        // message locally and ignore the body, so they keep working unchanged.
+        try {
+            return ResponseEntity.ok(chatService.recallMessageAndBroadcast(messageId));
+        } catch (IllegalStateException e) {
+            // The recall window has closed; nothing changed.
+            return ResponseEntity.status(409).body(null);
+        }
     }
 
     @PutMapping("/editMessage")

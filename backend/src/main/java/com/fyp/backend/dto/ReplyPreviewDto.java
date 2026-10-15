@@ -36,6 +36,8 @@ public class ReplyPreviewDto {
     private String content;
     /** True when the original is reported and this viewer may not see its words. */
     private boolean hidden;
+    /** True when the original was recalled; the excerpt is then only its placeholder body. */
+    private boolean recalled;
 
     /**
      * @param viewer who is reading, or null for a broadcast that reaches everyone
@@ -54,6 +56,7 @@ public class ReplyPreviewDto {
         dto.senderBot = author != null && author.isBot();
         dto.senderDisplayNameZh = dto.senderBot ? author.getDisplayNameZh() : null;
         dto.type = quoted.getType();
+        dto.recalled = quoted.getRecalledAt() != null;
 
         boolean reported = Boolean.TRUE.equals(quoted.getReported());
         boolean mayRead = !reported

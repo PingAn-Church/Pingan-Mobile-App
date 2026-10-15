@@ -1,9 +1,14 @@
 package com.fyp.backend.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import com.fyp.backend.model.ConversationReadState;
 import com.fyp.backend.repository.ConversationReadStateRepository;
 import com.fyp.backend.repository.MessageRepository;
 
@@ -57,6 +63,24 @@ class ConversationReadStateServiceTest {
         conversationReadStateService.markRead(7L, 3L);
 
         verify(readStateRepository).advanceWatermark(7L, 3L, 40L);
+    }
+
+    @Test
+    void theMoveIsReportedOnlyWhenTheWatermarkActuallyAdvances() {
+        when(messageRepository.findNewestMessageId(7L)).thenReturn(120L);
+        ConversationReadState behind = new ConversationReadState();
+        behind.setConversationId(7L);
+        behind.setUserId(3L);
+        behind.setLastReadMessageId(100L);
+        when(readStateRepository.findByConversationIdAndUserId(7L, 3L)).thenReturn(Optional.of(behind));
+
+        assertEquals(120L, conversationReadStateService.markRead(7L, 3L));
+        verify(readStateRepository).advanceWatermark(7L, 3L, 120L);
+
+        // Already at the newest message: nothing moves and nothing is announced.
+        behind.setLastReadMessageId(120L);
+        assertNull(conversationReadStateService.markRead(7L, 3L));
+        verify(readStateRepository, times(1)).advanceWatermark(any(), any(), any());
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.fyp.backend.dto.MessageDto;
 import com.fyp.backend.dto.PollDto;
 import com.fyp.backend.dto.ReactionSummaryDto;
 import com.fyp.backend.dto.ReplyPreviewDto;
+import com.fyp.backend.config.app.ChatProperties;
 import com.fyp.backend.exception.ContentUnderReviewException;
 import com.fyp.backend.model.*;
 import com.fyp.backend.mq.FanoutPublisher;
@@ -23,6 +24,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -54,6 +57,7 @@ public class ChatService {
     private final EventRepository eventRepository;
     private final MessageReactionService reactionService;
     private final PollService pollService;
+    private final ChatProperties chatProperties;
 
     @Autowired
     public ChatService(MessageRepository messageRepository,
@@ -70,7 +74,8 @@ public class ChatService {
                        AssistantAccountService assistantAccountService,
                        EventRepository eventRepository,
                        MessageReactionService reactionService,
-                       PollService pollService) {
+                       PollService pollService,
+                       ChatProperties chatProperties) {
         this.messageRepository = messageRepository;
         this.groupConversationRepository = groupConversationRepository;
         this.privateConversationRepository = privateConversationRepository;
@@ -87,6 +92,7 @@ public class ChatService {
         this.eventRepository = eventRepository;
         this.reactionService = reactionService;
         this.pollService = pollService;
+        this.chatProperties = chatProperties;
     }
 
     private Conversation getConversationByTypeAndId(Long conversationId, String conversationType) {
@@ -826,13 +832,40 @@ public class ChatService {
         Conversation conversation = getConversationByTypeAndId(conversationId, conversationType);
         checkUserIsParticipant(conversation, userId);
 
-        conversationReadStateService.markRead(conversationId, userId);
+        Long watermark = conversationReadStateService.markRead(conversationId, userId);
 
         if (conversation instanceof PrivateConversation) {
             messageDeliveryStatusRepository.markConversationRead(conversationId, userId);
+        } else if (watermark != null) {
+            // The group hears that this person has read up to here, so the
+            // "read by n" under a sender's bubble moves while they watch. One
+            // small event per read, on the reads topic (see ChatDestinations).
+            Map<String, Object> event = new LinkedHashMap<>();
+            event.put("eventType", "READ_WATERMARK");
+            event.put("conversationId", conversationId);
+            event.put("userId", userId);
+            event.put("lastReadMessageId", watermark);
+            String destination = ChatDestinations.readsTopic(conversationId);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    messagingTemplate.convertAndSend(destination, event);
+                }
+            });
         }
 
         return messageRepository.countUnread(conversationId, userId);
+    }
+
+    /**
+     * Who in a group has read up to where: member id → id of the last message
+     * they have read, for every member with a watermark. A sender's bubble counts
+     * the members past its message from this; READ_WATERMARK events keep it live.
+     */
+    public Map<String, Long> groupReadWatermarks(Long conversationId, Long userId) {
+        Conversation conversation = getConversationByTypeAndId(conversationId, "group");
+        checkUserIsParticipant(conversation, userId);
+        return conversationReadStateService.watermarks(conversationId);
     }
 
 
@@ -923,6 +956,79 @@ public class ChatService {
         return deletedMessageDto;
     }
 
+    /** The body a recalled message keeps, readable by builds that know nothing of recalls. */
+    public static final String RECALLED_BODY = "[消息已撤回 / Message recalled]";
+
+    /**
+     * Takes a message back for everyone, the way WeChat's 撤回 does: within the
+     * recall window (ChatProperties) the sender's message turns into a placeholder
+     * that says so. Admin removal of reported content is the other path,
+     * {@link #deleteMessageAndBroadcast}, which really deletes and has no window.
+     *
+     * The row stays — replies that quote it keep their anchor, and the placeholder
+     * line needs somewhere to hang — but everything that made it the message goes:
+     * the body becomes {@link #RECALLED_BODY} as a text body (so a build that knows
+     * nothing of recalls draws one plain line instead of a broken photo), the
+     * sticker, event, mentions and quote are cleared, its reactions and poll are
+     * deleted, and a photo or recording leaves storage once this commits. Everyone
+     * in the conversation gets the placeholder over the socket carrying
+     * {@code recalled} rather than {@code deleted}, so an old build merges it in
+     * place like an edit.
+     *
+     * @throws IllegalStateException when the window has closed; nothing changes
+     */
+    @Transactional
+    public MessageDto recallMessageAndBroadcast(Long messageId) {
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        if (message.getRecalledAt() != null) {
+            return new MessageDto(message); // already taken back; nothing to do twice
+        }
+        Duration age = Duration.between(message.getTimestamp().toLocalDateTime(), LocalDateTime.now());
+        if (age.compareTo(chatProperties.getRecallWindow()) > 0) {
+            throw new IllegalStateException("This message can no longer be recalled.");
+        }
+
+        boolean hasManagedMedia = MessageKind.of(message.getType()).hasMediaBody();
+        String mediaContent = message.getContent();
+        int metadataSeparator = mediaContent == null ? -1 : mediaContent.indexOf('|');
+        String mediaUrl = metadataSeparator >= 0
+                ? mediaContent.substring(0, metadataSeparator)
+                : mediaContent;
+
+        reactionService.removeAllFor(messageId);
+        pollService.removeForMessage(messageId);
+        // Both bulk deletes clear the persistence context (see PollService), so the
+        // message is read again before it is changed and saved.
+        message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        message.setRecalledAt(new Timestamp(System.currentTimeMillis()));
+        message.setContent(RECALLED_BODY);
+        message.setType(MessageKind.TEXT.type());
+        message.setStickerId(null);
+        message.setSharedEventId(null);
+        message.setMentionedUserIds(new HashSet<>());
+        message.setMentionsEveryone(false);
+        message.setReplyTo(null);
+        Message saved = messageRepository.save(message);
+
+        MessageDto recalledDto = new MessageDto(saved);
+        List<String> destinations = getDestination(saved.getConversationType(), recalledDto);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                for (String destination : destinations) {
+                    messagingTemplate.convertAndSend(destination, recalledDto);
+                }
+            }
+        });
+        if (hasManagedMedia && mediaUrl != null && !mediaUrl.isBlank()) {
+            ossCleanupService.deleteAfterCommit(mediaUrl);
+        }
+        return recalledDto;
+    }
+
+    /** Removes a message outright — admin moderation of reported content; no window, no placeholder. */
     @Transactional
     public MessageDto deleteMessageAndBroadcast(Long messageId) {
         Message message = messageRepository.findById(messageId)

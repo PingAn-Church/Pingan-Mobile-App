@@ -1,8 +1,12 @@
 package com.fyp.backend.service;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fyp.backend.model.ConversationReadState;
 import com.fyp.backend.repository.ConversationReadStateRepository;
 import com.fyp.backend.repository.MessageRepository;
 
@@ -13,7 +17,8 @@ import lombok.RequiredArgsConstructor;
  *
  * One number per person per conversation answers "what is unread here", so the
  * chat list costs a range count instead of a per-message existence check against
- * a table with a row for every member of every group.
+ * a table with a row for every member of every group. The same numbers answer
+ * "who has read this" in a group: everyone whose watermark has passed the message.
  */
 @Service
 @RequiredArgsConstructor
@@ -22,11 +27,24 @@ public class ConversationReadStateService {
     private final ConversationReadStateRepository readStateRepository;
     private final MessageRepository messageRepository;
 
-    /** Marks everything currently in the conversation as read for this person. */
+    /**
+     * Marks everything currently in the conversation as read for this person.
+     *
+     * @return the watermark now in place when this call moved it, or null when
+     *         there was nothing to move — an empty conversation, or a position
+     *         already read. Callers announce a move; staying put is silent.
+     */
     @Transactional
-    public void markRead(Long conversationId, Long userId) {
-        if (conversationId == null || userId == null) return;
-        setWatermark(conversationId, userId, messageRepository.findNewestMessageId(conversationId));
+    public Long markRead(Long conversationId, Long userId) {
+        if (conversationId == null || userId == null) return null;
+        Long newest = messageRepository.findNewestMessageId(conversationId);
+        if (newest == null) return null;
+        Long current = readStateRepository.findByConversationIdAndUserId(conversationId, userId)
+                .map(ConversationReadState::getLastReadMessageId)
+                .orElse(null);
+        if (current != null && current >= newest) return null;
+        readStateRepository.advanceWatermark(conversationId, userId, newest);
+        return newest;
     }
 
     /**
@@ -41,9 +59,19 @@ public class ConversationReadStateService {
         markRead(conversationId, userId);
     }
 
-    private void setWatermark(Long conversationId, Long userId, Long messageId) {
-        if (messageId == null) return;
-        readStateRepository.advanceWatermark(conversationId, userId, messageId);
+    /**
+     * Every member's watermark in a conversation: user id (as a string, for JSON)
+     * → id of the last message they have read. Members who never opened it are
+     * absent, which reads the same as "nothing read".
+     */
+    public Map<String, Long> watermarks(Long conversationId) {
+        Map<String, Long> watermarks = new HashMap<>();
+        for (ConversationReadState state : readStateRepository.findByConversationId(conversationId)) {
+            if (state.getLastReadMessageId() != null) {
+                watermarks.put(String.valueOf(state.getUserId()), state.getLastReadMessageId());
+            }
+        }
+        return watermarks;
     }
 
     @Transactional

@@ -15,6 +15,15 @@ public final class ChatDestinations {
     private ChatDestinations() {
     }
 
+    /**
+     * Where a group's read-watermark events go: beside the conversation topic,
+     * not on it. Builds that predate these events treat anything on the
+     * conversation topic as a message, so they must never hear one.
+     */
+    public static String readsTopic(Long conversationId) {
+        return "/topic/conversation-" + conversationId + "-reads";
+    }
+
     public static List<String> forMessage(String conversationType, MessageDto message) {
         List<String> destinations = new ArrayList<>();
 

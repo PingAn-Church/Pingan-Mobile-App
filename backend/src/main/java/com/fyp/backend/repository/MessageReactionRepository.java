@@ -19,11 +19,13 @@ public interface MessageReactionRepository extends JpaRepository<MessageReaction
     Optional<MessageReaction> findByMessageIdAndUserIdAndEmoji(Long messageId, Long userId, String emoji);
 
     /**
-     * Counts for a page of messages, as [messageId, emoji, count] rows. Aggregated
-     * in the database: a popular message in the app-level group can carry a few
-     * hundred 🙏, and a history page must not haul every one of them down.
+     * Counts for a page of messages, as [messageId, emoji, count, firstReactionId]
+     * rows. Aggregated in the database: a popular message in the app-level group
+     * can carry a few hundred 🙏, and a history page must not haul every one of
+     * them down. The lowest reaction id says which emoji arrived first, which is
+     * the order the tallies are drawn in.
      */
-    @Query("SELECT r.messageId, r.emoji, COUNT(r) FROM MessageReaction r "
+    @Query("SELECT r.messageId, r.emoji, COUNT(r), MIN(r.id) FROM MessageReaction r "
             + "WHERE r.messageId IN :messageIds GROUP BY r.messageId, r.emoji")
     List<Object[]> countByMessageIds(@Param("messageIds") Collection<Long> messageIds);
 

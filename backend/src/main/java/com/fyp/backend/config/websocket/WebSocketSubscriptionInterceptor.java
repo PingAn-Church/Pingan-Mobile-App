@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
  *  - /user/queue/status                     (global presence broadcast, by design)
  *  - /user/{ownUserId}/queue/*              (own per-user queues only)
  *  - /topic/conversation-{id}               (participants only)
+ *  - /topic/conversation-{id}-reads         (the group's read-watermark events; participants only)
  * Everything but the first also requires a verified account. Everything else is
  * dropped.
  */
@@ -38,7 +39,7 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
     private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketSubscriptionInterceptor.class);
 
     private static final Pattern USER_QUEUE = Pattern.compile("^/user/(\\d+)/queue/[\\w-]+$");
-    private static final Pattern CONVERSATION_TOPIC = Pattern.compile("^/topic/conversation-(\\d+)$");
+    private static final Pattern CONVERSATION_TOPIC = Pattern.compile("^/topic/conversation-(\\d+)(?:-reads)?$");
     private static final String STATUS_BROADCAST = "/user/queue/status";
     private static final String MODERATION_TOPIC = "/topic/content-moderation";
     private static final java.util.Set<String> ALLOWED_SEND_DESTINATIONS = java.util.Set.of(

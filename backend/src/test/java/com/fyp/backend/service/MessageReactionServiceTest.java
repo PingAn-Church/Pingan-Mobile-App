@@ -84,7 +84,7 @@ class MessageReactionServiceTest {
     void reactingStoresTheCanonicalEmojiAndAnswersWithMineFilledIn() {
         when(reactions.findByMessageIdAndUserIdAndEmoji(5L, 1L, "❤")).thenReturn(Optional.empty());
         when(reactions.countByMessageIds(anyCollection()))
-                .thenReturn(List.<Object[]>of(new Object[] { 5L, "❤", 1L }));
+                .thenReturn(List.<Object[]>of(new Object[] { 5L, "❤", 1L, 1L }));
         when(reactions.findMineByMessageIds(eq(1L), anyCollection()))
                 .thenReturn(List.<Object[]>of(new Object[] { 5L, "❤" }));
 
@@ -105,7 +105,7 @@ class MessageReactionServiceTest {
     void theBroadcastCarriesTalliesButNotWhoseTheyAre() {
         when(reactions.findByMessageIdAndUserIdAndEmoji(5L, 1L, "🙏")).thenReturn(Optional.empty());
         when(reactions.countByMessageIds(anyCollection()))
-                .thenReturn(List.<Object[]>of(new Object[] { 5L, "🙏", 12L }));
+                .thenReturn(List.<Object[]>of(new Object[] { 5L, "🙏", 12L, 1L }));
         when(reactions.findMineByMessageIds(eq(1L), anyCollection()))
                 .thenReturn(List.<Object[]>of(new Object[] { 5L, "🙏" }));
 
@@ -141,8 +141,18 @@ class MessageReactionServiceTest {
     }
 
     @Test
-    void onlyTheFixedSetOfEmojisIsAccepted() {
-        assertThrows(IllegalArgumentException.class, () -> service.toggle(5L, 1L, "😂", true));
+    void anySingleEmojiIsAcceptedButNotWordsOrPairs() {
+        // One emoji, in all the shapes keyboards produce.
+        for (String emoji : List.of("😂", "❤️", "🙏🏽", "👨‍👩‍👧", "🇨🇳", "1️⃣", "✝️", "©")) {
+            assertTrue(MessageReactionService.isSingleEmoji(MessageReactionService.canonical(emoji)), emoji);
+        }
+        // Not a reaction: nothing, words, a bare digit, two emojis, an emoji with words.
+        for (String text : List.of("", "amen", "1", "🙏🙏", "🙏 amen", "a🙏", "#")) {
+            assertFalse(MessageReactionService.isSingleEmoji(MessageReactionService.canonical(text)), text);
+        }
+
+        assertThrows(IllegalArgumentException.class, () -> service.toggle(5L, 1L, "amen", true));
+        assertThrows(IllegalArgumentException.class, () -> service.toggle(5L, 1L, "🙏🙏", true));
         assertThrows(IllegalArgumentException.class, () -> service.toggle(5L, 1L, "", true));
         assertThrows(IllegalArgumentException.class, () -> service.toggle(5L, 1L, null, true));
         verify(reactions, never()).save(any());
@@ -158,11 +168,13 @@ class MessageReactionServiceTest {
     }
 
     @Test
-    void summariesAggregateAPageInAllowedOrderAndMarkTheViewersOwn() {
+    void summariesAggregateAPageInFirstSeenOrderAndMarkTheViewersOwn() {
+        // 🙏 arrived first (reaction id 10), 👍 later (id 20): 🙏 is drawn first however
+        // the database happens to group the rows.
         when(reactions.countByMessageIds(List.of(5L, 6L))).thenReturn(List.<Object[]>of(
-                new Object[] { 5L, "👍", 3L },
-                new Object[] { 5L, "🙏", 40L },
-                new Object[] { 6L, "❤", 1L }));
+                new Object[] { 5L, "👍", 3L, 20L },
+                new Object[] { 5L, "🙏", 40L, 10L },
+                new Object[] { 6L, "❤", 1L, 30L }));
         when(reactions.findMineByMessageIds(eq(1L), eq(List.of(5L, 6L))))
                 .thenReturn(List.<Object[]>of(new Object[] { 5L, "👍" }));
 

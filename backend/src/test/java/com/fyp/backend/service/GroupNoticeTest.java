@@ -59,6 +59,7 @@ class GroupNoticeTest {
     @Mock private ChatService chatService;
     @Mock private ConversationReadStateRepository conversationReadStateRepository;
     @Mock private AssistantAccountService assistantAccountService;
+    @Mock private ConversationPinService conversationPinService;
 
     @InjectMocks private ConversationService conversationService;
 

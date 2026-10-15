@@ -54,6 +54,16 @@ public class Message {
     @org.hibernate.annotations.ColumnDefault("false")
     private Boolean reported = false;
 
+    /**
+     * When the sender took the message back, or null. A recalled message keeps
+     * its row — the "X recalled a message" line needs somewhere to hang, and the
+     * replies that quote it keep their anchor — but its body is replaced by
+     * ChatService.RECALLED_BODY and its reactions, poll and media are gone.
+     * Nullable: rows from before the column existed are null (= not recalled).
+     */
+    @Column(name = "recalled_at")
+    private Timestamp recalledAt;
+
     private Timestamp timestamp;
 
     @ManyToOne

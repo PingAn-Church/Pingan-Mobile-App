@@ -61,7 +61,8 @@ class ChatMessageDeletionOrderingTest {
                 conversationReadStateService, assistantAccountService,
                 org.mockito.Mockito.mock(com.fyp.backend.repository.EventRepository.class),
                 org.mockito.Mockito.mock(MessageReactionService.class),
-                org.mockito.Mockito.mock(PollService.class));
+                org.mockito.Mockito.mock(PollService.class),
+                new com.fyp.backend.config.app.ChatProperties());
         TransactionSynchronizationManager.initSynchronization();
     }
 

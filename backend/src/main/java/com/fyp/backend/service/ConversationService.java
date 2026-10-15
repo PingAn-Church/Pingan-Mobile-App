@@ -38,6 +38,7 @@ public class ConversationService {
     private final MessageRepository messageRepository;
     private final MessageDeliveryStatusRepository messageDeliveryStatusRepository;
     private final ConversationMuteRepository conversationMuteRepository;
+    private final ConversationPinService conversationPinService;
     private final OssCleanupService ossCleanupService;
     private final ConversationReadStateService conversationReadStateService;
     private final AssistantAccountService assistantAccountService;
@@ -53,6 +54,7 @@ public class ConversationService {
                                MessageRepository messageRepository,
                                MessageDeliveryStatusRepository messageDeliveryStatusRepository,
                                ConversationMuteRepository conversationMuteRepository,
+                               ConversationPinService conversationPinService,
                                OssCleanupService ossCleanupService,
                                ConversationReadStateService conversationReadStateService,
                                AssistantAccountService assistantAccountService,
@@ -66,6 +68,7 @@ public class ConversationService {
         this.messageRepository = messageRepository;
         this.messageDeliveryStatusRepository = messageDeliveryStatusRepository;
         this.conversationMuteRepository = conversationMuteRepository;
+        this.conversationPinService = conversationPinService;
         this.ossCleanupService = ossCleanupService;
         this.conversationReadStateService = conversationReadStateService;
         this.assistantAccountService = assistantAccountService;
@@ -343,6 +346,9 @@ public class ConversationService {
                 .map(ConversationMute::getConversationId)
                 .collect(Collectors.toSet());
 
+        // Likewise the pins, keyed by conversation id.
+        Map<Long, Long> pinnedAt = conversationPinService.pinnedAtByConversation(userId);
+
         // One query covers the whole list; being mentioned is rare enough that this
         // usually comes back empty.
         Set<Long> mentionedIn = new java.util.HashSet<>(
@@ -399,6 +405,8 @@ public class ConversationService {
         for (ConversationDto c : conversations) {
             c.setUnreadCount(unreadByConversation.getOrDefault(c.getConversationId(), 0L));
             c.setMuted(mutedConversationIds.contains(c.getConversationId()));
+            c.setPinned(pinnedAt.containsKey(c.getConversationId()));
+            c.setPinnedAt(pinnedAt.get(c.getConversationId()));
             c.setMentioned(mentionedIn.contains(c.getConversationId()));
             Message newest = newestByConversation.get(c.getConversationId());
             if (newest != null) {

@@ -45,6 +45,10 @@ public class MessageDto {
     private boolean mentionsEveryone = false;
     private boolean edited = false;
     private boolean deleted = false;
+    // The sender took the message back (ChatService.recallMessageAndBroadcast).
+    // The body is then the placeholder text; a build that knows this flag draws
+    // the "X recalled a message" line instead. Additive: older builds ignore it.
+    private boolean recalled = false;
     private boolean reported = false;
     // The event an "event" message shares. Sent by the client to name the event
     // (the server checks it and writes the body itself); null on everything else.
@@ -97,6 +101,7 @@ public class MessageDto {
         this.senderBot = message.getSender() != null && message.getSender().isBot();
         this.senderDisplayNameZh = this.senderBot ? message.getSender().getDisplayNameZh() : null;
         this.reported = Boolean.TRUE.equals(message.getReported());
+        this.recalled = message.getRecalledAt() != null;
         this.mentionedUserIds = message.getMentionedUserIds() == null
                 ? new ArrayList<>()
                 : new ArrayList<>(message.getMentionedUserIds());
