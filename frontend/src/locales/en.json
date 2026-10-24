@@ -473,6 +473,7 @@
   "topicFollowFailed": "Could not update notifications for this topic",
   "addCoverImage": "Add a cover picture",
   "changeCoverImage": "Change cover picture",
+  "removeCoverImage": "Remove cover picture",
   "addImage": "Add a picture",
   "removeImage": "Remove picture",
   "verifiedMember": "Verified",

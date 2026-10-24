@@ -161,7 +161,7 @@ const NewChatScreen = () => {
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            <AppText variant="body" color="textSecondary" style={styles.emptyText}>
+            <AppText variant="secondary" style={styles.emptyText}>
               {i18n.t("noUsersFound")}
             </AppText>
           }
@@ -208,9 +208,8 @@ const useStyles = makeStyles((t) => ({
     paddingHorizontal: t.spacing.lg,
     paddingVertical: t.spacing.md,
   },
-  // Filled search box (no border), unlike the outlined standard TextField.
   searchInput: {
-    backgroundColor: t.colors.backgroundMuted,
+    backgroundColor: t.colors.inputFilled,
     borderWidth: 0,
     borderRadius: t.radius.card,
     paddingHorizontal: t.spacing.md,

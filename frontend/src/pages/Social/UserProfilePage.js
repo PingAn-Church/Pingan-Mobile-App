@@ -1,17 +1,9 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, SafeAreaView, ScrollView, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import CachedImage from "../../components/CachedImage";
-import defaultProfileImage from "../../../assets/user.png";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Avatar, Button, Heading } from "../../components/ui";
 import { UserContext } from "../../context/UserContext";
 import { ChatContext } from "../../context/ChatContext";
 import { LanguageContext } from "../../context/LanguageContext";
@@ -31,6 +23,8 @@ import i18n from "../../../i18n";
  * whoever happens to be in the same group chat.
  */
 export default function UserProfilePage() {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const navigation = useNavigation();
   const route = useRoute();
   const userId = route.params?.userId;
@@ -147,7 +141,11 @@ export default function UserProfilePage() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#007aff" />
+        <ActivityIndicator
+          size="large"
+          color={colors.primary}
+          accessibilityLabel={i18n.t("loading")}
+        />
       </SafeAreaView>
     );
   }
@@ -155,38 +153,36 @@ export default function UserProfilePage() {
   if (!profile) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={styles.muted}>{i18n.t("unknownUser")}</Text>
+        <AppText variant="secondary" style={styles.centeredText}>
+          {i18n.t("unknownUser")}
+        </AppText>
       </SafeAreaView>
     );
   }
 
   const badges = [
-    profile.isVerifiedUser && { key: "verified", label: i18n.t("verifiedMember"), color: "#10b981" },
-    profile.isAdmin && { key: "admin", label: i18n.t("admin"), color: "#3b82f6" },
-    profile.isInstructor && { key: "instructor", label: i18n.t("instructorRole"), color: "#8b5cf6" },
+    profile.isVerifiedUser && { key: "verified", label: i18n.t("verifiedMember"), color: colors.roles.verified },
+    profile.isAdmin && { key: "admin", label: i18n.t("admin"), color: colors.roles.admin },
+    profile.isInstructor && { key: "instructor", label: i18n.t("instructorRole"), color: colors.roles.instructor },
   ].filter(Boolean);
 
   const blockedByMe = !!blockStatus?.blockedByMe;
+  const blockColor = blockedByMe ? "primary" : "danger";
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <CachedImage
-          uri={profile.profileImage}
-          type="profile"
-          fallbackSource={defaultProfileImage}
-          style={styles.avatar}
-        />
+        <Avatar uri={profile.profileImage} size="3xl" />
 
-        <Text style={styles.name}>
+        <Heading level={1} style={styles.centeredText}>
           {formatName(profile.firstName, profile.lastName) || i18n.t("unknownUser")}
-        </Text>
+        </Heading>
 
         {badges.length > 0 && (
           <View style={styles.badgeRow}>
             {badges.map((badge) => (
               <View key={badge.key} style={[styles.badge, { backgroundColor: badge.color }]}>
-                <Text style={styles.badgeText}>{badge.label}</Text>
+                <AppText variant="badge">{badge.label}</AppText>
               </View>
             ))}
           </View>
@@ -196,39 +192,39 @@ export default function UserProfilePage() {
             and Settings is where you edit it. */}
         {!isSelf && (
           <>
-            <TouchableOpacity
-              style={[styles.primaryButton, busy && styles.buttonDisabled]}
+            <Button
+              size="md"
+              icon="chatbubble-ellipses"
+              fullWidth={false}
+              title={i18n.t("sendMessage")}
               onPress={handleSendMessage}
               disabled={busy}
-            >
-              <Ionicons name="chatbubble-ellipses" size={18} color="#ffffff" />
-              <Text style={styles.primaryButtonText}>{i18n.t("sendMessage")}</Text>
-            </TouchableOpacity>
+              style={styles.sendButton}
+            />
 
             {/* A block in either direction stops private messaging, so say so
                 rather than letting Send Message fail with a generic error. */}
             {blockStatus?.blockedMe && !blockedByMe && (
-              <Text style={styles.muted}>{i18n.t("blockedYouNotice")}</Text>
+              <AppText variant="secondary" style={styles.centeredText}>
+                {i18n.t("blockedYouNotice")}
+              </AppText>
             )}
 
             <TouchableOpacity
               style={[styles.blockButton, busy && styles.buttonDisabled]}
               onPress={handleToggleBlock}
               disabled={busy}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy }}
             >
               <Ionicons
                 name={blockedByMe ? "lock-open-outline" : "ban-outline"}
-                size={18}
-                color={blockedByMe ? "#10b981" : "#dc2626"}
+                size={sizes.icon.sm}
+                color={colors[blockColor]}
               />
-              <Text
-                style={[
-                  styles.blockButtonText,
-                  { color: blockedByMe ? "#10b981" : "#dc2626" },
-                ]}
-              >
+              <AppText variant="button" size="md" color={blockColor}>
                 {blockedByMe ? i18n.t("unblockUser") : i18n.t("blockUser")}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           </>
         )}
@@ -237,46 +233,40 @@ export default function UserProfilePage() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+const ACTION_BUTTON_MIN_WIDTH = 220;
+
+const useStyles = makeStyles((t) => ({
+  container: { flex: 1, backgroundColor: t.colors.background },
   centered: { justifyContent: "center", alignItems: "center" },
-  content: { alignItems: "center", padding: 24, gap: 14 },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#e5e7eb",
-  },
-  name: { fontSize: 24, fontWeight: "700", color: "#111827", textAlign: "center" },
-  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
-  badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
-  badgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  primaryButton: {
+  centeredText: { textAlign: "center" },
+  content: { alignItems: "center", padding: t.spacing.xl, gap: t.spacing.base },
+  badgeRow: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
+    gap: t.spacing.sm,
     justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#007aff",
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 26,
-    marginTop: 10,
-    minWidth: 220,
   },
-  primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  badge: {
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs,
+    borderRadius: t.radius.full,
+  },
+  sendButton: {
+    marginTop: t.spacing.md,
+    minWidth: ACTION_BUTTON_MIN_WIDTH,
+  },
   blockButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: t.spacing.sm,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 26,
-    minWidth: 220,
+    borderColor: t.colors.borderSubtle,
+    borderRadius: t.radius.control,
+    minHeight: t.sizes.minTouchTarget,
+    paddingVertical: t.components.button.paddingVertical,
+    paddingHorizontal: t.components.button.paddingHorizontal,
+    minWidth: ACTION_BUTTON_MIN_WIDTH,
   },
-  blockButtonText: { fontWeight: "600", fontSize: 15 },
-  buttonDisabled: { opacity: 0.6 },
-  muted: { color: "#6b7280", fontSize: 14, textAlign: "center" },
-});
+  buttonDisabled: { opacity: t.components.button.disabledOpacity },
+}));

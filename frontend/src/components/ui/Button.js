@@ -5,11 +5,12 @@ import { makeStyles, useTheme } from "../../theme";
 import AppText from "./AppText";
 
 // The app's main button.
-//   variant    "primary" (blue, default) | "danger" (red)
-//   size       "lg" (18pt label, default) | "md" (16pt label)
+//   variant    "primary" (blue, default) | "danger" (red) | "neutral" (grey)
+//   size       "lg" (18pt label, default) | "md" (16pt label) | "sm" (14pt label)
 //   loading    shows a spinner and blocks taps
 //   icon       optional Ionicons name shown before the label
 //   fullWidth  stretches to the width of its container (default true)
+//   textStyle  extra style for the label (style is for the button box)
 export default function Button({
   title,
   onPress,
@@ -20,6 +21,7 @@ export default function Button({
   icon,
   fullWidth = true,
   style,
+  textStyle,
   ...props
 }) {
   const styles = useStyles();
@@ -49,7 +51,7 @@ export default function Button({
           {icon ? (
             <Ionicons name={icon} size={sizes.icon.lg} color={colors.onPrimary} style={styles.icon} />
           ) : null}
-          <AppText variant="button" size={size}>
+          <AppText variant="button" size={size} style={textStyle}>
             {title}
           </AppText>
         </>
@@ -70,6 +72,7 @@ const useStyles = makeStyles((t) => ({
   },
   primary: { backgroundColor: t.colors.primary },
   danger: { backgroundColor: t.colors.danger },
+  neutral: { backgroundColor: t.colors.neutral },
   fullWidth: { alignSelf: "stretch" },
   inactive: { opacity: t.components.button.disabledOpacity },
   icon: { marginRight: t.spacing.sm },

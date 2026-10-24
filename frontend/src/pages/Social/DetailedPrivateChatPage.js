@@ -1,17 +1,7 @@
 import { showAlert } from "../../utils/showAlert";
 import React, { useEffect, useState, useContext } from "react";
-import {
-  SafeAreaView,
-  Text,
-  View,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  TouchableOpacity,
-} from "react-native";
+import { SafeAreaView, View, ActivityIndicator, Alert } from "react-native";
 import { getUserById } from "../../service/UserService";
-import CachedImage from "../../components/CachedImage";
-import defaultProfileImage from "../../../assets/user.png";
 import { deleteConversationFromDatabase } from "../../service/ChatService";
 import { blockUser, unblockUser, getBlockStatus } from "../../service/BlockService";
 import { useNavigation } from "@react-navigation/native";
@@ -20,8 +10,12 @@ import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import { LanguageContext } from "../../context/LanguageContext";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Avatar, Button, Heading } from "../../components/ui";
 
 const DetailedPrivateChatPage = ({ route }) => {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { otherParticipantId } = route.params;
   const [participantDetails, setParticipantDetails] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +74,7 @@ const DetailedPrivateChatPage = ({ route }) => {
     if (blockBusy) return;
 
     if (blockedByMe) {
-      // Green "Unblock user" path.
+      // "Unblock user" path.
       const confirmed = await confirmAction({
         title: i18n.t("unblockUser"),
         message: i18n.t("confirmUnblockUser"),
@@ -160,8 +154,8 @@ const DetailedPrivateChatPage = ({ route }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007aff" />
-        <Text>{i18n.t("loadingParticipantDetails")}</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <AppText variant="secondary">{i18n.t("loadingParticipantDetails")}</AppText>
       </SafeAreaView>
     );
   }
@@ -169,54 +163,37 @@ const DetailedPrivateChatPage = ({ route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.centeredContent}>
-        <CachedImage
+        <Avatar
           uri={participantDetails.profileImage}
-          type="profile"
-          fallbackSource={defaultProfileImage}
+          size="4xl"
           style={styles.profileImage}
         />
-        <Text style={styles.participantName}>
+        <Heading level={1}>
           {formatName(participantDetails.firstName, participantDetails.lastName)}
-        </Text>
+        </Heading>
         {participantDetails.email && (
-          <Text style={styles.email}>{participantDetails.email}</Text>
+          <AppText variant="secondary" style={styles.email}>
+            {participantDetails.email}
+          </AppText>
         )}
-        <TouchableOpacity
+        <Button
+          variant="danger"
+          size="sm"
+          fullWidth={false}
+          title={i18n.t("deleteConvo")}
           onPress={handleDeletePrivateConversation}
-          style={{
-            backgroundColor: "#FF3B30",
-            paddingVertical: 12,
-            paddingHorizontal: 20,
-            borderRadius: 8,
-            marginTop: 30,
-          }}
-        >
-          <Text
-            style={{ color: "#fff", fontWeight: "bold", textAlign: "center" }}
-          >
-            {i18n.t("deleteConvo")}
-          </Text>
-        </TouchableOpacity>
+          style={styles.deleteButton}
+        />
 
-        <TouchableOpacity
+        <Button
+          variant={blockedByMe ? "primary" : "danger"}
+          size="sm"
+          fullWidth={false}
+          title={blockedByMe ? i18n.t("unblockUser") : i18n.t("blockUser")}
           onPress={handleToggleBlock}
-          disabled={blockBusy}
-          style={[
-            styles.blockButton,
-            blockedByMe ? styles.unblockButton : styles.blockButtonRed,
-            blockBusy && { opacity: 0.6 },
-          ]}
-        >
-          {blockBusy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text
-              style={{ color: "#fff", fontWeight: "bold", textAlign: "center" }}
-            >
-              {blockedByMe ? i18n.t("unblockUser") : i18n.t("blockUser")}
-            </Text>
-          )}
-        </TouchableOpacity>
+          loading={blockBusy}
+          style={styles.blockButton}
+        />
       </View>
     </SafeAreaView>
   );
@@ -224,51 +201,38 @@ const DetailedPrivateChatPage = ({ route }) => {
 
 export default DetailedPrivateChatPage;
 
-const styles = StyleSheet.create({
+// Keeps Block and Unblock the same width, so the button doesn't jump as the label changes.
+const BLOCK_BUTTON_MIN_WIDTH = 180;
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: t.colors.background,
   },
   centeredContent: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: t.spacing.lg,
   },
   profileImage: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    marginBottom: 20,
+    marginBottom: t.spacing.lg,
     borderWidth: 2,
-    borderColor: "#007aff",
-  },
-  participantName: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#333",
+    borderColor: t.colors.primary,
   },
   email: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 6,
+    marginTop: t.spacing.sm,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
+  deleteButton: {
+    marginTop: t.spacing["2xl"],
+  },
   blockButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginTop: 14,
-    minWidth: 180,
+    marginTop: t.spacing.base,
+    minWidth: BLOCK_BUTTON_MIN_WIDTH,
   },
-  blockButtonRed: {
-    backgroundColor: "#C62828",
-  },
-  unblockButton: {
-    backgroundColor: "#2E7D32",
-  },
-});
+}));

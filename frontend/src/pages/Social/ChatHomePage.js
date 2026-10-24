@@ -328,7 +328,7 @@ const ChatHomePage = () => {
               never contribute, so this stays at zero unless somebody opted in. */}
           {topicUnread > 0 && (
             <View style={styles.unreadBadge}>
-              <AppText variant="caption" color="onPrimary" weight="bold">
+              <AppText variant="badge">
                 {topicUnread > 99 ? "99+" : topicUnread}
               </AppText>
             </View>
@@ -413,12 +413,7 @@ const ChatHomePage = () => {
           {/* Online Count Badge for Group Chat */}
           {!isPrivateChat && onlineCount > 0 && (
             <View style={styles.groupOnlineIndicator}>
-              <AppText
-                variant="caption"
-                color="onPrimary"
-                weight="bold"
-                style={styles.groupOnlineText}
-              >
+              <AppText variant="badge">
                 {onlineCount}
               </AppText>
             </View>
@@ -451,7 +446,7 @@ const ChatHomePage = () => {
                 {lastMessage.previewContent}{" "}
                 {String(lastMessage.senderId) === String(user.id) &&
                   !!lastMessage.deliveryStatusIcon && (
-                    <AppText variant="caption" color="textDisabled">
+                    <AppText variant="caption">
                       ({lastMessage.deliveryStatusIcon})
                     </AppText>
                   )}
@@ -465,7 +460,7 @@ const ChatHomePage = () => {
         {/* Unread Message Badge */}
         {unreadCount > 0 && (
           <View style={styles.unreadBadge}>
-            <AppText variant="caption" color="onPrimary" weight="bold">
+            <AppText variant="badge">
               {unreadCount > 99 ? "99+" : unreadCount}
             </AppText>
           </View>
@@ -504,7 +499,7 @@ const ChatHomePage = () => {
         keyExtractor={(item) => item.conversationId.toString()}
         renderItem={renderConversationItem}
         ListEmptyComponent={
-          <AppText variant="body" color="textSecondary" style={styles.noConversations}>
+          <AppText variant="secondary" style={styles.noConversations}>
             {i18n.t("noMsg")}
           </AppText>
         }
@@ -624,11 +619,6 @@ const useStyles = makeStyles((t) => ({
     justifyContent: "center",
     alignItems: "center",
   },
-  // The bubble is only 14pt inside its ring, so the caption's 18pt line height
-  // would clip the number.
-  groupOnlineText: {
-    lineHeight: t.typography.fontSize.xs,
-  },
   noConversations: {
     textAlign: "center",
     marginTop: t.spacing["3xl"],
@@ -647,7 +637,7 @@ const useStyles = makeStyles((t) => ({
     borderRadius: t.radius.full,
     justifyContent: "center",
     alignItems: "center",
-    ...t.shadows.card,
+    ...t.shadows.button,
   },
   addButtonText: {
     fontSize: FAB_LABEL_SIZE,

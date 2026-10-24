@@ -11,6 +11,7 @@ import {
   Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 import { startGroupChat } from "../../service/UserService";
 import {
   getPresignedUploadUrl,
@@ -28,7 +29,7 @@ import { AppText, Button, Heading, TextField } from "../../components/ui";
 
 const NewGroupScreen = () => {
   const styles = useStyles();
-  const { colors } = useTheme();
+  const { colors, sizes } = useTheme();
   const [groupName, setGroupName] = useState("");
   const [selectedParticipants, setSelectedParticipants] = useState([]);
   const [groupImage, setGroupImage] = useState(null);
@@ -177,14 +178,7 @@ const NewGroupScreen = () => {
             ]}
           >
             {isSelected ? (
-              <AppText
-                variant="caption"
-                color="onPrimary"
-                weight="bold"
-                style={styles.userSelectCheckmark}
-              >
-                ✓
-              </AppText>
+              <Ionicons name="checkmark" size={sizes.icon.xs} color={colors.onPrimary} />
             ) : null}
           </View>
         )}
@@ -246,7 +240,7 @@ const NewGroupScreen = () => {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             loading ? null : (
-              <AppText variant="body" color="textSecondary" style={styles.emptyText}>
+              <AppText variant="secondary" style={styles.emptyText}>
                 {i18n.t("noUsersFound")}
               </AppText>
             )
@@ -268,11 +262,12 @@ const NewGroupScreen = () => {
             size="md"
             fullWidth={false}
             title={i18n.t("createGroup")}
-            loading={submitting}
+            disabled={submitting}
             onPress={handleCreateGroup}
             style={styles.rowButton}
           />
           <Button
+            variant="neutral"
             size="md"
             fullWidth={false}
             title={i18n.t("cancel")}
@@ -287,7 +282,6 @@ const NewGroupScreen = () => {
 
 export default NewGroupScreen;
 
-// Layout only — text, inputs and buttons get their look from the ui components.
 const PREVIEW_SIZE = 100; // picked group photo
 const CHECKBOX_SIZE = 20; // web-only select box on each person
 
@@ -330,10 +324,8 @@ const useStyles = makeStyles((t) => ({
     paddingHorizontal: t.spacing.lg,
     paddingVertical: t.spacing.md,
   },
-  // Filled search box (no border), unlike the outlined standard TextField —
-  // matches NewChatScreen.
   searchInput: {
-    backgroundColor: t.colors.backgroundMuted,
+    backgroundColor: t.colors.inputFilled,
     borderWidth: 0,
     borderRadius: t.radius.card,
     paddingHorizontal: t.spacing.md,
@@ -384,9 +376,5 @@ const useStyles = makeStyles((t) => ({
   userSelectBoxChecked: {
     backgroundColor: t.colors.primary,
     borderColor: t.colors.primary,
-  },
-
-  userSelectCheckmark: {
-    lineHeight: t.typography.fontSize.xs,
   },
 }));

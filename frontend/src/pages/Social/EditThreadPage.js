@@ -1,14 +1,7 @@
 // src/pages/Social/EditThreadPage.js
 
 import React, { useState, useContext, useEffect } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  Button,
-  StyleSheet,
-  TouchableOpacity,
-} from "react-native";
+import { View, TouchableOpacity } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { updateThread } from "../../service/ThreadService";
@@ -22,9 +15,13 @@ import {
   pickThreadImage,
   uploadThreadImage,
 } from "../../utils/threadMedia";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Heading, TextField } from "../../components/ui";
 
 const EditThreadPage = ({ route }) => {
   const { thread } = route.params;
+  const styles = useStyles();
+  const { colors, sizes, spacing } = useTheme();
   const navigation = useNavigation();
   const { language } = useContext(LanguageContext);
   const [title, setTitle] = useState(thread.title);
@@ -98,23 +95,25 @@ const EditThreadPage = ({ route }) => {
     <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      bottomOffset={24}
+      bottomOffset={spacing.xl}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.header}>{i18n.t("editThread")}</Text>
+      <Heading level={1} style={styles.header}>
+        {i18n.t("editThread")}
+      </Heading>
 
-      <TextInput
+      <TextField
         placeholder={i18n.t("threadTitle")}
         value={title}
         onChangeText={setTitle}
         style={styles.input}
       />
 
-      <TextInput
+      <TextField
         placeholder={i18n.t("threadContent")}
         value={content}
         onChangeText={setContent}
-        style={[styles.input, { height: 120 }]}
+        style={[styles.input, styles.contentInput]}
         multiline
       />
 
@@ -125,70 +124,102 @@ const EditThreadPage = ({ route }) => {
             type="thread"
             style={styles.coverPreview}
           />
-          <TouchableOpacity style={styles.coverRemove} onPress={() => setCoverUri(null)}>
-            <Ionicons name="close" size={18} color="#fff" />
+          <TouchableOpacity
+            style={styles.coverRemove}
+            onPress={() => setCoverUri(null)}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("removeCoverImage")}
+          >
+            <Ionicons name="close" size={sizes.icon.sm} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
       ) : null}
 
-      <TouchableOpacity style={styles.coverButton} onPress={handlePickCover}>
-        <Ionicons name="image-outline" size={20} color="#007aff" />
-        <Text style={styles.coverButtonText}>
+      <TouchableOpacity
+        style={styles.coverButton}
+        onPress={handlePickCover}
+        accessibilityRole="button"
+      >
+        <Ionicons name="image-outline" size={sizes.icon.md} color={colors.primary} />
+        <AppText
+          variant="button"
+          color="primary"
+          weight="semibold"
+          size="md"
+        >
           {coverUri ? i18n.t("changeCoverImage") : i18n.t("addCoverImage")}
-        </Text>
+        </AppText>
       </TouchableOpacity>
 
-      <Button title={i18n.t("save")} onPress={handleUpdate} disabled={submitting} />
+      <Button
+        size="sm"
+        title={i18n.t("save")}
+        disabled={submitting}
+        onPress={handleUpdate}
+        style={styles.saveButton}
+      />
     </KeyboardAwareScrollView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingBottom: 40 },
+export default EditThreadPage;
+
+// Layout only — text, inputs and buttons get their look from the ui components.
+const CONTENT_HEIGHT = 120; // thread body box
+
+const useStyles = makeStyles((t) => ({
+  container: {
+    flex: 1,
+    backgroundColor: t.colors.background,
+  },
+  content: {
+    padding: t.spacing.lg,
+    paddingBottom: t.spacing["3xl"],
+  },
   header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
+    marginBottom: t.spacing.xl,
     textAlign: "center",
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    padding: 14,
-    backgroundColor: "#f9f9f9",
-    marginBottom: 20,
-    fontSize: 16,
+    backgroundColor: t.colors.inputFilled,
+    borderRadius: t.radius.card,
+    padding: t.spacing.base,
+    marginBottom: t.spacing.lg,
   },
-  coverPreviewWrap: { marginBottom: 14 },
+  contentInput: {
+    height: CONTENT_HEIGHT,
+  },
+  coverPreviewWrap: {
+    marginBottom: t.spacing.md,
+  },
   coverPreview: {
     width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: 12,
-    backgroundColor: "#eee",
+    borderRadius: t.radius.card,
+    backgroundColor: t.colors.placeholder,
   },
   coverRemove: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    borderRadius: 14,
-    padding: 5,
+    top: t.spacing.sm,
+    right: t.spacing.sm,
+    backgroundColor: t.colors.overlay,
+    borderRadius: t.radius.full,
+    padding: t.spacing.xs,
   },
   coverButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: t.spacing.sm,
     borderWidth: 1,
-    borderColor: "#cfe2ff",
-    backgroundColor: "#f2f7ff",
-    borderRadius: 10,
-    paddingVertical: 12,
-    marginBottom: 20,
+    borderColor: t.colors.borderTinted,
+    backgroundColor: t.colors.surfaceTinted,
+    borderRadius: t.radius.card,
+    paddingVertical: t.spacing.md,
+    marginBottom: t.spacing.lg,
   },
-  coverButtonText: { color: "#007aff", fontWeight: "600", fontSize: 15 },
-});
-
-export default EditThreadPage;
+  saveButton: {
+    minHeight: 0,
+    paddingVertical: t.spacing.sm,
+  },
+}));

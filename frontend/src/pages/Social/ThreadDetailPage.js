@@ -184,13 +184,8 @@
 import React, { useEffect, useState, useRef, useContext } from "react";
 import {
   View,
-  Text,
   FlatList,
-  TextInput,
-  Button,
-  StyleSheet,
   Platform,
-  Alert,
   Image,
   RefreshControl,
   TouchableOpacity,
@@ -232,6 +227,8 @@ import {
   uploadThreadImage,
 } from "../../utils/threadMedia";
 import { parseServerDate } from "../../utils/serverDate";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Card, Heading, TextField } from "../../components/ui";
 
 // parseServerDate, not bare new Date(): thread timestamps are zone-less
 // LocalDateTime strings in server UTC — a bare parse read them as device-local
@@ -242,6 +239,8 @@ const formatDateTime = (isoDate) => {
 };
 
 const ThreadDetailPage = ({ route }) => {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const [thread, setThread] = useState(route.params.thread);
   const [replies, setReplies] = useState([]);
   const [newReply, setNewReply] = useState("");
@@ -560,15 +559,17 @@ const ThreadDetailPage = ({ route }) => {
           <TouchableOpacity
             style={styles.replyPreviewRemove}
             onPress={() => setReplyImageUri(null)}
+            accessibilityRole="button"
             accessibilityLabel={i18n.t("removeImage")}
           >
-            <Ionicons name="close" size={16} color="#fff" />
+            <Ionicons name="close" size={sizes.icon.xs} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
       ) : null}
 
       <View style={styles.replyBox}>
-        <TextInput
+        <TextField
+          size="sm"
           placeholder={i18n.t("writeReply")}
           value={newReply}
           onChangeText={setNewReply}
@@ -577,12 +578,20 @@ const ThreadDetailPage = ({ route }) => {
         <TouchableOpacity
           onPress={handlePickReplyImage}
           style={styles.replyAttachButton}
+          accessibilityRole="button"
           accessibilityLabel={i18n.t("addImage")}
           disabled={postingReply}
         >
-          <Ionicons name="image-outline" size={22} color="#007aff" />
+          <Ionicons name="image-outline" size={sizes.icon.lg} color={colors.primary} />
         </TouchableOpacity>
-        <Button title={i18n.t("reply")} onPress={handleReply} disabled={postingReply} />
+        <Button
+          size="sm"
+          fullWidth={false}
+          title={i18n.t("reply")}
+          onPress={handleReply}
+          disabled={postingReply}
+          style={styles.slimButton}
+        />
       </View>
     </View>
   );
@@ -597,19 +606,23 @@ const ThreadDetailPage = ({ route }) => {
         ref={flatListRef}
         data={replies}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={{ paddingBottom: 16 }}
+        contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#3b82f6"]}
-            tintColor="#3b82f6"
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
         onEndReached={loadMoreReplies}
         onEndReachedThreshold={0.3}
         ListFooterComponent={
-          repliesLoading ? <Text style={styles.loadingMore}>{i18n.t("loading")}</Text> : null
+          repliesLoading ? (
+            <AppText variant="secondary" style={styles.loadingMore}>
+              {i18n.t("loading")}
+            </AppText>
+          ) : null
         }
         ListHeaderComponent={(() => {
           // Reported threads are shadow-hidden from everyone except their author
@@ -620,32 +633,43 @@ const ThreadDetailPage = ({ route }) => {
             <View>
               <View style={styles.threadBox}>
                 {threadShadowHidden ? (
-                  <Text style={styles.reportedPlaceholder}>
+                  <AppText
+                    variant="body"
+                    color="textSecondary"
+                    style={styles.reportedPlaceholder}
+                  >
                     {i18n.t("reportedPendingReview")}
-                  </Text>
+                  </AppText>
                 ) : (
-                  <Text style={styles.threadTitle}>{thread.title}</Text>
+                  <Heading level={1} style={styles.threadTitle}>
+                    {thread.title}
+                  </Heading>
                 )}
                 <View style={styles.threadMetaRow}>
-                  <Text style={styles.threadMeta}>
+                  <AppText variant="secondary" style={styles.threadMeta}>
                     {i18n.t("by")}{" "}
                     {formatName(thread.createdByFirstName, thread.createdByLastName) ||
                       thread.createdByName}{" "}
                     •{" "}
                     {formatDateTime(thread.createdAt)}
-                  </Text>
+                  </AppText>
                   <TouchableOpacity
                     onPress={toggleSubscription}
                     style={styles.bellButton}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
                     accessibilityLabel={i18n.t(
                       thread.subscribed ? "unfollowTopic" : "followTopic"
                     )}
                   >
                     <Ionicons
                       name={thread.subscribed ? "notifications" : "notifications-off-outline"}
-                      size={20}
-                      color={thread.subscribed ? "#f59e0b" : "#9ca3af"}
+                      size={sizes.icon.md}
+                      color={
+                        thread.subscribed
+                          ? colors.thread.following
+                          : colors.thread.notFollowing
+                      }
                     />
                   </TouchableOpacity>
                 </View>
@@ -660,17 +684,10 @@ const ThreadDetailPage = ({ route }) => {
                 )}
 
                 {!threadShadowHidden && (
-                  <Text style={styles.threadContent}>{thread.content}</Text>
+                  <AppText variant="body">{thread.content}</AppText>
                 )}
 
-                <View
-                  style={{
-                    marginTop: 10,
-                    flexDirection: "row",
-                    justifyContent: "flex-end",
-                    gap: 20,
-                  }}
-                >
+                <View style={styles.threadActions}>
                   {!threadShadowHidden && (
                     <>
                       {user?.id === thread.createdById && (
@@ -678,28 +695,43 @@ const ThreadDetailPage = ({ route }) => {
                           onPress={() =>
                             navigation.navigate("EditThread", { thread })
                           }
+                          accessibilityRole="button"
                         >
-                          <Text style={{ color: "#007bff" }}>{i18n.t("edit")}</Text>
+                          <AppText variant="link" size="sm" weight="regular">
+                            {i18n.t("edit")}
+                          </AppText>
                         </TouchableOpacity>
                       )}
 
                       {(user?.id === thread.createdById || user?.admin) && (
-                        <TouchableOpacity onPress={handleDeleteThread}>
-                          <Text style={{ color: "#e74c3c" }}>{i18n.t("delete")}</Text>
+                        <TouchableOpacity
+                          onPress={handleDeleteThread}
+                          accessibilityRole="button"
+                        >
+                          <AppText variant="link" size="sm" weight="regular" color="danger">
+                            {i18n.t("delete")}
+                          </AppText>
                         </TouchableOpacity>
                       )}
                     </>
                   )}
 
                   {user?.id !== thread.createdById && !thread.reported && (
-                    <TouchableOpacity onPress={handleReportThread}>
-                      <Text style={{ color: "#e67e22" }}>{i18n.t("report")}</Text>
+                    <TouchableOpacity
+                      onPress={handleReportThread}
+                      accessibilityRole="button"
+                    >
+                      <AppText variant="link" size="sm" weight="regular" color="danger">
+                        {i18n.t("report")}
+                      </AppText>
                     </TouchableOpacity>
                   )}
                 </View>
               </View>
 
-              <Text style={styles.repliesHeader}>{i18n.t("replies")}</Text>
+              <Heading level={2} weight="semibold" style={styles.repliesHeader}>
+                {i18n.t("replies")}
+              </Heading>
             </View>
           );
         })()}
@@ -711,31 +743,46 @@ const ThreadDetailPage = ({ route }) => {
             && !user?.admin;
           if (replyShadowHidden) {
             return (
-              <View style={styles.replyItem}>
-                <Text style={styles.replyAuthor}>
+              <Card variant="subtle" style={styles.replyItem}>
+                <AppText
+                  variant="secondary"
+                  weight="semibold"
+                  style={styles.replyAuthor}
+                >
                   {formatName(item.authorFirstName, item.authorLastName) || item.authorName} • {formatDateTime(item.createdAt)}
-                </Text>
-                <Text style={styles.reportedPlaceholder}>
+                </AppText>
+                <AppText
+                  variant="body"
+                  color="textSecondary"
+                  style={styles.reportedPlaceholder}
+                >
                   {i18n.t("reportedPendingReview")}
-                </Text>
-              </View>
+                </AppText>
+              </Card>
             );
           }
           return (
-          <View style={styles.replyItem}>
-            <Text style={styles.replyAuthor}>
+          <Card variant="subtle" style={styles.replyItem}>
+            <AppText
+              variant="secondary"
+              weight="semibold"
+              style={styles.replyAuthor}
+            >
               {formatName(item.authorFirstName, item.authorLastName) || item.authorName} • {formatDateTime(item.createdAt)}
-            </Text>
+            </AppText>
             {editingReplyId === item.id ? (
               <>
-                <TextInput
+                <TextField
                   value={editContent}
                   onChangeText={setEditContent}
                   style={styles.editInput}
                   multiline
                 />
-                <View style={{ flexDirection: "row", marginTop: 6 }}>
+                <View style={styles.editActions}>
                   <Button
+                    size="sm"
+                    fullWidth={false}
+                    style={styles.slimButton}
                     title={i18n.t("save")}
                     onPress={async () => {
                       try {
@@ -758,17 +805,24 @@ const ThreadDetailPage = ({ route }) => {
                       }
                     }}
                   />
-                  <View style={{ width: 10 }} />
+                  <View style={styles.buttonSpacer} />
                   <Button
+                    variant="neutral"
+                    size="sm"
+                    fullWidth={false}
                     title={i18n.t("cancel")}
-                    color="gray"
                     onPress={() => setEditingReplyId(null)}
+                    style={styles.slimButton}
                   />
                 </View>
               </>
             ) : (
               <>
-                {!!item.content && <Text style={styles.replyText}>{item.content}</Text>}
+                {!!item.content && (
+                  <AppText variant="body">
+                    {item.content}
+                  </AppText>
+                )}
                 {!!item.imageUrl && (
                   <CachedImage
                     uri={item.imageUrl}
@@ -780,7 +834,7 @@ const ThreadDetailPage = ({ route }) => {
               </>
             )}
             {(user?.id === item.authorId || user?.admin || !item.reported) && (
-              <View style={{ flexDirection: "row", marginTop: 4 }}>
+              <View style={styles.replyActions}>
                 {(user?.id === item.authorId || user?.admin) && (
                   <>
                     {user?.id === item.authorId && (
@@ -789,10 +843,16 @@ const ThreadDetailPage = ({ route }) => {
                         setEditingReplyId(item.id);
                         setEditContent(item.content);
                       }}
+                      accessibilityRole="button"
                     >
-                      <Text style={{ color: "#007bff", marginRight: 16 }}>
+                      <AppText
+                        variant="link"
+                        size="sm"
+                        weight="regular"
+                        style={styles.replyActionText}
+                      >
                         {i18n.t("edit")}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                     )}
 
@@ -817,170 +877,180 @@ const ThreadDetailPage = ({ route }) => {
                           ]);
                         }
                       }}
+                      accessibilityRole="button"
                     >
-                      <Text style={{ color: "#e74c3c", marginRight: 16 }}>
+                      <AppText
+                        variant="link"
+                        size="sm"
+                        weight="regular"
+                        color="danger"
+                        style={styles.replyActionText}
+                      >
                         {i18n.t("delete")}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   </>
                 )}
 
                 {user?.id !== item.authorId && !item.reported && (
-                  <TouchableOpacity onPress={() => handleReportReply(item)}>
-                    <Text style={{ color: "#e67e22" }}>{i18n.t("report")}</Text>
+                  <TouchableOpacity
+                    onPress={() => handleReportReply(item)}
+                    accessibilityRole="button"
+                  >
+                    <AppText variant="link" size="sm" weight="regular" color="danger">
+                      {i18n.t("report")}
+                    </AppText>
                   </TouchableOpacity>
                 )}
               </View>
             )}
-          </View>
+          </Card>
           );
         }}
       />
 
-      <StickyInputFooter background="#fafafa">{replyComposer}</StickyInputFooter>
+      <StickyInputFooter background={colors.surfaceSubtle}>{replyComposer}</StickyInputFooter>
     </KeyboardAvoidingView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+export default ThreadDetailPage;
 
+// Layout only — text, inputs, cards and buttons get their look from the ui components.
+const PREVIEW_SIZE = 92; 
+
+const useStyles = makeStyles((t) => ({
+  container: {
+    flex: 1,
+    backgroundColor: t.colors.background,
+  },
+  listContent: {
+    paddingBottom: t.spacing.base,
+  },
   threadBox: {
-    padding: 16,
+    padding: t.spacing.base,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    backgroundColor: "#fdfdfd",
+    borderBottomColor: t.colors.borderSubtle,
+    backgroundColor: t.colors.background,
   },
   threadTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  threadMeta: {
-    fontSize: 13,
-    color: "#777",
-    marginBottom: 10,
-    lineHeight: 21,
-  },
-  threadContent: {
-    fontSize: 16,
-    color: "#333",
-    lineHeight: 24,
-  },
-
-  repliesHeader: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginTop: 16,
-    marginHorizontal: 16,
-    marginBottom: 8,
-  },
-
-  replyItem: {
-    backgroundColor: "#f9f9f9",
-    borderRadius: 10,
-    padding: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-  },
-  replyAuthor: {
-    fontWeight: "600",
-    marginBottom: 4,
-    fontSize: 13,
-    color: "#444",
-  },
-  replyText: {
-    fontSize: 15,
-    color: "#333",
-    lineHeight: 23,
-  },
-  reportedPlaceholder: {
-    fontSize: 15,
-    fontStyle: "italic",
-    color: "#999",
-    lineHeight: 23,
-  },
-  loadingMore: {
-    textAlign: "center",
-    color: "#777",
-    paddingVertical: 10,
-  },
-
-  replyComposer: {
-    borderTopWidth: 1,
-    borderColor: "#ddd",
-    backgroundColor: "#fafafa",
-  },
-  replyBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-  },
-  replyAttachButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  replyPreviewWrap: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    alignSelf: "flex-start",
-  },
-  replyPreview: {
-    width: 92,
-    height: 92,
-    borderRadius: 10,
-    backgroundColor: "#eee",
-  },
-  replyPreviewRemove: {
-    position: "absolute",
-    top: 6,
-    right: -6,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 12,
-    padding: 4,
+    marginBottom: t.spacing.xs,
   },
   threadMetaRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    gap: t.spacing.md,
   },
-  bellButton: { padding: 2 },
+  threadMeta: {
+    marginBottom: t.spacing.md,
+  },
+  bellButton: {
+    padding: t.spacing.xs,
+  },
   threadCover: {
     width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: 12,
-    marginTop: 12,
-    backgroundColor: "#eee",
+    borderRadius: t.radius.card,
+    marginTop: t.spacing.md,
+    backgroundColor: t.colors.placeholder,
+  },
+  threadActions: {
+    marginTop: t.spacing.md, 
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: t.spacing.lg,
+  },
+  repliesHeader: {
+    marginTop: t.spacing.base,
+    marginHorizontal: t.spacing.base,
+    marginBottom: t.spacing.sm,
+  },
+  replyItem: {
+    padding: t.spacing.md,
+    marginHorizontal: t.spacing.base,
+    marginBottom: t.spacing.md,
+  },
+  replyAuthor: {
+    marginBottom: t.spacing.xs,
+  },
+  reportedPlaceholder: {
+    fontStyle: "italic",
   },
   replyImage: {
     width: "100%",
     aspectRatio: 4 / 3,
-    borderRadius: 10,
-    marginTop: 8,
-    backgroundColor: "#eee",
+    borderRadius: t.radius.card,
+    marginTop: t.spacing.sm,
+    backgroundColor: t.colors.placeholder,
+  },
+  editInput: {
+    padding: t.spacing.sm,
+    borderRadius: t.radius.control,
+    backgroundColor: t.colors.surface,
+    lineHeight: t.textVariants.body.lineHeight,
+  },
+  editActions: {
+    flexDirection: "row",
+    marginTop: t.spacing.sm,
+  },
+  buttonSpacer: {
+    width: t.spacing.md, 
+  },
+  replyActions: {
+    flexDirection: "row",
+    marginTop: t.spacing.xs,
+  },
+  replyActionText: {
+    marginRight: t.spacing.base,
+  },
+  loadingMore: {
+    textAlign: "center",
+    paddingVertical: t.spacing.md,
+  },
+  replyComposer: {
+    borderTopWidth: 1,
+    borderColor: t.colors.borderSubtle,
+    backgroundColor: t.colors.surfaceSubtle,
+  },
+  replyBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: t.spacing.md,
   },
   input: {
     flex: 1,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radius.control,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    marginRight: t.spacing.sm,
   },
-  editInput: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 8,
-    backgroundColor: "#fff",
-    fontSize: 15,
-    lineHeight: 23,
+  replyAttachButton: {
+    paddingHorizontal: t.spacing.sm,
+    paddingVertical: t.spacing.sm,
   },
-});
-
-export default ThreadDetailPage;
+  replyPreviewWrap: {
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.md,
+    alignSelf: "flex-start",
+  },
+  replyPreview: {
+    width: PREVIEW_SIZE,
+    height: PREVIEW_SIZE,
+    borderRadius: t.radius.card,
+    backgroundColor: t.colors.placeholder,
+  },
+  replyPreviewRemove: {
+    position: "absolute",
+    top: t.spacing.sm,
+    right: -t.spacing.sm,
+    backgroundColor: t.colors.overlay,
+    borderRadius: t.radius.full,
+    padding: t.spacing.xs,
+  },
+  slimButton: {
+    minHeight: 0,
+    paddingVertical: t.spacing.sm,
+  },
+}));

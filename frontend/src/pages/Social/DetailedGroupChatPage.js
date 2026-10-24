@@ -2,13 +2,9 @@ import { showAlert } from "../../utils/showAlert";
 import React, { useCallback, useEffect, useState, useContext } from "react";
 import {
   SafeAreaView,
-  Text,
-  TextInput,
   View,
-  StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
   Switch,
   TouchableOpacity,
 } from "react-native";
@@ -31,18 +27,20 @@ import {
   uploadFileToOSS,
   deleteOwnUpload,
 } from "../../service/OSSService";
-import CachedImage from "../../components/CachedImage";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
-import defaultProfileImage from "../../../assets/user.png";
 import { deleteConversationFromDatabase } from "../../service/ChatService";
 import { confirmAction } from "../../utils/confirmAction";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import { groupDisplayName } from "../../utils/conversationDisplay";
 import { LanguageContext } from "../../context/LanguageContext";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Avatar, Button, Card, Heading, TextField } from "../../components/ui";
 
 const DetailedGroupChatPage = ({ route }) => {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { conversationId } = route.params; // We're still using conversationId passed via route
   const { conversations, setConversations } = useContext(ChatContext); // Access conversations from ChatContext
   const { language } = useContext(LanguageContext);
@@ -415,7 +413,7 @@ const DetailedGroupChatPage = ({ route }) => {
   if (!conversation) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <Text>{i18n.t("convoNotFound")}</Text>
+        <AppText variant="secondary">{i18n.t("convoNotFound")}</AppText>
       </SafeAreaView>
     );
   }
@@ -428,8 +426,8 @@ const DetailedGroupChatPage = ({ route }) => {
   if (conversation.loading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007aff" />
-        <Text>{i18n.t("loadingParticipants")}</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <AppText variant="secondary">{i18n.t("loadingParticipants")}</AppText>
       </SafeAreaView>
     );
   }
@@ -440,95 +438,113 @@ const DetailedGroupChatPage = ({ route }) => {
     <KeyboardAvoidingView style={styles.container} behavior="padding">
       {/* Group Icon and Name */}
       <View style={styles.headerContainer}>
-        <CachedImage
+        <Avatar
           uri={chatIcon}
           type="group"
           conversationId={conversationId}
-          fallbackSource={defaultProfileImage}
+          size="2xl"
           style={styles.chatIcon}
         />
-        <Text style={styles.groupName}>{groupDisplayName(conversation, language)}</Text>
+        <Heading level={1} style={styles.groupName}>
+          {groupDisplayName(conversation, language)}
+        </Heading>
         {isAppGroup && (
-          <Text style={styles.memberCount}>
+          <AppText variant="secondary" style={styles.memberCount}>
             {i18n.t("memberCount", { count: conversation.participantCount || 0 })}
-          </Text>
+          </AppText>
         )}
 
         {/* Backend updateGroupIcon is admin-only; only admins get the control so
             non-admins never hit the guaranteed "only admins" 400 (shown as a generic
             failure). Matches every other mutating action on this screen. */}
         {isAdmin && (
-          <TouchableOpacity
+          <Button
+            size="md"
+            fullWidth={false}
+            title={i18n.t("changeImage")}
             onPress={handleChangeGroupIcon}
             style={styles.changeIconButton}
-          >
-            <Text style={styles.changeIconText}>{i18n.t("changeImage")}</Text>
-          </TouchableOpacity>
+          />
         )}
       </View>
 
       {canRenameAppGroup && (
-        <View style={styles.renameCard}>
-          <Text style={styles.renameHeading}>{i18n.t("renameAppGroup")}</Text>
-          <TextInput
+        <Card style={styles.renameCard}>
+          <AppText
+            variant="cardTitleSmall"
+            accessibilityRole="header"
+            style={styles.renameHeading}
+          >
+            {i18n.t("renameAppGroup")}
+          </AppText>
+          <TextField
             style={styles.renameInput}
             value={nameEn}
             onChangeText={setNameEn}
             placeholder={i18n.t("appGroupNameEn")}
           />
-          <TextInput
+          <TextField
             style={styles.renameInput}
             value={nameZh}
             onChangeText={setNameZh}
             placeholder={i18n.t("appGroupNameZh")}
           />
-          <TouchableOpacity
-            style={[styles.renameButton, renaming && styles.renameButtonDisabled]}
+          <Button
+            size="md"
+            title={renaming ? i18n.t("saving") : i18n.t("save")}
             onPress={handleRenameAppGroup}
             disabled={renaming}
-          >
-            <Text style={styles.renameButtonText}>
-              {renaming ? i18n.t("saving") : i18n.t("save")}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          />
+        </Card>
       )}
 
       {canRenameAppGroup && (
-        <View style={styles.renameCard}>
+        <Card style={styles.renameCard}>
           <View style={styles.assistantSwitchRow}>
             <View style={styles.assistantSwitchText}>
-              <Text style={styles.renameHeading}>{i18n.t("assistantSwitchTitle")}</Text>
-              <Text style={styles.assistantSwitchHint}>{i18n.t("assistantSwitchHint")}</Text>
+              <AppText
+                variant="cardTitleSmall"
+                accessibilityRole="header"
+                style={styles.renameHeading}
+              >
+                {i18n.t("assistantSwitchTitle")}
+              </AppText>
+              <AppText variant="secondary" style={styles.assistantSwitchHint}>
+                {i18n.t("assistantSwitchHint")}
+              </AppText>
             </View>
             <Switch
               value={assistantOn}
               onValueChange={handleToggleAssistant}
               disabled={togglingAssistant}
+              accessibilityLabel={i18n.t("assistantSwitchTitle")}
+              accessibilityHint={i18n.t("assistantSwitchHint")}
             />
           </View>
-        </View>
+        </Card>
       )}
 
       {/* Everyone verified is in the app-level group and stays in it — leaving,
           deleting and hand-picking members are all meaningless there, and the
           backend refuses them anyway. Mute is the way to quieten it. */}
       {!isAppGroup && (
-        <TouchableOpacity
+        <Button
+          variant="danger"
+          size="md"
+          title={i18n.t("leaveGroup")}
           onPress={handleLeaveGroup}
           style={styles.leaveGroupButton}
-        >
-          <Text style={styles.leaveGroupText}>{i18n.t("leaveGroup")}</Text>
-        </TouchableOpacity>
+        />
       )}
 
       {isAdmin && !isAppGroup && (
-        <TouchableOpacity
+        <Button
+          variant="danger"
+          size="md"
+          title={i18n.t("deleteGroup")}
           onPress={handleDeleteGroupConversation}
           style={styles.leaveGroupButton}
-        >
-          <Text style={styles.leaveGroupText}>{i18n.t("deleteGroup")}</Text>
-        </TouchableOpacity>
+        />
       )}
 
 
@@ -537,10 +553,11 @@ const DetailedGroupChatPage = ({ route }) => {
         <TouchableOpacity
           style={styles.addParticipantButton}
           onPress={() => setShowAddParticipantModal(true)}
+          accessibilityRole="button"
         >
-          <Text style={styles.addParticipantText}>
+          <AppText variant="link" size="lg">
             {i18n.t("addParticipants")}
-          </Text>
+          </AppText>
         </TouchableOpacity>
       )}
 
@@ -550,33 +567,36 @@ const DetailedGroupChatPage = ({ route }) => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.participantCard}>
-            <CachedImage
-              uri={item.profileImage}
-              type="profile"
-              fallbackSource={defaultProfileImage}
-              style={styles.profileImage}
-            />
+            <Avatar uri={item.profileImage} size="lg" style={styles.profileImage} />
             <View style={styles.textContainer}>
-              <Text style={styles.name}>
+              <AppText variant="body" color="textPrimary" weight="semibold">
                 {formatName(item.firstName, item.lastName) || item.fallbackName}
-              </Text>
-              <Text style={styles.bio}>{item.bio || i18n.t("noBio")}</Text>
+              </AppText>
+              <AppText variant="secondary">{item.bio || i18n.t("noBio")}</AppText>
             </View>
 
             {/* Make Admin Button */}
             {isAdmin && !isAppGroup && !conversation.adminIds.includes(item.id) && (
-              <TouchableOpacity
+              <Button
+                size="sm"
+                fullWidth={false}
+                title={`+ ${i18n.t("admin")}`}
                 onPress={() => handleAddAdmin(item.id)}
-                style={styles.addAdminButton}
-              >
-                <Text style={styles.addAdminText}>+ {i18n.t("admin")}</Text>
-              </TouchableOpacity>
+                style={[styles.smallButton, styles.addAdminButton]}
+              />
             )}
 
             {/* Admin Badge */}
             {conversation.adminIds.includes(item.id) && (
               <View style={styles.adminBadgeContainer}>
-                <Text style={styles.adminBadge}>{i18n.t("admin")}</Text>
+                <AppText
+                  variant="badge"
+                  color="primary"
+                  size="sm"
+                  style={styles.adminBadge}
+                >
+                  {i18n.t("admin")}
+                </AppText>
               </View>
             )}
 
@@ -586,34 +606,34 @@ const DetailedGroupChatPage = ({ route }) => {
                 {/* Remove Admin Button */}
                 {conversation.adminIds.includes(item.id) &&
                   item.id !== user.id && (
-                    <TouchableOpacity
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      fullWidth={false}
+                      title={`x ${i18n.t("admin")}`}
                       onPress={() => handleRemoveAdmin(item.id)}
-                      style={styles.removeAdminButton}
-                    >
-                      <Text style={styles.removeAdminText}>
-                        x {i18n.t("admin")}
-                      </Text>
-                    </TouchableOpacity>
+                      style={[styles.smallButton, styles.removeAdminButton]}
+                    />
                   )}
 
                 {/* Remove Participant Button */}
-                <TouchableOpacity
+                <Button
+                  variant="danger"
+                  size="sm"
+                  fullWidth={false}
+                  title={`x ${i18n.t("participant")}`}
                   onPress={() => handleRemoveParticipant(item.id)}
-                  style={styles.removeButton}
-                >
-                  <Text style={styles.removeButtonText}>
-                    x {i18n.t("participant")}
-                  </Text>
-                </TouchableOpacity>
+                  style={styles.smallButton}
+                />
               </View>
             )}
           </View>
         )}
         ListEmptyComponent={
           loadingMembers ? null : (
-            <Text style={styles.noParticipants}>
+            <AppText variant="secondary" style={styles.noParticipants}>
               {i18n.t("noParticipantsFound")}
-            </Text>
+            </AppText>
           )
         }
         // Only the app-level group pages its members; every other group already
@@ -624,7 +644,7 @@ const DetailedGroupChatPage = ({ route }) => {
         onEndReachedThreshold={0.3}
         ListFooterComponent={
           loadingMembers ? (
-            <ActivityIndicator style={{ marginVertical: 14 }} color="#007aff" />
+            <ActivityIndicator style={styles.loadingMore} color={colors.primary} />
           ) : null
         }
       />
@@ -653,85 +673,102 @@ const DetailedGroupChatPage = ({ route }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 20 },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  headerContainer: { alignItems: "center", marginBottom: 20 },
-  chatIcon: { width: 100, height: 100, borderRadius: 50, marginBottom: 10 },
+export default DetailedGroupChatPage;
+
+const useStyles = makeStyles((t) => ({
+  container: {
+    flex: 1,
+    backgroundColor: t.colors.background,
+    padding: t.spacing.lg,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: t.colors.background,
+  },
+  headerContainer: {
+    alignItems: "center",
+    marginBottom: t.spacing.lg,
+  },
+  chatIcon: {
+    marginBottom: t.spacing.md,
+  },
   groupName: {
-    fontSize: 22,
-    fontWeight: "bold",
     textAlign: "center",
-    marginBottom: 10,
+    marginBottom: t.spacing.md,
   },
   memberCount: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 10,
+    marginBottom: t.spacing.md,
+  },
+  changeIconButton: {
+    marginTop: t.spacing.md,
+    minHeight: 0,
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.base,
+  },
+  renameCard: {
+    marginBottom: t.spacing.base,
+  },
+  renameHeading: {
+    marginBottom: t.spacing.md,
+  },
+  renameInput: {
+    paddingHorizontal: t.spacing.md,
+    backgroundColor: t.colors.surface,
+    marginBottom: t.spacing.md,
   },
   assistantSwitchRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    gap: t.spacing.md, 
   },
   assistantSwitchText: {
     flex: 1,
   },
   assistantSwitchHint: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 2,
+    marginTop: t.spacing.xs,
   },
-  renameCard: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    backgroundColor: "#f9fafb",
+  leaveGroupButton: {
+    marginTop: t.spacing.base,
+    marginHorizontal: t.spacing.lg,
   },
-  renameHeading: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 10,
+  addParticipantButton: {
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.lg,
   },
-  renameInput: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "#fff",
-    fontSize: 15,
-    marginBottom: 10,
-  },
-  renameButton: {
-    backgroundColor: "#007aff",
-    borderRadius: 8,
-    paddingVertical: 11,
-    alignItems: "center",
-  },
-  renameButtonDisabled: { opacity: 0.6 },
-  renameButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   participantCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 20,
+    paddingVertical: t.spacing.base,
+    paddingHorizontal: t.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: t.colors.borderSubtle,
   },
-  profileImage: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
-  textContainer: { flex: 1 },
-  name: { fontSize: 18, fontWeight: "600" },
-  bio: { fontSize: 14, color: "#555" },
-  noParticipants: {
-    textAlign: "center",
-    fontSize: 16,
-    color: "#888",
-    marginTop: 20,
+  profileImage: {
+    marginRight: t.spacing.base,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  // The admin buttons and their gaps use sm, not the md that 10 snaps to: the row
+  // is crowded, and every point here comes out of the name column.
+  smallButton: {
+    minHeight: 0,
+    paddingVertical: t.spacing.xs,
+    paddingHorizontal: t.spacing.sm,
+  },
+  addAdminButton: {
+    marginLeft: t.spacing.sm,
+  },
+  removeAdminButton: {
+    marginBottom: t.spacing.md,
+  },
+  removeButtonsContainer: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    marginLeft: t.spacing.sm,
   },
   adminBadgeContainer: {
     justifyContent: "center",
@@ -739,72 +776,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   adminBadge: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#007aff",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: "#EAF3FF",
-    borderRadius: 10,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs,
+    backgroundColor: t.colors.surfaceTinted,
+    borderRadius: t.radius.full,
     overflow: "hidden",
   },
-  removeButton: {
-    backgroundColor: "#FF3B30",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-  },
-  removeButtonText: { color: "#fff", fontWeight: "bold" },
-  addAdminButton: {
-    backgroundColor: "#007aff",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-    marginLeft: 10,
-  },
-  addAdminText: { color: "#fff", fontWeight: "bold" },
-  addParticipantButton: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomColor: "#ddd",
-  },
-  addParticipantText: { fontSize: 18, fontWeight: "600", color: "#007aff" },
-  removeAdminButton: {
-    backgroundColor: "#FF3B30",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  removeAdminText: { color: "#fff", fontWeight: "bold" },
-  removeButtonsContainer: {
-    flexDirection: "column",
-    alignItems: "flex-start",
-    marginLeft: 10,
-  },
-  leaveGroupButton: {
-    backgroundColor: "#FF3B30",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 15,
-    marginHorizontal: 20,
-  },
-  leaveGroupText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  changeIconButton: {
-    marginTop: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    backgroundColor: "#007aff",
-    borderRadius: 6,
-  },
-
-  changeIconText: {
-    color: "#fff",
-    fontWeight: "bold",
+  noParticipants: {
     textAlign: "center",
-    fontSize: 16,
+    marginTop: t.spacing.lg,
   },
-});
-
-export default DetailedGroupChatPage;
+  loadingMore: {
+    marginVertical: t.spacing.base,
+  },
+}));

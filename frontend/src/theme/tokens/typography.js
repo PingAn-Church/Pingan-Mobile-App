@@ -42,4 +42,6 @@ export const textVariants = {
   link: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: "primary" },
   // Button labels are single-line too (same Android clipping reason).
   button: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: "onPrimary" },
+  // Count bubbles (unread, online) and status pills (Admin, AI). Single-line too (same reason).
+  badge: { fontSize: fontSize.xs, fontWeight: fontWeight.bold, color: "onPrimary" },
 };

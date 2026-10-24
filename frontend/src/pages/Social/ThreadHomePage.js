@@ -59,13 +59,9 @@ import { showAlert } from "../../utils/showAlert";
 import React, { useState, useEffect, useCallback, useContext } from "react";
 import {
   View,
-  Text,
   FlatList,
-  Button,
   ActivityIndicator,
   TouchableOpacity,
-  StyleSheet,
-  Alert,
 } from "react-native";
 import { fetchThreadById, fetchThreads } from "../../service/ThreadService";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -79,6 +75,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { setThreadSubscription } from "../../service/ThreadService";
 import { parseServerDate } from "../../utils/serverDate";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Button, Card, Heading } from "../../components/ui";
 
 // Helper to format a server timestamp to a readable local time. parseServerDate
 // applies the server-UTC rule (zone-less LocalDateTime strings would otherwise
@@ -89,6 +87,8 @@ const formatDateTime = (isoDate) => {
 };
 
 const ThreadHomePage = () => {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [threads, setThreads] = useState([]);
@@ -259,11 +259,13 @@ const ThreadHomePage = () => {
     [user?.admin, user?.id]
   );
 
-  if (loadingInitial) return <ActivityIndicator size="large" color="blue" />;
+  if (loadingInitial) return <ActivityIndicator size="large" color={colors.primary} />;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>{i18n.t("threadsAndTopics")}</Text>
+      <Heading level={1} style={styles.header}>
+        {i18n.t("threadsAndTopics")}
+      </Heading>
 
       {/* <FlatList
         data={threads}
@@ -291,11 +293,9 @@ const ThreadHomePage = () => {
         )}
       /> */}
       {threads.length === 0 ? (
-        <Text
-          style={{ textAlign: "center", marginVertical: 40, color: "#888" }}
-        >
+        <AppText variant="secondary" style={styles.emptyText}>
           {i18n.t("noThreads")}
-        </Text>
+        </AppText>
       ) : (
         <FlatList
           data={threads}
@@ -306,7 +306,7 @@ const ThreadHomePage = () => {
           onEndReachedThreshold={0.3}
           ListFooterComponent={
             loadingMore ? (
-              <ActivityIndicator color="blue" style={{ marginVertical: 16 }} />
+              <ActivityIndicator color={colors.primary} style={styles.loadingMore} />
             ) : null
           }
           renderItem={({ item }) => {
@@ -314,14 +314,21 @@ const ThreadHomePage = () => {
             // until an admin resolves the report.
             const shadowHidden = !!item.reported && user?.id !== item.createdById;
             return (
-              <TouchableOpacity
+              <Card
+                variant="default"
+                elevated
                 style={styles.threadItem}
                 onPress={() => handleThreadPress(item)}
+                accessibilityRole="button"
               >
                 {shadowHidden ? (
-                  <Text style={styles.reportedPlaceholder}>
+                  <AppText
+                    variant="body"
+                    color="textSecondary"
+                    style={styles.reportedPlaceholder}
+                  >
                     {i18n.t("reportedPendingReview")}
-                  </Text>
+                  </AppText>
                 ) : (
                   <>
                     {!!item.coverImage && (
@@ -332,40 +339,51 @@ const ThreadHomePage = () => {
                         resizeMode="cover"
                       />
                     )}
-                    <Text style={styles.threadTitle}>{item.title}</Text>
-                    <Text style={styles.threadContent}>
+                    <AppText
+                      variant="cardTitle"
+                      weight="semibold"
+                      style={styles.threadTitle}
+                    >
+                      {item.title}
+                    </AppText>
+                    <AppText variant="body" style={styles.threadContent}>
                       {item.content.length > 80
                         ? item.content.slice(0, 80) + "..."
                         : item.content}
-                    </Text>
+                    </AppText>
                   </>
                 )}
                 <View style={styles.metaRow}>
-                  <Text style={styles.threadMeta}>
+                  <AppText variant="secondary">
                     {i18n.t("by")} {formatName(item.createdByFirstName, item.createdByLastName) || item.createdByName}
-                  </Text>
+                  </AppText>
                   <View style={styles.metaRight}>
-                    <Text style={styles.threadMeta}>
+                    <AppText variant="secondary">
                       {formatDateTime(item.createdAt)}
-                    </Text>
+                    </AppText>
                     {/* Topics are silent unless you ask for them; this is the ask. */}
                     <TouchableOpacity
                       onPress={() => toggleSubscription(item)}
                       style={styles.bellButton}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityRole="button"
                       accessibilityLabel={i18n.t(
                         item.subscribed ? "unfollowTopic" : "followTopic"
                       )}
                     >
                       <Ionicons
                         name={item.subscribed ? "notifications" : "notifications-off-outline"}
-                        size={19}
-                        color={item.subscribed ? "#f59e0b" : "#9ca3af"}
+                        size={sizes.icon.md}
+                        color={
+                          item.subscribed
+                            ? colors.thread.following
+                            : colors.thread.notFollowing
+                        }
                       />
                     </TouchableOpacity>
                   </View>
                 </View>
-              </TouchableOpacity>
+              </Card>
             );
           }}
         />
@@ -375,62 +393,70 @@ const ThreadHomePage = () => {
           behind it, and a bottom-flush button was partly covered by 3-button nav. */}
       <View style={{ paddingBottom: insets.bottom }}>
         <Button
+          size="sm"
           title={i18n.t("createNewThread")}
           onPress={handleCreateThread}
           disabled={loadingInitial || refreshing}
+          style={styles.createButton}
         />
       </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
-  header: { fontSize: 26, fontWeight: "bold", marginBottom: 20 },
-  threadItem: {
-    padding: 16,
-    backgroundColor: "#ffffff",
-    marginBottom: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+export default ThreadHomePage;
+
+// Layout only — text, cards and buttons get their look from the ui components.
+const useStyles = makeStyles((t) => ({
+  container: {
+    flex: 1,
+    padding: t.spacing.base,
+    backgroundColor: t.colors.background,
   },
-  metaRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  bellButton: { padding: 2 },
+  header: {
+    marginBottom: t.spacing.lg,
+  },
+  emptyText: {
+    textAlign: "center",
+    marginVertical: t.spacing["3xl"],
+  },
+  loadingMore: {
+    marginVertical: t.spacing.base,
+  },
+  threadItem: {
+    marginBottom: t.spacing.md,
+  },
+  metaRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: t.spacing.md, 
+  },
+  bellButton: {
+    padding: t.spacing.xs,
+  },
   threadCover: {
     width: "100%",
     aspectRatio: 16 / 9,
-    borderRadius: 10,
-    marginBottom: 10,
-    backgroundColor: "#eee",
+    borderRadius: t.radius.card,
+    marginBottom: t.spacing.md, 
+    backgroundColor: t.colors.placeholder,
   },
-  threadTitle: { fontSize: 18, fontWeight: "600", marginBottom: 6 },
+  threadTitle: {
+    marginBottom: t.spacing.sm,
+  },
   threadContent: {
-    fontSize: 15,
-    color: "#333",
-    marginBottom: 8,
-    lineHeight: 23,
+    marginBottom: t.spacing.sm,
   },
   reportedPlaceholder: {
-    fontSize: 15,
     fontStyle: "italic",
-    color: "#999",
-    marginBottom: 8,
-    lineHeight: 23,
+    marginBottom: t.spacing.sm,
   },
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  threadMeta: {
-    fontSize: 13,
-    color: "#777",
-    lineHeight: 21,
+  createButton: {
+    minHeight: 0,
+    paddingVertical: t.spacing.sm,
   },
-});
-
-export default ThreadHomePage;
+}));

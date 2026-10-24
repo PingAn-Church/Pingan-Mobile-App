@@ -26,10 +26,10 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Ionicons } from "@expo/vector-icons";
 import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
-import defaultProfileImage from "../../../assets/user.png";
 // The assistant has no stored avatar; it wears the app's own icon.
 import appIcon from "../../../assets/icon.png";
-import CachedImage from "../../components/CachedImage";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Avatar, Button, TextField } from "../../components/ui";
 import i18n from "../../../i18n";
 import { formatName } from "../../utils/formatName";
 import {
@@ -301,10 +301,16 @@ const getConversationPreview = (conversation, currentUserId) => {
 
 const webFontSize = (baseSize) => (Platform.OS === "web" ? baseSize + 7 : baseSize);
 
+const webLineHeight = (baseLineHeight) => (Platform.OS === "web" ? baseLineHeight + 7 : baseLineHeight);
+
+const ICON_BUTTON_SIZE = 34; // round back / close buttons in the web panels
+const FAB_SIZE = 54; // web sidebar "new chat" button
+const CHECKBOX_SIZE = 18; // web new-group select box
+const GROUP_PREVIEW_SIZE = 70; // picked photo in the web new-group panel
 // Bounds a chat photo is drawn inside. Wide enough to read, short enough that one
 // tall screenshot doesn't push the rest of the conversation off screen.
-const IMAGE_BUBBLE_MAX_WIDTH = 240;
-const IMAGE_BUBBLE_MAX_HEIGHT = 320;
+const IMAGE_BUBBLE_MAX_WIDTH = 240; 
+const IMAGE_BUBBLE_MAX_HEIGHT = 320; 
 
 /**
  * Largest box with the photo's own proportions that fits the bounds above, so
@@ -337,6 +343,8 @@ const ChatImage = React.memo(function ChatImage({
   onPress,
   onLongPress,
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   // Source priority: the local file (sender's own freshly-sent image — instant and
   // survives the optimistic -> persisted swap), then the on-device media cache, then
   // the remote presigned URL. peekCachedMedia seeds the first render synchronously so
@@ -385,7 +393,13 @@ const ChatImage = React.memo(function ChatImage({
   }, [uri]);
 
   if (!uri) {
-    return <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : "#0A84FF"} />;
+    return (
+      <ActivityIndicator
+        size="small"
+        color={isMe ? colors.onPrimary : colors.primary}
+        accessibilityLabel={i18n.t("loading")}
+      />
+    );
   }
 
   return (
@@ -397,6 +411,8 @@ const ChatImage = React.memo(function ChatImage({
       onPress={() => onPress(message, uri)}
       onLongPress={onLongPress ? (event) => onLongPress(message, event) : undefined}
       delayLongPress={300}
+      accessibilityRole="imagebutton"
+      accessibilityLabel={i18n.t("imagePreview")}
     >
       <Image
         source={{ uri }}
@@ -408,7 +424,7 @@ const ChatImage = React.memo(function ChatImage({
       />
       {message.pending ? (
         <View style={styles.imageUploadOverlay}>
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <ActivityIndicator size="small" color={colors.onPrimary} accessibilityLabel={i18n.t("loading")} />
         </View>
       ) : null}
     </TouchableOpacity>
@@ -423,28 +439,39 @@ const ChatNativeHeaderTitle = React.memo(function ChatNativeHeaderTitle({
   canOpen,
   onPress,
 }) {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   return (
     <TouchableOpacity
       style={styles.nativeHeaderTitle}
       activeOpacity={canOpen ? 0.72 : 1}
       onPress={onPress}
       disabled={!canOpen}
+      accessibilityRole="button"
+      accessibilityLabel={title || i18n.t("chat")}
+      accessibilityState={{ disabled: !canOpen }}
     >
-      <CachedImage
+      <Avatar
         uri={iconUri}
         type={iconType}
-        conversationId={iconType === "group" ? conversationId : undefined}
-        fallbackSource={defaultProfileImage}
+        conversationId={conversationId}
+        size="sm"
         style={styles.nativeHeaderAvatar}
       />
-      <Text style={styles.nativeHeaderText} numberOfLines={1}>
+      <AppText
+        variant="body"
+        color="textPrimary"
+        weight="semibold"
+        style={styles.nativeHeaderText}
+        numberOfLines={1}
+      >
         {title || i18n.t("chat")}
-      </Text>
+      </AppText>
       {canOpen ? (
         <Ionicons
           name="chevron-forward"
-          size={15}
-          color="#8E8E93"
+          size={sizes.icon.xs}
+          color={colors.textSecondary}
           style={styles.nativeHeaderChevron}
         />
       ) : null}
@@ -470,6 +497,8 @@ const AndroidKeyboardListSpacer = React.memo(function AndroidKeyboardListSpacer(
 });
 
 export default function ChatPage({ route }) {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const conversationId = route?.params?.conversationId ?? route?.params?.id ?? null;
 
   const { user: currentUser } = useContext(UserContext);
@@ -2052,8 +2081,8 @@ export default function ChatPage({ route }) {
             >
               <Ionicons
                 name={muted ? "notifications-off-outline" : "ellipsis-vertical"}
-                size={21}
-                color="#111827"
+                size={sizes.icon.md}
+                color={colors.textPrimary}
               />
             </TouchableOpacity>
           )
@@ -2335,30 +2364,38 @@ export default function ChatPage({ route }) {
           style={styles.jumpToEndButton}
           onPress={jumpToEnd}
           activeOpacity={0.85}
+          accessibilityRole="button"
           accessibilityLabel="Jump to latest messages"
         >
-          <Ionicons name="chevron-down" size={24} color="#1F1F22" />
+          <Ionicons name="chevron-down" size={sizes.icon.lg} color={colors.textPrimary} />
         </TouchableOpacity>
       )}
 
       {editingMessage && (
         <View style={styles.editingBanner}>
-          <Text style={{ fontSize: webFontSize(12), color: "#666" }}>Editing message...</Text>
+          <AppText variant="caption" style={styles.editingBannerText}>
+            Editing message...
+          </AppText>
           <TouchableOpacity
             onPress={() => {
               setEditingMessage(null);
               setInputText("");
             }}
+            accessibilityRole="button"
           >
-            <Text style={{ color: "red", fontSize: webFontSize(12) }}>Cancel</Text>
+            <AppText variant="link" size="xs" color="danger" style={styles.editingCancelText}>
+              Cancel
+            </AppText>
           </TouchableOpacity>
         </View>
       )}
 
       {messagingBlocked && (
         <View style={styles.blockedBanner}>
-          <Ionicons name="ban-outline" size={16} color="#8E8E93" />
-          <Text style={styles.blockedBannerText}>{i18n.t("messagingBlockedNotice")}</Text>
+          <Ionicons name="ban-outline" size={sizes.icon.xs} color={colors.textSecondary} />
+          <AppText variant="secondary" style={styles.blockedBannerText}>
+            {i18n.t("messagingBlockedNotice")}
+          </AppText>
         </View>
       )}
 
@@ -2371,11 +2408,12 @@ export default function ChatPage({ route }) {
               <TouchableOpacity
                 style={styles.mentionRow}
                 onPress={() => applyMention({ id: "__all__" })}
+                accessibilityRole="button"
               >
-                <View style={[styles.mentionAvatar, styles.mentionAvatarAll]}>
-                  <Ionicons name="megaphone" size={16} color="#FFFFFF" />
-                </View>
-                <Text style={styles.mentionName}>{i18n.t("mentionEveryone")}</Text>
+                <Avatar icon="megaphone" color="chat.mention" size="sm" />
+                <AppText variant="body" style={styles.mentionName}>
+                  {i18n.t("mentionEveryone")}
+                </AppText>
               </TouchableOpacity>
             )}
             {mentionCandidates.map((candidate) => (
@@ -2383,16 +2421,12 @@ export default function ChatPage({ route }) {
                 key={String(candidate.id)}
                 style={styles.mentionRow}
                 onPress={() => applyMention(candidate)}
+                accessibilityRole="button"
               >
-                <CachedImage
-                  uri={candidate.profileImage || null}
-                  type="profile"
-                  fallbackSource={defaultProfileImage}
-                  style={styles.mentionAvatar}
-                />
-                <Text style={styles.mentionName} numberOfLines={1}>
+                <Avatar uri={candidate.profileImage} size="sm" />
+                <AppText variant="body" style={styles.mentionName} numberOfLines={1}>
                   {candidate.fullName || i18n.t("unknownUser")}
-                </Text>
+                </AppText>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -2405,8 +2439,15 @@ export default function ChatPage({ route }) {
           style={styles.attachButton}
           activeOpacity={0.82}
           disabled={messagingBlocked}
+          accessibilityRole="button"
+          accessibilityLabel={i18n.t("sendImage")}
+          accessibilityState={{ disabled: messagingBlocked }}
         >
-          <Ionicons name="image" size={23} color={messagingBlocked ? "#B0B0B3" : "#111111"} />
+          <Ionicons
+            name="image"
+            size={sizes.icon.lg}
+            color={messagingBlocked ? colors.textDisabled : colors.textPrimary}
+          />
         </TouchableOpacity>
 
         <View style={styles.inputPill}>
@@ -2415,7 +2456,8 @@ export default function ChatPage({ route }) {
             value={inputText}
             onChangeText={handleInputTextChange}
             placeholder={messagingBlocked ? i18n.t("messagingBlockedPlaceholder") : i18n.t("typeMessage")}
-            placeholderTextColor="#98989D"
+            placeholderTextColor={colors.textSecondary}
+            accessibilityLabel={messagingBlocked ? i18n.t("messagingBlockedPlaceholder") : i18n.t("typeMessage")}
             style={styles.inputField}
             multiline
             editable={!messagingBlocked}
@@ -2427,8 +2469,8 @@ export default function ChatPage({ route }) {
           >
             <VoiceRecorder
               onRecordingComplete={handleVoiceRecordingComplete}
-              iconSize={24}
-              iconColor={messagingBlocked ? "#B0B0B3" : "#1F1F22"}
+              iconSize={sizes.icon.lg}
+              iconColor={messagingBlocked ? colors.textDisabled : colors.textPrimary}
               buttonSize={38}
             />
           </View>
@@ -2442,16 +2484,19 @@ export default function ChatPage({ route }) {
             isSendDisabled ? styles.sendButtonDisabled : styles.sendButtonActive,
           ]}
           activeOpacity={0.86}
+          accessibilityRole="button"
+          accessibilityLabel={editingMessage ? i18n.t("update") : i18n.t("send")}
+          accessibilityState={{ disabled: isSendDisabled, busy: isSendingText }}
         >
           {isSendingText ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={colors.onPrimary} accessibilityLabel={i18n.t("loading")} />
           ) : (
             // Icons instead of the old hardcoded English "Send"/"Update":
             // language-neutral, and the paper plane is the universal send glyph.
             <Ionicons
               name={editingMessage ? "checkmark" : "paper-plane"}
-              size={20}
-              color="#FFFFFF"
+              size={sizes.icon.md}
+              color={colors.onPrimary}
             />
           )}
         </TouchableOpacity>
@@ -2487,7 +2532,7 @@ export default function ChatPage({ route }) {
         ListHeaderComponent={Platform.OS === "android" ? AndroidKeyboardListSpacer : null}
         ListFooterComponent={
           loadingOlder ? (
-            <ActivityIndicator style={{ marginVertical: 12 }} color="#888" />
+            <ActivityIndicator style={styles.loadingOlder} color={colors.textSecondary} accessibilityLabel={i18n.t("loading")} />
           ) : null
         }
         keyExtractor={(item, index) =>
@@ -2499,7 +2544,9 @@ export default function ChatPage({ route }) {
           if (item.type === "date") {
             return (
               <View style={styles.dateSeparator}>
-                <Text style={styles.dateText}>{item.date}</Text>
+                <AppText variant="caption" style={styles.dateText}>
+                  {item.date}
+                </AppText>
               </View>
             );
           }
@@ -2585,9 +2632,9 @@ export default function ChatPage({ route }) {
             >
               {isShadowHidden ? (
                 <View style={styles.messageContentContainer}>
-                  <Text style={styles.reportedPlaceholder}>
+                  <AppText variant="body" color="textSecondary" style={styles.reportedPlaceholder}>
                     {i18n.t("reportedPendingReview")}
-                  </Text>
+                  </AppText>
                 </View>
               ) : isImage ? (
                 <ChatImage
@@ -2623,7 +2670,8 @@ export default function ChatPage({ route }) {
                 })()
               ) : (
                 <View style={styles.messageContentContainer}>
-                  <Text
+                  <AppText
+                    variant="body"
                     selectable
                     style={[
                       styles.content,
@@ -2642,25 +2690,27 @@ export default function ChatPage({ route }) {
                         part.text
                       )
                     )}
-                  </Text>
+                  </AppText>
 
                   {showTranslation && (
                     <View style={styles.translationContainer}>
                       <View style={styles.translationDivider} />
-                      <Text
+                      <AppText
+                        variant="body"
                         style={[
                           styles.translatedText,
                           isMe ? styles.contentSent : styles.contentReceived,
                         ]}
                       >
                         {translationEntry.text}
-                      </Text>
+                      </AppText>
                     </View>
                   )}
                 </View>
               )}
 
-              <Text
+              <AppText
+                variant="caption"
                 style={[
                   styles.timestamp,
                   isImage ? styles.imageTimestamp : (isMe ? styles.timestampSent : styles.timestampReceived),
@@ -2671,9 +2721,11 @@ export default function ChatPage({ route }) {
                 {isMe && item.isEdited ? " • Edited" : ""}
                 {isPending ? " • Sending..." : ""}
                 {isFailed ? " • Failed" : ""}
-              </Text>
+              </AppText>
               {showOutgoingDeliveryState && (
-                <Text
+                <AppText
+                  variant="caption"
+                  weight="semibold"
                   style={[
                     styles.deliveryStatus,
                     isImage ? styles.imageTimestamp : styles.timestampSent,
@@ -2682,7 +2734,7 @@ export default function ChatPage({ route }) {
                   ]}
                 >
                   {formatDeliveryStateLabel(outgoingDeliveryState)}
-                </Text>
+                </AppText>
               )}
             </TouchableOpacity>
           );
@@ -2695,19 +2747,14 @@ export default function ChatPage({ route }) {
                 isAssistant ? (
                   // No profile to open, and no stored avatar to fetch: the
                   // assistant wears the app icon straight from the bundle.
-                  <Image source={appIcon} style={styles.groupMessageAvatar} />
+                  <Avatar source={appIcon} size="sm" style={styles.groupMessageAvatar} />
                 ) : (
                   <TouchableOpacity
                     onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
                     accessibilityRole="button"
                     accessibilityLabel={senderName}
                   >
-                    <CachedImage
-                      uri={senderAvatarPath}
-                      type="profile"
-                      fallbackSource={defaultProfileImage}
-                      style={styles.groupMessageAvatar}
-                    />
+                    <Avatar uri={senderAvatarPath} size="sm" style={styles.groupMessageAvatar} />
                   </TouchableOpacity>
                 )
               ) : (
@@ -2719,20 +2766,33 @@ export default function ChatPage({ route }) {
                 {startsRun &&
                   (isAssistant ? (
                     <View style={styles.assistantNameRow}>
-                      <Text style={styles.groupSenderName} numberOfLines={1}>
+                      <AppText
+                        variant="caption"
+                        weight="semibold"
+                        style={styles.groupSenderName}
+                        numberOfLines={1}
+                      >
                         {senderName}
-                      </Text>
+                      </AppText>
                       <View style={styles.assistantBadge}>
-                        <Text style={styles.assistantBadgeText}>{i18n.t("aiBadge")}</Text>
+                        <AppText variant="badge" style={styles.assistantBadgeText}>
+                          {i18n.t("aiBadge")}
+                        </AppText>
                       </View>
                     </View>
                   ) : (
                     <TouchableOpacity
                       onPress={() => navigation.navigate("UserProfile", { userId: item.senderId })}
+                      accessibilityRole="button"
                     >
-                      <Text style={styles.groupSenderName} numberOfLines={1}>
+                      <AppText
+                        variant="caption"
+                        weight="semibold"
+                        style={styles.groupSenderName}
+                        numberOfLines={1}
+                      >
                         {senderName}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   ))}
                 {bubble}
@@ -2740,7 +2800,9 @@ export default function ChatPage({ route }) {
                   // Chrome, not message text. In the body it would ride along in
                   // the push notification and stand in for the answer as the
                   // conversation-list preview, and cost tokens on every reply.
-                  <Text style={styles.assistantDisclaimer}>{i18n.t("assistantDisclaimer")}</Text>
+                  <AppText variant="secondary" size="xs" style={styles.assistantDisclaimer}>
+                    {i18n.t("assistantDisclaimer")}
+                  </AppText>
                 )}
               </View>
             </View>
@@ -2750,9 +2812,15 @@ export default function ChatPage({ route }) {
 
       <Modal transparent visible={contextMenu.visible} animationType="fade" onRequestClose={closeContextMenu}>
         <View style={styles.menuOverlay} pointerEvents="box-none">
-          <Pressable style={styles.menuBackdrop} onPress={closeContextMenu} />
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={closeContextMenu}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("close")}
+          />
           <View
             style={[styles.contextMenu, { left: contextMenuPosition.left, top: contextMenuPosition.top }]}
+            accessibilityRole="menu"
             onLayout={(event) =>
               setContextMenuSize({
                 width: event.nativeEvent.layout.width,
@@ -2763,6 +2831,7 @@ export default function ChatPage({ route }) {
             {contextCanCopy && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
+                accessibilityRole="menuitem"
                 onPress={async () => {
                   const selected = contextMenu.message;
                   closeContextMenu();
@@ -2780,13 +2849,14 @@ export default function ChatPage({ route }) {
                   }
                 }}
               >
-                <Text style={styles.contextMenuItemText}>{i18n.t("copy")}</Text>
+                <AppText variant="body" size="sm" style={styles.contextMenuItemText}>{i18n.t("copy")}</AppText>
               </TouchableOpacity>
             )}
 
             {contextCanDownload && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
+                accessibilityRole="menuitem"
                 onPress={async () => {
                   const selected = contextMenu.message;
                   closeContextMenu();
@@ -2804,27 +2874,29 @@ export default function ChatPage({ route }) {
                   }
                 }}
               >
-                <Text style={styles.contextMenuItemText}>{i18n.t("download")}</Text>
+                <AppText variant="body" size="sm" style={styles.contextMenuItemText}>{i18n.t("download")}</AppText>
               </TouchableOpacity>
             )}
 
             {contextCanTranslate && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
+                accessibilityRole="menuitem"
                 onPress={() => {
                   const selected = contextMenu.message;
                   closeContextMenu();
                   handleTranslate(selected);
                 }}
                 disabled={translatingId === contextMessageIdKey}
+                accessibilityState={{ disabled: translatingId === contextMessageIdKey }}
               >
-                <Text style={styles.contextMenuItemText}>
+                <AppText variant="body" size="sm" style={styles.contextMenuItemText}>
                   {translatingId === contextMessageIdKey
                     ? i18n.t("translating")
                     : contextHasVisibleTranslation
                       ? i18n.t("hideTranslation")
                       : i18n.t("translate")}
-                </Text>
+                </AppText>
               </TouchableOpacity>
             )}
 
@@ -2834,9 +2906,10 @@ export default function ChatPage({ route }) {
               !isLocalOnlyMessage(contextMenu.message) && (
                 <TouchableOpacity
                   style={styles.contextMenuItem}
+                  accessibilityRole="menuitem"
                   onPress={() => beginEditMessage(contextMenu.message)}
                 >
-                  <Text style={styles.contextMenuItemText}>{i18n.t("edit")}</Text>
+                  <AppText variant="body" size="sm" style={styles.contextMenuItemText}>{i18n.t("edit")}</AppText>
 
                 </TouchableOpacity>
               )}
@@ -2845,6 +2918,7 @@ export default function ChatPage({ route }) {
               !contextMenu.message?.pending && (
                 <TouchableOpacity
                   style={styles.contextMenuItem}
+                  accessibilityRole="menuitem"
                   onPress={async () => {
                     const selected = contextMenu.message;
                     closeContextMenu();
@@ -2859,34 +2933,25 @@ export default function ChatPage({ route }) {
                     await handleDeleteMessage(selected);
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.contextMenuItemText,
-                      styles.contextMenuDangerText,
-                    ]}
-                  >
+                  <AppText variant="body" size="sm" color="danger" style={styles.contextMenuItemText}>
                     {i18n.t("delete")}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               )}
 
             {contextCanReport && (
               <TouchableOpacity
                 style={styles.contextMenuItem}
+                accessibilityRole="menuitem"
                 onPress={() => {
                   const selected = contextMenu.message;
                   closeContextMenu();
                   submitReport(selected);
                 }}
               >
-                <Text
-                  style={[
-                    styles.contextMenuItemText,
-                    styles.contextMenuDangerText,
-                  ]}
-                >
+                <AppText variant="body" size="sm" color="danger" style={styles.contextMenuItemText}>
                   {i18n.t("report")}
-                </Text>
+                </AppText>
               </TouchableOpacity>
             )}
           </View>
@@ -2900,7 +2965,7 @@ export default function ChatPage({ route }) {
         onClose={closeImageViewer}
       />
 
-      <StickyInputFooter background="#F2F2F7">{composerContent}</StickyInputFooter>
+      <StickyInputFooter background={colors.surfaceSubtle}>{composerContent}</StickyInputFooter>
     </KeyboardAvoidingView>
   );
 
@@ -2921,50 +2986,52 @@ export default function ChatPage({ route }) {
                     onPress={() => setShowWebCreateGroupPanel(false)}
                     style={styles.webNewChatBackButton}
                     activeOpacity={0.82}
+                    accessibilityRole="button"
+                    accessibilityLabel={i18n.t("back")}
                   >
-                    <Ionicons name="arrow-back" size={20} color="#111827" />
+                    <Ionicons name="arrow-back" size={sizes.icon.md} color={colors.textPrimary} />
                   </TouchableOpacity>
-                  <Text style={styles.webNewChatTitle}>{i18n.t("createNewGroup")}</Text>
+                  <AppText variant="sectionTitle" size="md" weight="semibold" style={styles.webNewChatTitle}>
+                    {i18n.t("createNewGroup")}
+                  </AppText>
                 </View>
 
                 <View style={styles.webNewGroupFormWrap}>
-                  <TextInput
+                  <TextField
                     value={newGroupName}
                     onChangeText={setNewGroupName}
                     placeholder={i18n.t("groupName")}
-                    placeholderTextColor="#8B8F97"
                     style={styles.webNewGroupInput}
                   />
 
                   {uploadingNewGroupImage ? (
                     <View style={styles.webNewGroupImageLoading}>
-                      <ActivityIndicator size="small" color="#0A84FF" />
+                      <ActivityIndicator size="small" color={colors.primary} accessibilityLabel={i18n.t("loading")} />
                     </View>
                   ) : newGroupImageUri ? (
                     <Image source={{ uri: newGroupImageUri }} style={styles.webNewGroupImagePreview} />
                   ) : null}
 
-                  <TouchableOpacity
-                    style={styles.webNewGroupImageButton}
+                  <Button
+                    size="sm"
+                    title={i18n.t("pickGroupImage")}
                     onPress={handlePickNewGroupImage}
-                    activeOpacity={0.9}
-                  >
-                    <Text style={styles.webNewGroupImageButtonText}>{i18n.t("pickGroupImage")}</Text>
-                  </TouchableOpacity>
+                    style={styles.webNewGroupImageButton}
+                    textStyle={styles.webNewGroupImageButtonText}
+                  />
                 </View>
 
                 <View style={styles.sidebarSearchInputWrap}>
                   <Ionicons
                     name="search"
-                    size={16}
-                    color="#8B8F97"
+                    size={sizes.icon.xs}
+                    color={colors.textSecondary}
                     style={styles.sidebarSearchIcon}
                   />
-                  <TextInput
+                  <TextField
                     value={newGroupSearchQuery}
                     onChangeText={setNewGroupSearchQuery}
                     placeholder={i18n.t("searchUsers")}
-                    placeholderTextColor="#8B8F97"
                     style={styles.sidebarSearchInput}
                   />
                 </View>
@@ -2988,20 +3055,29 @@ export default function ChatPage({ route }) {
                           isSelected ? styles.sidebarConversationItemActive : null,
                         ]}
                         activeOpacity={0.82}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isSelected }}
                       >
-                        <CachedImage
-                          uri={item?.profileImage}
-                          type="profile"
-                          fallbackSource={defaultProfileImage}
-                          style={styles.sidebarAvatar}
-                        />
+                        <Avatar uri={item?.profileImage} size="md" style={styles.sidebarAvatar} />
                         <View style={styles.sidebarTextWrap}>
-                          <Text style={styles.sidebarConversationTitle} numberOfLines={1}>
+                          <AppText
+                            variant="body"
+                            size="sm"
+                            weight="semibold"
+                            color="textPrimary"
+                            style={styles.sidebarConversationTitle}
+                            numberOfLines={1}
+                          >
                             {formatName(item?.firstName, item?.lastName) || i18n.t("unknownUser")}
-                          </Text>
-                          <Text style={styles.sidebarConversationPreview} numberOfLines={1}>
+                          </AppText>
+                          <AppText
+                            variant="secondary"
+                            size="xs"
+                            style={styles.sidebarConversationPreview}
+                            numberOfLines={1}
+                          >
                             {item?.email || ""}
-                          </Text>
+                          </AppText>
                         </View>
                         <View
                           style={[
@@ -3009,7 +3085,9 @@ export default function ChatPage({ route }) {
                             isSelected ? styles.webSelectBoxChecked : null,
                           ]}
                         >
-                          {isSelected ? <Text style={styles.webSelectBoxCheckmark}>✓</Text> : null}
+                          {isSelected ? (
+                            <Ionicons name="checkmark" size={sizes.icon.xs} color={colors.onPrimary} />
+                          ) : null}
                         </View>
                       </TouchableOpacity>
                     );
@@ -3017,18 +3095,14 @@ export default function ChatPage({ route }) {
                 />
 
                 <View style={styles.webNewChatFooter}>
-                  <TouchableOpacity
-                    style={styles.webNewGroupButton}
+                  <Button
+                    size="sm"
+                    title={i18n.t("createGroup")}
                     onPress={handleCreateGroupFromSidebar}
-                    disabled={creatingNewGroup || uploadingNewGroupImage}
-                    activeOpacity={0.9}
-                  >
-                    {creatingNewGroup ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.webNewGroupButtonText}>{i18n.t("createGroup")}</Text>
-                    )}
-                  </TouchableOpacity>
+                    loading={creatingNewGroup}
+                    disabled={uploadingNewGroupImage}
+                    textStyle={styles.webNewGroupButtonText}
+                  />
                 </View>
               </View>
             ) : showWebNewChatPanel ? (
@@ -3038,31 +3112,34 @@ export default function ChatPage({ route }) {
                     onPress={() => setShowWebNewChatPanel(false)}
                     style={styles.webNewChatBackButton}
                     activeOpacity={0.82}
+                    accessibilityRole="button"
+                    accessibilityLabel={i18n.t("back")}
                   >
-                    <Ionicons name="arrow-back" size={20} color="#111827" />
+                    <Ionicons name="arrow-back" size={sizes.icon.md} color={colors.textPrimary} />
                   </TouchableOpacity>
-                  <Text style={styles.webNewChatTitle}>{i18n.t("startNewChat")}</Text>
+                  <AppText variant="sectionTitle" size="md" weight="semibold" style={styles.webNewChatTitle}>
+                    {i18n.t("startNewChat")}
+                  </AppText>
                 </View>
 
                 <View style={styles.sidebarSearchInputWrap}>
                   <Ionicons
                     name="search"
-                    size={16}
-                    color="#8B8F97"
+                    size={sizes.icon.xs}
+                    color={colors.textSecondary}
                     style={styles.sidebarSearchIcon}
                   />
-                  <TextInput
+                  <TextField
                     value={newChatSearchQuery}
                     onChangeText={setNewChatSearchQuery}
                     placeholder={i18n.t("searchUsers")}
-                    placeholderTextColor="#8B8F97"
                     style={styles.sidebarSearchInput}
                   />
                 </View>
 
                 {loadingNewChatUsers ? (
                   <View style={styles.webNewChatLoadingWrap}>
-                    <ActivityIndicator size="small" color="#0A84FF" />
+                    <ActivityIndicator size="small" color={colors.primary} accessibilityLabel={i18n.t("loading")} />
                   </View>
                 ) : (
                   <FlatList
@@ -3076,20 +3153,28 @@ export default function ChatPage({ route }) {
                         onPress={() => handleStartPrivateChatFromSidebar(item)}
                         style={styles.sidebarConversationItem}
                         activeOpacity={0.82}
+                        accessibilityRole="button"
                       >
-                        <CachedImage
-                          uri={item?.profileImage}
-                          type="profile"
-                          fallbackSource={defaultProfileImage}
-                          style={styles.sidebarAvatar}
-                        />
+                        <Avatar uri={item?.profileImage} size="md" style={styles.sidebarAvatar} />
                         <View style={styles.sidebarTextWrap}>
-                          <Text style={styles.sidebarConversationTitle} numberOfLines={1}>
+                          <AppText
+                            variant="body"
+                            size="sm"
+                            weight="semibold"
+                            color="textPrimary"
+                            style={styles.sidebarConversationTitle}
+                            numberOfLines={1}
+                          >
                             {formatName(item?.firstName, item?.lastName) || i18n.t("unknownUser")}
-                          </Text>
-                          <Text style={styles.sidebarConversationPreview} numberOfLines={1}>
+                          </AppText>
+                          <AppText
+                            variant="secondary"
+                            size="xs"
+                            style={styles.sidebarConversationPreview}
+                            numberOfLines={1}
+                          >
                             {item?.email || ""}
-                          </Text>
+                          </AppText>
                         </View>
                       </TouchableOpacity>
                     )}
@@ -3101,15 +3186,14 @@ export default function ChatPage({ route }) {
                 <View style={styles.sidebarSearchInputWrap}>
                   <Ionicons
                     name="search"
-                    size={16}
-                    color="#8B8F97"
+                    size={sizes.icon.xs}
+                    color={colors.textSecondary}
                     style={styles.sidebarSearchIcon}
                   />
-                  <TextInput
+                  <TextField
                     value={sidebarSearchQuery}
                     onChangeText={setSidebarSearchQuery}
                     placeholder="Search"
-                    placeholderTextColor="#8B8F97"
                     style={styles.sidebarSearchInput}
                   />
                 </View>
@@ -3127,17 +3211,33 @@ export default function ChatPage({ route }) {
                         <TouchableOpacity
                           onPress={() => navigation.navigate("ThreadHomePage")}
                           style={styles.sidebarConversationItem}
+                          accessibilityRole="button"
                         >
-                          <View style={[styles.sidebarAvatar, styles.sidebarTopicsAvatar]}>
-                            <Ionicons name="documents" size={20} color="#FFFFFF" />
-                          </View>
+                          <Avatar
+                            icon="documents"
+                            color="chat.topicsAvatar"
+                            size="md"
+                            style={styles.sidebarAvatar}
+                          />
                           <View style={styles.sidebarTextWrap}>
-                            <Text style={styles.sidebarConversationTitle} numberOfLines={1}>
+                            <AppText
+                              variant="body"
+                              size="sm"
+                              weight="semibold"
+                              color="textPrimary"
+                              style={styles.sidebarConversationTitle}
+                              numberOfLines={1}
+                            >
                               {i18n.t("topicsThreadsOverview")}
-                            </Text>
-                            <Text style={styles.sidebarConversationPreview} numberOfLines={1}>
+                            </AppText>
+                            <AppText
+                              variant="secondary"
+                              size="xs"
+                              style={styles.sidebarConversationPreview}
+                              numberOfLines={1}
+                            >
                               {i18n.t("topicsThreadsSubtitle")}
-                            </Text>
+                            </AppText>
                           </View>
                         </TouchableOpacity>
                       );
@@ -3156,27 +3256,33 @@ export default function ChatPage({ route }) {
                           styles.sidebarConversationItem,
                           isActive ? styles.sidebarConversationItemActive : null,
                         ]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isActive }}
                       >
-                        <CachedImage
+                        <Avatar
                           uri={conversationIconPaths[String(item.conversationId)]}
                           type={item.conversationType === "group" ? "group" : "profile"}
-                          conversationId={
-                            item.conversationType === "group" ? item.conversationId : undefined
-                          }
-                          fallbackSource={defaultProfileImage}
+                          conversationId={item.conversationId}
+                          size="md"
                           style={[
                             styles.sidebarAvatar,
                             isActive ? styles.sidebarAvatarActive : null,
                           ]}
                         />
                         <View style={styles.sidebarTextWrap}>
-                          <Text
+                          <AppText
+                            variant="body"
+                            size="sm"
+                            weight="semibold"
+                            color="textPrimary"
                             style={styles.sidebarConversationTitle}
                             numberOfLines={1}
                           >
                             {item.sidebarTitle}
-                          </Text>
-                          <Text
+                          </AppText>
+                          <AppText
+                            variant="secondary"
+                            size="xs"
                             style={styles.sidebarConversationPreview}
                             numberOfLines={1}
                           >
@@ -3184,7 +3290,7 @@ export default function ChatPage({ route }) {
                               <Text style={styles.sidebarMentionMarker}>[@] </Text>
                             )}
                             {item.sidebarPreview}
-                          </Text>
+                          </AppText>
                         </View>
                       </TouchableOpacity>
                     );
@@ -3198,26 +3304,32 @@ export default function ChatPage({ route }) {
                   accessibilityLabel={i18n.t("startNewChat")}
                   activeOpacity={0.88}
                 >
-                  <Ionicons name="add" size={28} color="#FFFFFF" />
+                  <Ionicons name="add" size={sizes.icon.xl} color={colors.onPrimary} />
                 </TouchableOpacity>
 
                 {showWebChatMenu && (
-                  <View style={styles.webChatMenu}>
+                  <View style={styles.webChatMenu} accessibilityRole="menu">
                     <TouchableOpacity
                       onPress={handleOpenWebNewChatPanel}
                       style={styles.webChatMenuOption}
                       activeOpacity={0.7}
+                      accessibilityRole="menuitem"
                     >
-                      <Ionicons name="person" size={20} color="#0A84FF" />
-                      <Text style={styles.webChatMenuOptionText}>{i18n.t("startNewChat")}</Text>
+                      <Ionicons name="person" size={sizes.icon.md} color={colors.primary} />
+                      <AppText variant="body" size="sm" color="textPrimary" style={styles.webChatMenuOptionText}>
+                        {i18n.t("startNewChat")}
+                      </AppText>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleOpenWebCreateGroupPanel}
                       style={styles.webChatMenuOption}
                       activeOpacity={0.7}
+                      accessibilityRole="menuitem"
                     >
-                      <Ionicons name="people" size={20} color="#0A84FF" />
-                      <Text style={styles.webChatMenuOptionText}>{i18n.t("createNewGroup")}</Text>
+                      <Ionicons name="people" size={sizes.icon.md} color={colors.primary} />
+                      <AppText variant="body" size="sm" color="textPrimary" style={styles.webChatMenuOptionText}>
+                        {i18n.t("createNewGroup")}
+                      </AppText>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -3228,6 +3340,8 @@ export default function ChatPage({ route }) {
             <Pressable
               style={styles.webChatMenuBackdrop}
               onPress={() => setShowWebChatMenu(false)}
+              accessibilityRole="button"
+              accessibilityLabel={i18n.t("close")}
             />
           )}
           <View style={styles.webChatPane}>
@@ -3248,13 +3362,19 @@ export default function ChatPage({ route }) {
                   accessibilityRole="button"
                   accessibilityLabel={i18n.t("close")}
                 >
-                  <Ionicons name="close" size={22} color="#111827" />
+                  <Ionicons name="close" size={sizes.icon.lg} color={colors.textPrimary} />
                 </TouchableOpacity>
-                <Text style={styles.webDetailsSidebarTitle} numberOfLines={1}>
+                <AppText
+                  variant="sectionTitle"
+                  size="md"
+                  weight="semibold"
+                  style={styles.webDetailsSidebarTitle}
+                  numberOfLines={1}
+                >
                   {conversationType === "group"
                     ? i18n.t("detailedGroupChat")
                     : i18n.t("detailedPrivateChat")}
-                </Text>
+                </AppText>
               </View>
 
               <View style={styles.webDetailsSidebarBody}>
@@ -3294,18 +3414,30 @@ export default function ChatPage({ route }) {
         onRequestClose={() => setShowHeaderMenu(false)}
       >
         <View style={styles.menuOverlay} pointerEvents="box-none">
-          <Pressable style={styles.menuBackdrop} onPress={() => setShowHeaderMenu(false)} />
-          <View style={[styles.headerMenu, { top: headerMenuTop ?? (headerHeight || 56) + 4 }]}>
-            <TouchableOpacity style={styles.contextMenuItem} onPress={toggleMuteNotifications}>
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => setShowHeaderMenu(false)}
+            accessibilityRole="button"
+            accessibilityLabel={i18n.t("close")}
+          />
+          <View
+            style={[styles.headerMenu, { top: headerMenuTop ?? (headerHeight || 56) + 4 }]}
+            accessibilityRole="menu"
+          >
+            <TouchableOpacity
+              style={styles.contextMenuItem}
+              onPress={toggleMuteNotifications}
+              accessibilityRole="menuitem"
+            >
               <View style={styles.headerMenuItemRow}>
                 <Ionicons
                   name={muted ? "notifications-outline" : "notifications-off-outline"}
-                  size={18}
-                  color="#111827"
+                  size={sizes.icon.sm}
+                  color={colors.textPrimary}
                 />
-                <Text style={styles.headerMenuItemText}>
+                <AppText variant="body" size="sm" color="textPrimary" style={styles.headerMenuItemText}>
                   {muted ? i18n.t("unmuteNotifications") : i18n.t("muteNotifications")}
-                </Text>
+                </AppText>
               </View>
             </TouchableOpacity>
           </View>
@@ -3315,22 +3447,22 @@ export default function ChatPage({ route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: "#F2F2F7",
-    paddingBottom: Platform.OS === "android" ? 0 : 15,
+    backgroundColor: t.colors.backgroundMuted,
+    paddingBottom: Platform.OS === "android" ? 0 : t.spacing.base,
   },
   webLayoutContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#ECECEF",
+    backgroundColor: t.colors.backgroundMuted,
   },
   webSidebar: {
     borderRightWidth: 1,
-    borderColor: "#DDDEE4",
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 10,
+    borderColor: t.colors.borderSubtle,
+    backgroundColor: t.colors.surface,
+    paddingVertical: t.spacing.md,
     position: "relative",
   },
   webNewChatPanel: {
@@ -3339,21 +3471,20 @@ const styles = StyleSheet.create({
   webNewChatHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingBottom: 8,
+    paddingHorizontal: t.spacing.md,
+    paddingBottom: t.spacing.sm,
   },
   webNewChatBackButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: ICON_BUTTON_SIZE,
+    height: ICON_BUTTON_SIZE,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 8,
+    marginRight: t.spacing.sm,
   },
   webNewChatTitle: {
-    fontSize: webFontSize(16),
-    fontWeight: "600",
-    color: "#111827",
+    fontSize: webFontSize(t.typography.fontSize.md),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.md * t.typography.lineHeight.tight)),
   },
   webNewChatLoadingWrap: {
     flex: 1,
@@ -3361,48 +3492,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   webNewGroupFormWrap: {
-    paddingHorizontal: 10,
-    paddingBottom: 8,
+    paddingHorizontal: t.spacing.md,
+    paddingBottom: t.spacing.sm,
   },
   webNewGroupInput: {
     // minHeight, not height: at large system font sizes a fixed box clips the text.
     minHeight: 40,
-    borderRadius: 10,
-    backgroundColor: "#F2F3F7",
-    borderWidth: 1,
-    borderColor: "#E3E5EA",
-    paddingHorizontal: 12,
-    color: "#111827",
-    fontSize: webFontSize(14),
-    marginBottom: 8,
+    backgroundColor: t.colors.inputFilled,
+    paddingVertical: 0,
+    paddingHorizontal: t.spacing.md,
+    fontSize: webFontSize(t.typography.fontSize.sm),
+    marginBottom: t.spacing.sm,
   },
   webNewGroupImageLoading: {
     alignItems: "center",
     justifyContent: "center",
-    height: 70,
-    marginBottom: 8,
-    borderRadius: 10,
+    height: GROUP_PREVIEW_SIZE,
+    marginBottom: t.spacing.sm,
+    borderRadius: t.radius.card,
     borderWidth: 1,
-    borderColor: "#E3E5EA",
+    borderColor: t.colors.borderSubtle,
   },
   webNewGroupImagePreview: {
-    width: 70,
-    height: 70,
-    borderRadius: 10,
-    marginBottom: 8,
+    width: GROUP_PREVIEW_SIZE,
+    height: GROUP_PREVIEW_SIZE,
+    borderRadius: t.radius.card,
+    marginBottom: t.spacing.sm,
     alignSelf: "center",
   },
   webNewGroupImageButton: {
-    backgroundColor: "#0A84FF",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-    marginBottom: 8,
+    marginBottom: t.spacing.sm,
   },
   webNewGroupImageButtonText: {
-    color: "#FFFFFF",
-    fontSize: webFontSize(13),
-    fontWeight: "600",
+    fontSize: webFontSize(t.typography.fontSize.sm),
   },
   webNewChatListContent: {
     paddingBottom: 82,
@@ -3412,131 +3534,106 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    paddingTop: 8,
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: t.spacing.md,
+    paddingBottom: t.spacing.md,
+    paddingTop: t.spacing.sm,
+    backgroundColor: t.colors.surface,
     borderTopWidth: 1,
-    borderColor: "#EAECEF",
-  },
-  webNewGroupButton: {
-    backgroundColor: "#0A84FF",
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
+    borderColor: t.colors.borderSubtle,
   },
   webNewGroupButtonText: {
-    color: "#FFFFFF",
-    fontSize: webFontSize(14),
-    fontWeight: "600",
+    fontSize: webFontSize(t.typography.fontSize.sm),
   },
   sidebarConversationListContent: {
     paddingBottom: 86,
   },
   sidebarSearchInputWrap: {
-    paddingHorizontal: 10,
-    paddingBottom: 8,
+    paddingHorizontal: t.spacing.md,
+    paddingBottom: t.spacing.sm,
     position: "relative",
     justifyContent: "center",
   },
   sidebarSearchIcon: {
     position: "absolute",
-    left: 22,
+    left: t.spacing.xl,
     zIndex: 1,
   },
   sidebarSearchInput: {
     height: 38,
-    borderRadius: 10,
-    backgroundColor: "#F2F3F7",
-    borderWidth: 1,
-    borderColor: "#E3E5EA",
-    paddingLeft: 34,
-    paddingRight: 12,
-    color: "#111827",
-    fontSize: webFontSize(14),
+    backgroundColor: t.colors.inputFilled,
+    paddingVertical: 0,
+    paddingLeft: t.spacing["2xl"],
+    paddingRight: t.spacing.md,
+    fontSize: webFontSize(t.typography.fontSize.sm),
   },
   sidebarConversationItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginHorizontal: 8,
-    borderRadius: 12,
+    paddingHorizontal: t.spacing.base,
+    paddingVertical: t.spacing.md,
+    marginHorizontal: t.spacing.sm,
+    borderRadius: t.radius.row,
   },
   sidebarConversationSeparator: {
     height: 1,
-    backgroundColor: "#EEF0F4",
-    marginHorizontal: 16,
+    backgroundColor: t.colors.borderSubtle,
+    marginHorizontal: t.spacing.base,
   },
   sidebarConversationItemActive: {
-    backgroundColor: "#E8F2FF",
+    backgroundColor: t.colors.surfaceSelected,
   },
   sidebarAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
+    marginRight: t.spacing.md,
   },
   sidebarAvatarActive: {
     borderWidth: 2,
-    borderColor: "#A8CCFF",
+    borderColor: t.colors.primary,
   },
   sidebarTextWrap: {
     flex: 1,
   },
   sidebarConversationTitle: {
-    fontSize: webFontSize(14),
-    fontWeight: "600",
-    color: "#111827",
+    fontSize: webFontSize(t.typography.fontSize.sm),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.sm * t.typography.lineHeight.normal)),
   },
   sidebarConversationPreview: {
-    marginTop: 2,
-    fontSize: webFontSize(12),
-    color: "#6B7280",
+    marginTop: t.spacing.xs,
+    fontSize: webFontSize(t.typography.fontSize.xs),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.xs * t.typography.lineHeight.normal)),
   },
   webSelectBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+    width: CHECKBOX_SIZE,
+    height: CHECKBOX_SIZE,
+    borderRadius: t.radius.control,
     borderWidth: 1,
-    borderColor: "#C9CED8",
-    backgroundColor: "#FFFFFF",
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 8,
+    marginLeft: t.spacing.sm,
   },
   webSelectBoxChecked: {
-    backgroundColor: "#0A84FF",
-    borderColor: "#0A84FF",
-  },
-  webSelectBoxCheckmark: {
-    color: "#FFFFFF",
-    fontSize: webFontSize(11),
-    fontWeight: "700",
-    lineHeight: webFontSize(11),
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
   },
   sidebarNewChatButton: {
     position: "absolute",
-    right: 18,
-    bottom: 18,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#0A84FF",
+    right: t.spacing.lg,
+    bottom: t.spacing.lg,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   webChatMenu: {
     position: "absolute",
-    right: 18,
+    right: t.spacing.lg,
     bottom: 80,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radius.card,
+    ...t.shadows.popup,
     overflow: "hidden",
   },
   webChatMenuBackdrop: {
@@ -3546,59 +3643,505 @@ const styles = StyleSheet.create({
   webChatMenuOption: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: t.spacing.base,
+    paddingVertical: t.spacing.md,
     borderBottomWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: t.colors.borderSubtle,
   },
   webChatMenuOption_last: {
     borderBottomWidth: 0,
   },
   webChatMenuOptionText: {
-    marginLeft: 12,
-    fontSize: webFontSize(14),
-    fontWeight: "500",
-    color: "#111827",
+    marginLeft: t.spacing.md,
+    fontSize: webFontSize(t.typography.fontSize.sm),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.sm * t.typography.lineHeight.normal)),
   },
   webChatPane: {
     flex: 3,
-    backgroundColor: "#F2F2F7",
+    backgroundColor: t.colors.backgroundMuted,
     paddingHorizontal: 100,
   },
   webDetailsSidebar: {
     borderLeftWidth: 1,
-    borderColor: "#DDDEE4",
-    backgroundColor: "#FFFFFF",
+    borderColor: t.colors.borderSubtle,
+    backgroundColor: t.colors.surface,
     flexDirection: "column",
   },
   webDetailsSidebarHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.md,
     borderBottomWidth: 1,
-    borderColor: "#E9E9EB",
-    backgroundColor: "#FFFFFF",
+    borderColor: t.colors.borderSubtle,
+    backgroundColor: t.colors.surface,
   },
   webDetailsCloseButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: ICON_BUTTON_SIZE,
+    height: ICON_BUTTON_SIZE,
+    borderRadius: t.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-    marginRight: 8,
+    backgroundColor: t.colors.surfaceControlMuted,
+    marginRight: t.spacing.sm,
   },
   webDetailsSidebarTitle: {
-    fontSize: webFontSize(15),
-    fontWeight: "600",
-    color: "#111827",
     flexShrink: 1,
+    fontSize: webFontSize(t.typography.fontSize.md),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.md * t.typography.lineHeight.tight)),
   },
   webDetailsSidebarBody: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: t.colors.surface,
     overflow: "hidden",
+  },
+  nativeHeaderTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 0,
+    maxWidth: Platform.OS === "web" ? 420 : 240,
+  },
+  nativeHeaderAvatar: {
+    marginRight: t.spacing.sm,
+  },
+  nativeHeaderText: {
+    flexShrink: 1,
+    fontSize: webFontSize(t.textVariants.body.fontSize),
+    lineHeight: webLineHeight(t.textVariants.body.lineHeight),
+  },
+  nativeHeaderChevron: {
+    marginLeft: t.spacing.xs,
+  },
+  message: {
+    marginVertical: t.spacing.xs,
+    marginHorizontal: t.spacing.md,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderRadius: t.radius.bubble,
+    maxWidth: "82%",
+  },
+  // The tightened corner is the bubble's tail, so it sits at the TOP on the
+  // sender's side — pointing up at their avatar, which is drawn at the head of
+  // the group rather than the foot of it.
+  sentMessage: {
+    alignSelf: "flex-end",
+    backgroundColor: t.colors.primary,
+    borderTopLeftRadius: t.radius.bubble,
+    borderTopRightRadius: t.radius.bubbleTail,
+    borderBottomLeftRadius: t.radius.bubble,
+    borderBottomRightRadius: t.radius.bubble,
+  },
+  receivedMessage: {
+    alignSelf: "flex-start",
+    backgroundColor: t.colors.chat.bubbleReceived,
+    borderTopLeftRadius: t.radius.bubbleTail,
+    borderTopRightRadius: t.radius.bubble,
+    borderBottomLeftRadius: t.radius.bubble,
+    borderBottomRightRadius: t.radius.bubble,
+  },
+  imageMessageBubbleSent: {
+    alignSelf: "flex-end",
+    padding: 0,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    maxWidth: 230,
+  },
+  imageMessageBubbleReceived: {
+    alignSelf: "flex-start",
+    padding: 0,
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    maxWidth: 230,
+  },
+  chatImage: {
+    width: 220,
+    height: 220,
+    borderRadius: t.radius.card,
+  },
+  chatImageSent: {
+    borderWidth: 2,
+    borderColor: t.colors.borderTinted,
+  },
+  chatImageReceived: {
+    borderWidth: 1,
+    borderColor: t.colors.borderSubtle,
+  },
+  // Dim + spinner shown over a photo while it is still uploading.
+  imageUploadOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: t.colors.overlay,
+    borderRadius: t.radius.card,
+  },
+  failedMessage: {
+    borderWidth: 1,
+    borderColor: t.colors.danger,
+  },
+  // Group chats only: an incoming message is drawn as [avatar][name over bubble],
+  // so you can tell who is speaking without opening the participant list.
+  groupMessageRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingLeft: t.spacing.md,
+    paddingRight: t.spacing.md,
+  },
+  groupMessageAvatar: {
+    marginRight: t.spacing.sm,
+    marginTop: t.spacing.xs,
+  },
+  groupMessageAvatarSpacer: {
+    width: t.sizes.avatar.sm,
+    marginRight: t.spacing.sm,
+  },
+  groupMessageColumn: {
+    flex: 1,
+    alignItems: "flex-start",
+  },
+  assistantNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: t.spacing.sm,
+  },
+  assistantBadge: {
+    backgroundColor: t.colors.chat.assistantBadge,
+    borderRadius: t.radius.full,
+    paddingHorizontal: t.spacing.xs,
+  },
+  assistantBadgeText: {
+    color: t.colors.chat.assistantBadgeText,
+    letterSpacing: 0.4,
+    fontSize: webFontSize(t.textVariants.badge.fontSize),
+  },
+  assistantDisclaimer: {
+    marginTop: t.spacing.xs,
+    marginLeft: t.spacing.xs,
+    maxWidth: "82%",
+    fontSize: webFontSize(t.typography.fontSize.xs),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.xs * t.typography.lineHeight.normal)),
+  },
+  groupSenderName: {
+    marginLeft: t.spacing.xs,
+    marginBottom: t.spacing.xs,
+    fontSize: webFontSize(t.textVariants.caption.fontSize),
+    lineHeight: webLineHeight(t.textVariants.caption.lineHeight),
+  },
+  groupMessageBubble: {
+    marginHorizontal: 0,
+  },
+  sidebarMentionMarker: {
+    color: t.colors.chat.mention,
+    fontWeight: t.typography.fontWeight.bold,
+  },
+  mentionPicker: {
+    marginHorizontal: t.spacing.md,
+    marginBottom: t.spacing.sm,
+    borderRadius: t.radius.card,
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.colors.borderSubtle,
+    overflow: "hidden",
+  },
+  // Capped so the picker never swallows the conversation behind it.
+  mentionPickerScroll: { maxHeight: 190 },
+  mentionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: t.spacing.md,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+  },
+  mentionName: {
+    flex: 1,
+    fontSize: webFontSize(t.textVariants.body.fontSize),
+    lineHeight: webLineHeight(t.textVariants.body.lineHeight),
+  },
+  mentionInSent: { fontWeight: t.typography.fontWeight.bold, color: t.colors.chat.mentionInSent },
+  mentionInReceived: { fontWeight: t.typography.fontWeight.bold, color: t.colors.chat.mention },
+  content: {
+    fontSize: webFontSize(t.textVariants.body.fontSize),
+    lineHeight: webLineHeight(t.textVariants.body.lineHeight),
+  },
+  contentSent: {
+    color: t.colors.onPrimary,
+  },
+  contentReceived: {
+    color: t.colors.textBody,
+  },
+  reportedPlaceholder: {
+    fontStyle: "italic",
+    fontSize: webFontSize(t.textVariants.body.fontSize),
+    lineHeight: webLineHeight(t.textVariants.body.lineHeight),
+  },
+  timestamp: {
+    alignSelf: "flex-end",
+    marginTop: t.spacing.xs,
+    letterSpacing: 0.1,
+    fontSize: webFontSize(t.textVariants.caption.fontSize),
+    lineHeight: webLineHeight(t.textVariants.caption.lineHeight),
+  },
+  timestampSent: {
+    color: t.colors.chat.timestampSent,
+  },
+  timestampReceived: {
+    color: t.colors.textSecondary,
+  },
+  imageTimestamp: {
+    color: t.colors.textSecondary,
+    marginTop: t.spacing.sm,
+  },
+  composerWrap: {
+    position: "relative",
+    overflow: "visible",
+  },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.sm,
+    paddingBottom: t.spacing.sm,
+    backgroundColor: t.colors.surfaceSubtle,
+    borderTopWidth: 1,
+    borderColor: t.colors.borderSubtle,
+  },
+  inputContainerBlocked: {
+    opacity: t.components.button.disabledOpacity,
+  },
+  blockedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: t.spacing.sm,
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.md,
+    backgroundColor: t.colors.surfaceMuted,
+    borderTopWidth: 1,
+    borderColor: t.colors.borderSubtle,
+  },
+  blockedBannerText: {
+    flexShrink: 1,
+  },
+  // Floating "jump to latest" button, sits just above the input bar, bottom-right.
+  jumpToEndButton: {
+    position: "absolute",
+    right: t.spacing.base,
+    bottom: 78,
+    width: t.sizes.minTouchTarget,
+    height: t.sizes.minTouchTarget,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.colors.borderSubtle,
+    justifyContent: "center",
+    alignItems: "center",
+    ...t.shadows.button,
+    zIndex: 10,
+  },
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: t.radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: t.colors.surfaceControlMuted,
+    marginRight: t.spacing.sm,
+  },
+  inputPill: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 104,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.inputFilled,
+    paddingLeft: t.spacing.md,
+    paddingRight: t.spacing.xs,
+    paddingVertical: t.spacing.xs,
+    overflow: "visible",
+  },
+  inputField: {
+    flex: 1,
+    paddingVertical: t.spacing.sm,
+    paddingRight: t.spacing.sm,
+    maxHeight: 92,
+    fontSize: webFontSize(t.textVariants.body.fontSize),
+    lineHeight: webLineHeight(t.textVariants.body.lineHeight),
+    textAlignVertical: "center",
+    color: t.colors.textPrimary,
+  },
+  sendButton: {
+    // Icon-only now, so a compact round-ish pill; minHeight keeps the tap
+    // target at 40dp regardless of font scale.
+    minWidth: 52,
+    minHeight: 40,
+    borderRadius: t.radius.full,
+    paddingHorizontal: t.spacing.base,
+    marginLeft: t.spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonActive: {
+    backgroundColor: t.colors.primary,
+  },
+  sendButtonDisabled: {
+    backgroundColor: t.colors.surfaceDisabled,
+  },
+  editingBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.xs,
+    backgroundColor: t.colors.surfaceMuted,
+  },
+  editingBannerText: {
+    fontSize: webFontSize(t.textVariants.caption.fontSize),
+    lineHeight: webLineHeight(t.textVariants.caption.lineHeight),
+  },
+  editingCancelText: {
+    fontSize: webFontSize(t.typography.fontSize.xs),
+  },
+  loadingOlder: { marginVertical: t.spacing.md },
+  dateSeparator: { alignItems: "center", marginVertical: t.spacing.md },
+  dateText: {
+    backgroundColor: t.colors.surfaceMuted,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs,
+    borderRadius: t.radius.full,
+    overflow: "hidden",
+    fontSize: webFontSize(t.textVariants.caption.fontSize),
+    lineHeight: webLineHeight(t.textVariants.caption.lineHeight),
+  },
+  voiceRecorderWrap: {
+    marginLeft: t.spacing.xs,
+    alignSelf: "center",
+  },
+  voiceMessageBubble: {
+    paddingHorizontal: t.spacing.sm,
+    paddingVertical: t.spacing.sm,
+    borderWidth: 0,
+  },
+  // Tail at the top, matching sentMessage / receivedMessage above.
+  voiceMessageBubbleSent: {
+    alignSelf: "flex-end",
+    backgroundColor: t.colors.primary,
+    borderTopLeftRadius: t.radius.bubble,
+    borderTopRightRadius: t.radius.bubbleTail,
+    borderBottomLeftRadius: t.radius.bubble,
+    borderBottomRightRadius: t.radius.bubble,
+  },
+  voiceMessageBubbleReceived: {
+    alignSelf: "flex-start",
+    backgroundColor: t.colors.chat.bubbleReceived,
+    borderTopLeftRadius: t.radius.bubbleTail,
+    borderTopRightRadius: t.radius.bubble,
+    borderBottomLeftRadius: t.radius.bubble,
+    borderBottomRightRadius: t.radius.bubble,
+  },
+  voiceWrapper: {
+    width: "100%",
+    alignItems: "stretch",
+    justifyContent: "center",
+  },
+  voiceCard: {
+    width: "100%",
+    minWidth: 228,
+    maxWidth: 320,
+    borderRadius: t.radius.bubble,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderWidth: 1,
+  },
+  voiceCardSent: {
+    backgroundColor: t.colors.chat.voiceCardSent,
+    borderColor: t.colors.overlayBorder,
+  },
+  voiceCardReceived: {
+    backgroundColor: t.colors.surface,
+    borderColor: t.colors.borderSubtle,
+  },
+  voiceTimestamp: {
+    alignSelf: "flex-end",
+    marginTop: t.spacing.sm,
+  },
+  deliveryStatus: {
+    alignSelf: "flex-end",
+    marginTop: 1,
+    letterSpacing: 0.2,
+    fontSize: webFontSize(t.textVariants.caption.fontSize),
+    lineHeight: webLineHeight(t.textVariants.caption.lineHeight),
+  },
+  deliveryStatusSeen: {
+    color: t.colors.onPrimary,
+  },
+  deliveryStatusVoice: {
+    marginTop: t.spacing.xs,
+  },
+  menuOverlay: {
+    ...StyleSheet.absoluteFill,
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFill,
+  },
+  contextMenu: {
+    position: "absolute",
+    minWidth: 160,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radius.card,
+    borderWidth: 1,
+    borderColor: t.colors.borderSubtle,
+    paddingVertical: t.spacing.xs,
+    ...t.shadows.popup,
+  },
+  contextMenuItem: {
+    paddingHorizontal: t.spacing.base,
+    paddingVertical: t.spacing.md,
+  },
+  contextMenuItemText: {
+    fontSize: webFontSize(t.typography.fontSize.sm),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.sm * t.typography.lineHeight.normal)),
+  },
+  headerMenuButton: {
+    paddingHorizontal: t.spacing.sm,
+    paddingVertical: t.spacing.xs,
+  },
+  headerMenu: {
+    position: "absolute",
+    right: t.spacing.md,
+    minWidth: 200,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radius.card,
+    borderWidth: 1,
+    borderColor: t.colors.borderSubtle,
+    paddingVertical: t.spacing.xs,
+    ...t.shadows.popup,
+  },
+  headerMenuItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerMenuItemText: {
+    marginLeft: t.spacing.md,
+    fontSize: webFontSize(t.typography.fontSize.sm),
+    lineHeight: webLineHeight(Math.round(t.typography.fontSize.sm * t.typography.lineHeight.normal)),
+  },
+  messageContentContainer: {
+    width: "100%",
+    minWidth: 80,
+  },
+  translationContainer: {
+    marginTop: t.spacing.sm,
+  },
+  translationDivider: {
+    height: 1,
+    backgroundColor: t.colors.chat.translationDivider,
+    marginVertical: t.spacing.xs,
+    width: "100%",
+  },
+  translatedText: {
+    fontStyle: "italic",
+    fontSize: webFontSize(t.textVariants.body.fontSize),
+    lineHeight: webLineHeight(t.textVariants.body.lineHeight),
   },
   detailsContent: {
     flex: 1,
@@ -3680,485 +4223,4 @@ const styles = StyleSheet.create({
     color: "#111827",
     flex: 1,
   },
-  nativeHeaderTitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 0,
-    maxWidth: Platform.OS === "web" ? 420 : 240,
-  },
-  nativeHeaderAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-  },
-  nativeHeaderText: {
-    fontSize: webFontSize(16),
-    fontWeight: "600",
-    color: "#111111",
-    flexShrink: 1,
-  },
-  nativeHeaderChevron: {
-    marginLeft: 4,
-  },
-  message: {
-    marginVertical: 3,
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    maxWidth: "82%",
-  },
-  // The tightened corner is the bubble's tail, so it sits at the TOP on the
-  // sender's side — pointing up at their avatar, which is drawn at the head of
-  // the group rather than the foot of it.
-  sentMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#0A84FF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  receivedMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  imageMessageBubbleSent: {
-    alignSelf: "flex-end",
-    padding: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: 230,
-  },
-  imageMessageBubbleReceived: {
-    alignSelf: "flex-start",
-    padding: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: 230,
-  },
-  chatImage: {
-    width: 220,
-    height: 220,
-    borderRadius: 18,
-  },
-  chatImageSent: {
-    borderWidth: 2,
-    borderColor: "rgba(10,132,255,0.25)",
-  },
-  chatImageReceived: {
-    borderWidth: 1,
-    borderColor: "#D7D7DB",
-  },
-  // Dim + spinner shown over a photo while it is still uploading.
-  imageUploadOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 18,
-  },
-  failedMessage: {
-    borderWidth: 1,
-    borderColor: "#E35D5D",
-  },
-  // Group chats only: an incoming message is drawn as [avatar][name over bubble],
-  // so you can tell who is speaking without opening the participant list.
-  groupMessageRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingLeft: 12,
-    paddingRight: 12,
-  },
-  groupMessageAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-    marginTop: 4,
-    backgroundColor: "#E9E9EB",
-  },
-  groupMessageAvatarSpacer: {
-    width: 32,
-    marginRight: 8,
-  },
-  groupMessageColumn: {
-    flex: 1,
-    alignItems: "flex-start",
-  },
-  assistantNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  assistantBadge: {
-    backgroundColor: "#E7E3FF",
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  assistantBadgeText: {
-    fontSize: webFontSize(10),
-    fontWeight: "700",
-    color: "#5B4BD6",
-    letterSpacing: 0.4,
-  },
-  assistantDisclaimer: {
-    fontSize: webFontSize(11),
-    color: "#8E8E93",
-    marginTop: 2,
-    marginLeft: 4,
-    maxWidth: "82%",
-  },
-  groupSenderName: {
-    fontSize: webFontSize(12),
-    fontWeight: "600",
-    color: "#6B7280",
-    marginLeft: 4,
-    marginBottom: 2,
-  },
-  groupMessageBubble: {
-    marginHorizontal: 0,
-  },
-  sidebarTopicsAvatar: {
-    backgroundColor: "#0F766E",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sidebarMentionMarker: {
-    color: "#f97316",
-    fontWeight: "800",
-  },
-  mentionPicker: {
-    marginHorizontal: 12,
-    marginBottom: 6,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E5EA",
-    overflow: "hidden",
-  },
-  // Capped so the picker never swallows the conversation behind it.
-  mentionPickerScroll: { maxHeight: 190 },
-  mentionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  mentionAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#E9E9EB",
-  },
-  mentionAvatarAll: {
-    backgroundColor: "#f97316",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mentionName: { fontSize: webFontSize(15), color: "#1F1F22", flex: 1 },
-  mentionInSent: { fontWeight: "700", color: "#FFE8C7" },
-  mentionInReceived: { fontWeight: "700", color: "#C2410C" },
-  content: {
-    fontSize: webFontSize(16),
-    lineHeight: Platform.OS === "web" ? 24 : 21,
-  },
-  contentSent: {
-    color: "#FFFFFF",
-  },
-  contentReceived: {
-    color: "#111113",
-  },
-  reportedPlaceholder: {
-    fontSize: webFontSize(15),
-    lineHeight: Platform.OS === "web" ? 22 : 20,
-    fontStyle: "italic",
-    color: "#8A8A8E",
-  },
-  timestamp: {
-    fontSize: webFontSize(10),
-    alignSelf: "flex-end",
-    marginTop: 4,
-    letterSpacing: 0.1,
-  },
-  timestampSent: {
-    color: "rgba(255,255,255,0.82)",
-  },
-  timestampReceived: {
-    color: "rgba(60,60,67,0.62)",
-  },
-  imageTimestamp: {
-    color: "rgba(60,60,67,0.62)",
-    marginTop: 6,
-  },
-  composerWrap: {
-    position: "relative",
-    overflow: "visible",
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 7,
-    backgroundColor: "#F2F2F7",
-    borderTopWidth: 1,
-    borderColor: "#E1E1E6",
-  },
-  inputContainerBlocked: {
-    opacity: 0.55,
-  },
-  blockedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: "#ECECEF",
-    borderTopWidth: 1,
-    borderColor: "#E1E1E6",
-  },
-  blockedBannerText: {
-    fontSize: 12,
-    color: "#8E8E93",
-    flexShrink: 1,
-  },
-  // Floating "jump to latest" button, sits just above the input bar, bottom-right.
-  jumpToEndButton: {
-    position: "absolute",
-    right: 16,
-    bottom: 78,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E1E1E6",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 5,
-    zIndex: 10,
-  },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#E7E7EA",
-    marginRight: 7,
-  },
-  inputPill: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 104,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 20,
-    backgroundColor: "#E7E7EA",
-    paddingLeft: 12,
-    paddingRight: 4,
-    paddingVertical: 2,
-    overflow: "visible",
-  },
-  inputField: {
-    flex: 1,
-    paddingVertical: Platform.OS === "ios" ? 7 : 6,
-    paddingRight: 6,
-    maxHeight: 92,
-    fontSize: webFontSize(16),
-    lineHeight: Platform.OS === "web" ? 23 : 20,
-    textAlignVertical: "center",
-    color: "#111113",
-  },
-  sendButton: {
-    // Icon-only now, so a compact round-ish pill; minHeight keeps the tap
-    // target at 40dp regardless of font scale.
-    minWidth: 52,
-    minHeight: 40,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    marginLeft: 7,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendButtonActive: {
-    backgroundColor: "#0A84FF",
-  },
-  sendButtonDisabled: {
-    backgroundColor: "#C4C8D0",
-  },
-  editingBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 5,
-    backgroundColor: "#EEE",
-  },
-  dateSeparator: { alignItems: "center", marginVertical: 12 },
-  dateText: {
-    fontSize: webFontSize(12),
-    color: "#7A7A80",
-    backgroundColor: "#E5E5EA",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-  voiceRecorderWrap: {
-    marginLeft: 3,
-    alignSelf: "center",
-  },
-  voiceMessageBubble: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderWidth: 0,
-  },
-  // Tail at the top, matching sentMessage / receivedMessage above.
-  voiceMessageBubbleSent: {
-    alignSelf: "flex-end",
-    backgroundColor: "#0A84FF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  voiceMessageBubbleReceived: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E9E9EB",
-    borderTopLeftRadius: 6,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  voiceWrapper: {
-    width: "100%",
-    alignItems: "stretch",
-    justifyContent: "center",
-  },
-  voiceCard: {
-    width: "100%",
-    minWidth: 228,
-    maxWidth: 320,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-  },
-  voiceCardSent: {
-    backgroundColor: "rgba(255, 255, 255, 0.14)",
-    borderColor: "rgba(255,255,255,0.24)",
-  },
-  voiceCardReceived: {
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderColor: "rgba(141,141,147,0.2)",
-  },
-  voiceTimestamp: {
-    alignSelf: "flex-end",
-    marginTop: 6,
-  },
-  deliveryStatus: {
-    fontSize: webFontSize(11),
-    alignSelf: "flex-end",
-    marginTop: 1,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-  deliveryStatusSeen: {
-    color: "rgba(255,255,255,0.98)",
-  },
-  deliveryStatusVoice: {
-    marginTop: 2,
-  },
-  menuOverlay: {
-    ...StyleSheet.absoluteFill,
-  },
-  menuBackdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  contextMenu: {
-    position: "absolute",
-    minWidth: 160,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
-  },
-  contextMenuItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  contextMenuItemText: {
-    fontSize: webFontSize(14),
-    color: "#111827",
-    fontWeight: "500",
-  },
-  contextMenuDangerText: {
-    color: "#DC2626",
-  },
-  headerMenuButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  headerMenu: {
-    position: "absolute",
-    right: 10,
-    minWidth: 200,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
-  },
-  headerMenuItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  headerMenuItemText: {
-    marginLeft: 10,
-    fontSize: webFontSize(14),
-    color: "#111827",
-    fontWeight: "500",
-  },
-  messageContentContainer: {
-    width: "100%",
-    minWidth: 80,
-  },
-  translationContainer: {
-    marginTop: 8,
-  },
-  translationDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.1)",
-    marginVertical: 4,
-    width: '100%',
-  },
-  translatedText: {
-    fontSize: webFontSize(15),
-    fontStyle: "italic",
-  },
-});
+}));

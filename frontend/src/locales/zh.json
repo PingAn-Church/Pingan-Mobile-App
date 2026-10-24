@@ -473,6 +473,7 @@
   "topicFollowFailed": "无法更新该话题的通知设置",
   "addCoverImage": "添加封面图片",
   "changeCoverImage": "更换封面图片",
+  "removeCoverImage": "移除封面图片",
   "addImage": "添加图片",
   "removeImage": "移除图片",
   "verifiedMember": "已认证",
