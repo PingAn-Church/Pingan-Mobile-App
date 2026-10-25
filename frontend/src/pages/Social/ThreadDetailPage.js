@@ -1052,5 +1052,6 @@ const useStyles = makeStyles((t) => ({
   slimButton: {
     minHeight: 0,
     paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.sm,
   },
 }));

@@ -21,12 +21,12 @@ export const colors = {
   backgroundMuted: "#F1F5F9", // screens with white panels (Chats, Settings)
   surface: "#FFFFFF",
   surfaceSubtle: "#F8F9FA", // light panel set apart from its surroundings: bottom bars, composers, subtle cards
-  surfaceMuted: "#F0F0F0", // grey band or chip behind status or a row of controls (segmented tab track, chat editing / blocked banners, date chip)
+  surfaceMuted: "#F0F0F0", // grey band or chip behind status or a row of controls (segmented tab track, chat editing / blocked banners)
   surfaceControlMuted: "#E7E7EA", // grey fill of a low-emphasis icon button (web details close ✕, chat attach 📎)
   surfaceSelected: "#F0F8FF", // highlighted row: picked in a pick list, or the chat that's open
   surfaceDisabled: "#C4C8D0", // background of a disabled button (chat send button with nothing to send)
   surfaceTinted: "#F2F7FF", // pale brand blue behind blue text or icons (secondary buttons, badges)
-  inputFilled: "#F1F5F9", // background of filled inputs (search boxes, chat message box, thread title/content)
+  inputFilled: "#F1F5F9", // background of filled inputs (search boxes, thread title/content)
   border: "#CCCCCC", // input fields
   borderSubtle: "#E5E7EB", // dividers between rows, panel and bar edges, card outlines
   borderTinted: "#CFE2FF", // pale blue edge: surfaceTinted elements (cover buttons), your own chat photos
@@ -49,6 +49,8 @@ export const colors = {
     assistantBadge: "#E7E3FF", // background of the "AI" tag beside the assistant's name
     assistantBadgeText: "#5B4BD6", // text of the "AI" tag
     bubbleReceived: "#E9E9EB", // other people's message bubbles (yours use primary)
+    dateChip: "#E9E9EB", // date label between days of messages: a grey chip on the grey chat background
+    composerInput: "#E7E7EA", // the message box in the chat composer: a filled input on the grey composer bar
     voiceCardSent: "rgba(255,255,255,0.14)", // faint panel behind the voice player in your own (primary) bubble
     translationDivider: "rgba(0,0,0,0.1)", // line above a translation inside a bubble: a darker tint of either bubble
   },

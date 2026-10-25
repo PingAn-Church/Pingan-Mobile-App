@@ -2393,7 +2393,7 @@ export default function ChatPage({ route }) {
       {messagingBlocked && (
         <View style={styles.blockedBanner}>
           <Ionicons name="ban-outline" size={sizes.icon.xs} color={colors.textSecondary} />
-          <AppText variant="secondary" style={styles.blockedBannerText}>
+          <AppText variant="secondary" size="xs" style={styles.blockedBannerText}>
             {i18n.t("messagingBlockedNotice")}
           </AppText>
         </View>
@@ -2849,7 +2849,7 @@ export default function ChatPage({ route }) {
                   }
                 }}
               >
-                <AppText variant="body" size="sm" style={styles.contextMenuItemText}>{i18n.t("copy")}</AppText>
+                <AppText variant="body" size="sm" color="textPrimary" style={styles.contextMenuItemText}>{i18n.t("copy")}</AppText>
               </TouchableOpacity>
             )}
 
@@ -2874,7 +2874,7 @@ export default function ChatPage({ route }) {
                   }
                 }}
               >
-                <AppText variant="body" size="sm" style={styles.contextMenuItemText}>{i18n.t("download")}</AppText>
+                <AppText variant="body" size="sm" color="textPrimary" style={styles.contextMenuItemText}>{i18n.t("download")}</AppText>
               </TouchableOpacity>
             )}
 
@@ -2890,7 +2890,7 @@ export default function ChatPage({ route }) {
                 disabled={translatingId === contextMessageIdKey}
                 accessibilityState={{ disabled: translatingId === contextMessageIdKey }}
               >
-                <AppText variant="body" size="sm" style={styles.contextMenuItemText}>
+                <AppText variant="body" size="sm" color="textPrimary" style={styles.contextMenuItemText}>
                   {translatingId === contextMessageIdKey
                     ? i18n.t("translating")
                     : contextHasVisibleTranslation
@@ -2909,7 +2909,7 @@ export default function ChatPage({ route }) {
                   accessibilityRole="menuitem"
                   onPress={() => beginEditMessage(contextMenu.message)}
                 >
-                  <AppText variant="body" size="sm" style={styles.contextMenuItemText}>{i18n.t("edit")}</AppText>
+                  <AppText variant="body" size="sm" color="textPrimary" style={styles.contextMenuItemText}>{i18n.t("edit")}</AppText>
 
                 </TouchableOpacity>
               )}
@@ -3921,6 +3921,7 @@ const useStyles = makeStyles((t) => ({
   },
   blockedBannerText: {
     flexShrink: 1,
+    lineHeight: Math.round(t.typography.fontSize.xs * t.typography.lineHeight.normal),
   },
   // Floating "jump to latest" button, sits just above the input bar, bottom-right.
   jumpToEndButton: {
@@ -3954,7 +3955,7 @@ const useStyles = makeStyles((t) => ({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: t.radius.full,
-    backgroundColor: t.colors.inputFilled,
+    backgroundColor: t.colors.chat.composerInput,
     paddingLeft: t.spacing.md,
     paddingRight: t.spacing.xs,
     paddingVertical: t.spacing.xs,
@@ -4004,7 +4005,7 @@ const useStyles = makeStyles((t) => ({
   loadingOlder: { marginVertical: t.spacing.md },
   dateSeparator: { alignItems: "center", marginVertical: t.spacing.md },
   dateText: {
-    backgroundColor: t.colors.surfaceMuted,
+    backgroundColor: t.colors.chat.dateChip,
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.xs,
     borderRadius: t.radius.full,
