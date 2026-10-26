@@ -271,6 +271,8 @@
   "storageDescription": "Cached photos and voice messages load instantly and don't re-download. When the limit is reached, the least-recently-used items are removed automatically.",
   "storageUsedLabel": "Used",
   "cacheLimit": "Cache limit",
+  "minimum": "Minimum",
+  "maximum": "Maximum",
   "clearCache": "Clear cache",
   "clearCacheConfirm": "Remove all cached photos and voice messages from this device? They will re-download when you open them again. This also deletes any unfinished spiritual gifts assessment and, if you are not signed in, your saved gift results — those cannot be recovered.",
   "cacheCleared": "Cache cleared.",

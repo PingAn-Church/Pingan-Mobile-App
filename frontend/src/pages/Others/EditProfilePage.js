@@ -1,15 +1,10 @@
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
-  Button,
-  StyleSheet,
   TouchableOpacity,
   Platform,
   ScrollView,
   Alert,
-  ActivityIndicator,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import * as ImagePicker from "expo-image-picker";
@@ -21,15 +16,16 @@ import {
   uploadFileToOSS,
   deleteOwnUpload,
 } from "../../service/OSSService";
-import CachedImage from "../../components/CachedImage";
 import i18n from "../../../i18n";
-import { Ionicons } from "@expo/vector-icons";
 import { LanguageContext } from "../../context/LanguageContext";
 import { UserContext } from "../../context/UserContext";
 import { showAlert } from "../../utils/showAlert";
+import { makeStyles } from "../../theme";
+import { AppText, Avatar, Button, TextField } from "../../components/ui";
 
 
 const EditProfile = () => {
+  const styles = useStyles();
   const navigation = useNavigation();
   const { user } = useContext(UserContext);
   const { language } = useContext(LanguageContext);
@@ -60,7 +56,7 @@ const EditProfile = () => {
         setEmail(data.email);
         console.log("data check: ", data);
         if (data.birthday) setBirthday(data.birthday);
-        // The stored object path, not a signed URL: CachedImage below serves it
+        // The stored object path, not a signed URL: the Avatar below (via CachedImage) serves it
         // from the same on-device copy the rest of the app already uses. Once the
         // picker runs this holds a local file:// URI instead, which is exactly how
         // the comparison against originalProfileImage detects a new picture.
@@ -209,39 +205,67 @@ const EditProfile = () => {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.profileContainer}>
-        {profileImage ? (
-          <CachedImage uri={profileImage} type="profile" style={styles.image} />
-        ) : (
-          <Ionicons name="person-circle" size={100} color="#6e6e6e" />
-        )}
+        <Avatar uri={profileImage} size="2xl" style={styles.image} />
 
         <View style={styles.imageContainer}>
-          <TouchableOpacity style={styles.button} onPress={pickImage}>
-            <Text style={styles.imageText}>{i18n.t("pickProfilePicture")}</Text>
-          </TouchableOpacity>
+          <Button
+            title={i18n.t("pickProfilePicture")}
+            size="md"
+            onPress={pickImage}
+            style={styles.button}
+          />
         </View>
       </View>
 
-      <Text style={styles.label}>{i18n.t("firstName")}</Text>
-      <TextInput
+      <AppText variant="secondary" size="lg" style={styles.label}>
+        {i18n.t("firstName")}
+      </AppText>
+      <TextField
+        size="lg"
         style={styles.input}
         value={firstName}
         onChangeText={setFirstName}
+        accessibilityLabel={i18n.t("firstName")}
       />
 
-      <Text style={styles.label}>{i18n.t("lastName")}</Text>
-      <TextInput
+      <AppText variant="secondary" size="lg" style={styles.label}>
+        {i18n.t("lastName")}
+      </AppText>
+      <TextField
+        size="lg"
         style={styles.input}
         value={lastName}
         onChangeText={setLastName}
+        accessibilityLabel={i18n.t("lastName")}
       />
 
-      <Text style={styles.label}>{i18n.t("email")}</Text>
-      <TextInput style={styles.input} value={email} editable={false} />
+      <AppText variant="secondary" size="lg" style={styles.label}>
+        {i18n.t("email")}
+      </AppText>
+      <TextField
+        size="lg"
+        style={styles.input}
+        value={email}
+        editable={false}
+        accessibilityLabel={i18n.t("email")}
+      />
 
-      <Text style={styles.label}>{i18n.t("birthday")}</Text>
-      <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-        <Text style={styles.input}>{birthday || i18n.t("selectDate")}</Text>
+      <AppText variant="secondary" size="lg" style={styles.label}>
+        {i18n.t("birthday")}
+      </AppText>
+      <TouchableOpacity
+        onPress={() => setShowDatePicker(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${i18n.t("birthday")}, ${birthday || i18n.t("selectDate")}`}
+      >
+        {/* Drawn like a TextField; "Select Date" is grey like a placeholder. */}
+        <AppText
+          size="lg"
+          color={birthday ? "textPrimary" : "textSecondary"}
+          style={[styles.input, styles.dateField]}
+        >
+          {birthday || i18n.t("selectDate")}
+        </AppText>
       </TouchableOpacity>
       {showDatePicker &&
         (Platform.OS === "ios" ? (
@@ -257,8 +281,9 @@ const EditProfile = () => {
             <TouchableOpacity
               style={styles.iosPickerDoneButton}
               onPress={() => setShowDatePicker(false)}
+              accessibilityRole="button"
             >
-              <Text style={styles.iosPickerDoneText}>{i18n.t("done")}</Text>
+              <AppText variant="link">{i18n.t("done")}</AppText>
             </TouchableOpacity>
           </View>
         ) : (
@@ -272,17 +297,12 @@ const EditProfile = () => {
         ))}
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.button, submitting && { opacity: 0.6 }]}
+        <Button
+          title={i18n.t("save")}
           onPress={handleSave}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>{i18n.t("save")}</Text>
-          )}
-        </TouchableOpacity>
+          loading={submitting}
+          style={styles.button}
+        />
       </View>
     </KeyboardAwareScrollView>
   );
@@ -290,66 +310,48 @@ const EditProfile = () => {
 
 export default EditProfile;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    padding: 20,
+    padding: t.spacing.lg,
   },
   label: {
-    fontSize: 18,
-    marginTop: 10,
-    marginBottom: 10,
+    marginVertical: t.spacing.md,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    borderRadius: 6,
-    fontSize: 18,
-    marginBottom: 10,
+    marginBottom: t.spacing.md,
+  },
+  dateField: {
+    borderWidth: t.components.input.borderWidth,
+    borderColor: t.colors.border,
+    borderRadius: t.radius.control,
+    padding: t.components.input.padding,
   },
   button: {
-    backgroundColor: "#007bff",
-    paddingVertical: 12,
-    borderRadius: 5,
-    alignSelf: "stretch",
-    marginVertical: 10,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    marginVertical: t.spacing.md,
+    paddingHorizontal: 0,
   },
   buttonContainer: {
-    marginVertical: 30,
+    marginVertical: t.spacing["2xl"],
     width: "100%",
   },
   imageContainer: {
     width: "50%",
   },
-  imageText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
   profileContainer: {
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: t.spacing.md,
   },
   image: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginVertical: 10,
+    marginVertical: t.spacing.md,
   },
   iosPickerContainer: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 6,
-    marginBottom: 10,
+    backgroundColor: t.colors.surface,
+    borderWidth: t.components.input.borderWidth,
+    borderColor: t.colors.border,
+    borderRadius: t.radius.control,
+    marginBottom: t.spacing.md,
     overflow: "hidden",
   },
   iosPicker: {
@@ -357,16 +359,11 @@ const styles = StyleSheet.create({
   },
   iosPickerDoneButton: {
     alignSelf: "flex-end",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: t.spacing.md,
+    paddingHorizontal: t.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: "#eee",
+    borderTopColor: t.colors.borderSubtle,
     width: "100%",
     alignItems: "flex-end",
   },
-  iosPickerDoneText: {
-    color: "#007bff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
+}));

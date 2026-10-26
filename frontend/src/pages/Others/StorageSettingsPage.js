@@ -1,8 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import {
   View,
-  Text,
-  StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   PanResponder,
@@ -13,6 +11,8 @@ import { useNavigation } from "@react-navigation/native";
 import i18n from "../../../i18n";
 import { LanguageContext } from "../../context/LanguageContext";
 import { showAlert } from "../../utils/showAlert";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Card } from "../../components/ui";
 import {
   init as initMediaCache,
   getUsageBytes,
@@ -28,6 +28,23 @@ const MB = 1024 * 1024;
 const GB = 1024 * MB;
 const STEP = 256 * MB; // snap the budget to tidy 256 MB increments
 const THUMB = 22;
+const SLIDER_HEIGHT = 28; // touch area of the slider
+const RAIL_HEIGHT = 4; // slider rail and its blue fill
+const THUMB_TOP = 3; // centres the knob in the slider
+const RAIL_TOP = 12; // centres the rail and fill in the slider
+const PROGRESS_HEIGHT = 8; // "storage used" bar
+const NOTICE_RADIUS = 8; // corners of the web-only notice
+// Light shadow under the slider knob.
+const THUMB_SHADOW = Platform.select({
+  web: { boxShadow: "0px 1px 3px rgba(0,0,0,0.18)" },
+  default: {
+    elevation: 3,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+});
 
 function formatBytes(bytes) {
   const b = Math.max(0, Number(bytes) || 0);
@@ -49,6 +66,8 @@ function ratioToBytes(r) {
 }
 
 export default function StorageSettingsPage() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const navigation = useNavigation();
   const { language } = useContext(LanguageContext);
   const isNative = Platform.OS !== "web";
@@ -133,35 +152,54 @@ export default function StorageSettingsPage() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0A5AF6" />
+        <ActivityIndicator size="large" color={colors.primary} accessibilityLabel={i18n.t("loading")} />
       </View>
     );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.description}>{i18n.t("storageDescription")}</Text>
+      <AppText variant="secondary" style={styles.description}>
+        {i18n.t("storageDescription")}
+      </AppText>
 
-      {!isNative ? <Text style={styles.note}>{i18n.t("storageNativeOnly")}</Text> : null}
+      {!isNative ? (
+        <AppText variant="secondary" style={styles.note}>
+          {i18n.t("storageNativeOnly")}
+        </AppText>
+      ) : null}
 
-      <View style={styles.card}>
+      <Card variant="default" style={styles.card}>
         <View style={styles.usageRow}>
-          <Text style={styles.usageLabel}>{i18n.t("storageUsedLabel")}</Text>
-          <Text style={styles.usageValue}>
+          <AppText variant="cardTitleSmall" accessibilityRole="header">
+            {i18n.t("storageUsedLabel")}
+          </AppText>
+          <AppText weight="bold" color="primary">
             {formatBytes(usage)} / {formatBytes(displayBudget)}
-          </Text>
+          </AppText>
         </View>
-        <View style={styles.progressTrack}>
+        <View
+          style={styles.progressTrack}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel={i18n.t("storageUsedLabel")}
+        >
           <View style={[styles.progressFill, { width: `${Math.round(usageRatio * 100)}%` }]} />
         </View>
-      </View>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{i18n.t("cacheLimit")}</Text>
-        <Text style={styles.limitValue}>{formatBytes(displayBudget)}</Text>
+      <Card variant="default" style={styles.card}>
+        <AppText variant="cardTitleSmall" accessibilityRole="header">
+          {i18n.t("cacheLimit")}
+        </AppText>
+        <AppText size="xl" weight="bold" color="primary" style={styles.limitValue}>
+          {formatBytes(displayBudget)}
+        </AppText>
 
         <View
           style={styles.sliderTrack}
+          accessible
+          accessibilityLabel={`${i18n.t("cacheLimit")}, ${formatBytes(displayBudget)}`}
           onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
           {...pan.panHandlers}
         >
@@ -170,98 +208,106 @@ export default function StorageSettingsPage() {
           <View style={[styles.sliderThumb, { left: thumbLeft }]} />
         </View>
         <View style={styles.sliderLabels}>
-          <Text style={styles.sliderLabelText}>{formatBytes(MIN_BUDGET_BYTES)}</Text>
-          <Text style={styles.sliderLabelText}>{formatBytes(MAX_BUDGET_BYTES)}</Text>
+          <AppText
+            variant="caption"
+            weight="semibold"
+            accessibilityLabel={`${i18n.t("minimum")}, ${formatBytes(MIN_BUDGET_BYTES)}`}
+          >
+            {formatBytes(MIN_BUDGET_BYTES)}
+          </AppText>
+          <AppText
+            variant="caption"
+            weight="semibold"
+            accessibilityLabel={`${i18n.t("maximum")}, ${formatBytes(MAX_BUDGET_BYTES)}`}
+          >
+            {formatBytes(MAX_BUDGET_BYTES)}
+          </AppText>
         </View>
-      </View>
+      </Card>
 
-      <TouchableOpacity style={styles.clearButton} onPress={handleClear} activeOpacity={0.85}>
-        <Text style={styles.clearButtonText}>{i18n.t("clearCache")}</Text>
+      <TouchableOpacity
+        style={styles.clearButton}
+        onPress={handleClear}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+      >
+        <AppText variant="button" size="md" color="danger">
+          {i18n.t("clearCache")}
+        </AppText>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F2F2F7" },
-  content: { padding: 20, paddingBottom: 40 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F2F2F7" },
-  description: { fontSize: 14, color: "#5B6470", lineHeight: 20, marginBottom: 16 },
+const useStyles = makeStyles((t) => ({
+  container: { flex: 1, backgroundColor: t.colors.backgroundMuted },
+  content: { padding: t.spacing.lg, paddingBottom: t.spacing["3xl"] },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: t.colors.backgroundMuted,
+  },
+  description: { marginBottom: t.spacing.base },
   note: {
-    fontSize: 13,
-    color: "#8A6D00",
-    backgroundColor: "#FFF6DA",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 16,
+    color: t.colors.storage.noticeText,
+    backgroundColor: t.colors.storage.notice,
+    borderRadius: NOTICE_RADIUS,
+    padding: t.spacing.md,
+    marginBottom: t.spacing.base,
   },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 1,
-  },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#1C1C1E" },
+  card: { marginBottom: t.spacing.base },
   usageRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  usageLabel: { fontSize: 15, fontWeight: "600", color: "#1C1C1E" },
-  usageValue: { fontSize: 15, fontWeight: "700", color: "#0A5AF6" },
   progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#E5EAF2",
-    marginTop: 12,
+    height: PROGRESS_HEIGHT,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.surfaceMuted,
+    marginTop: t.spacing.md,
     overflow: "hidden",
   },
-  progressFill: { height: "100%", borderRadius: 4, backgroundColor: "#0A5AF6" },
-  limitValue: { fontSize: 22, fontWeight: "800", color: "#0A5AF6", marginTop: 4, marginBottom: 14 },
+  progressFill: { height: "100%", borderRadius: t.radius.full, backgroundColor: t.colors.primary },
+  limitValue: { marginTop: t.spacing.xs, marginBottom: t.spacing.base },
   // 28px tall for a comfortable touch target; the 4px rail is centred at top:12.
   sliderTrack: {
-    height: 28,
+    height: SLIDER_HEIGHT,
     justifyContent: "center",
   },
   sliderRail: {
     position: "absolute",
     left: 0,
     right: 0,
-    top: 12,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#E5EAF2",
+    top: RAIL_TOP,
+    height: RAIL_HEIGHT,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.surfaceMuted,
   },
   sliderFill: {
     position: "absolute",
     left: 0,
-    top: 12,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#0A5AF6",
+    top: RAIL_TOP,
+    height: RAIL_HEIGHT,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.primary,
   },
   sliderThumb: {
     position: "absolute",
     width: THUMB,
     height: THUMB,
-    borderRadius: THUMB / 2,
-    backgroundColor: "#FFFFFF",
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.surface,
     borderWidth: 2,
-    borderColor: "#0A5AF6",
-    top: 3,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    borderColor: t.colors.primary,
+    top: THUMB_TOP,
+    ...THUMB_SHADOW,
   },
-  sliderLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
-  sliderLabelText: { fontSize: 12, color: "#8A929E", fontWeight: "600" },
+  sliderLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: t.spacing.md },
   clearButton: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radius.control,
+    paddingVertical: t.components.button.paddingVertical,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#F0C0C0",
-    marginTop: 4,
+    borderColor: t.colors.storage.clearBorder,
+    marginTop: t.spacing.xs,
   },
-  clearButtonText: { color: "#E0463E", fontSize: 16, fontWeight: "700" },
-});
+}));

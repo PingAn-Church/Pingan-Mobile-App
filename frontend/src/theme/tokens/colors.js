@@ -13,15 +13,15 @@ export const colors = {
   // Text
   textPrimary: "#000000", // headings, titles and the main line of a list row
   textBody: "#333333", // paragraphs
-  textSecondary: "#666666", // dates, captions, empty states, status notes (5.7:1 on white)
+  textSecondary: "#666666", // dates, captions, empty states, status notes, low-emphasis icons (5.7:1 on white)
   textDisabled: "#8A8A8A",
 
   // Surfaces
   background: "#FFFFFF",
   backgroundMuted: "#F1F5F9", // screens with white panels (Chats, Settings)
   surface: "#FFFFFF",
-  surfaceSubtle: "#F8F9FA", // light panel set apart from its surroundings: bottom bars, composers, subtle cards
-  surfaceMuted: "#F0F0F0", // grey band or chip behind status or a row of controls (segmented tab track, chat editing / blocked banners)
+  surfaceSubtle: "#F8F9FA", // light panel set apart from its surroundings: bottom bars, composers, subtle cards, profile rows
+  surfaceMuted: "#F0F0F0", // grey band, chip or track: segmented tab track, chat editing / blocked banners, empty part of a progress bar or slider rail
   surfaceControlMuted: "#E7E7EA", // grey fill of a low-emphasis icon button (web details close ✕, chat attach 📎)
   surfaceSelected: "#F0F8FF", // highlighted row: picked in a pick list, or the chat that's open
   surfaceDisabled: "#C4C8D0", // background of a disabled button (chat send button with nothing to send)
@@ -66,6 +66,13 @@ export const colors = {
   thread: {
     following: "#F59E0B", // bell when you follow a topic
     notFollowing: "#9CA3AF", // bell when you don't
+  },
+
+  // Storage settings
+  storage: {
+    notice: "#FFF6DA", // background of the web-only "caching is mobile-only" notice
+    noticeText: "#8A6D00", // its text
+    clearBorder: "#F0C0C0", // pale red outline of the Clear Cache button
   },
 
   // Home quick-action tiles

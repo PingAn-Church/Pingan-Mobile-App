@@ -20,7 +20,6 @@ import {
   useWindowDimensions
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import PressToRevealPasswordInput from "../../components/PressToRevealPasswordInput";
 import { MaterialIcons } from "@expo/vector-icons";
 import { UserContext } from "../../context/UserContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -30,7 +29,6 @@ import { getAllApplications } from "../../service/ApplicationService";
 import { useNavigation } from "@react-navigation/native";
 import { logoutUser } from "../../service/AuthService";
 import { clearAll as clearMediaCache } from "../../service/MediaCacheService";
-import CachedImage from "../../components/CachedImage";
 import { changePassword } from "../../service/AuthService";
 import { LanguageContext } from "../../context/LanguageContext";
 import { useFocusEffect } from "@react-navigation/native";
@@ -40,8 +38,12 @@ import { showAlert } from "../../utils/showAlert";
 import AppUpdateStatusIcon from "../../components/AppUpdateStatusIcon";
 import TermsModal, { TERMS_COPY } from "../../components/TermsAndConditions";
 import { parseServerDate } from "../../utils/serverDate";
+import { makeStyles, useTheme } from "../../theme";
+import { AppText, Avatar, Button, Heading, PasswordField } from "../../components/ui";
 
 export default function ProfilePage() {
+  const styles = useStyles();
+  const { colors, sizes } = useTheme();
   const { user, setUser, logout } = useContext(UserContext);
   const navigation = useNavigation();
   const [userDetails, setUserDetails] = useState([]);
@@ -273,59 +275,72 @@ export default function ProfilePage() {
     }
   };
 
+  // Read out by screen readers for the language row (guest and signed-in).
+  const languageLabel = `${i18n.t("changeLanguage")}, ${i18n.t("language")}: ${i18n.t(
+    language === "en" ? "english" : "chinese"
+  )}`;
+
   if (!user) {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.guestContent}>
           <View style={styles.profileHeader}>
-            <View style={styles.profileCircle}>
-              <Ionicons name="person-circle" size={100} color="#6e6e6e" />
-            </View>
+            <Avatar size="2xl" style={styles.profileImage} />
           </View>
 
           <View style={styles.profileContainer}>
-            <TouchableOpacity style={styles.detailContainer} onPress={toggleLanguage}>
+            <TouchableOpacity
+              style={styles.detailContainer}
+              onPress={toggleLanguage}
+              accessibilityRole="button"
+              accessibilityLabel={languageLabel}
+            >
               <MaterialIcons
                 name="language"
-                size={24}
-                color="#007AFF"
+                size={sizes.icon.lg}
+                color={colors.primary}
                 style={styles.detailIcon}
               />
               <View style={styles.detailTextContainer}>
-                <Text style={styles.detailLabel}>{i18n.t("changeLanguage")}</Text>
-                <Text style={styles.detailValue}>
+                <AppText variant="secondary" size="md">{i18n.t("changeLanguage")}</AppText>
+                <AppText variant="bodyLarge" weight="bold" color="textPrimary">
                   {i18n.t("language")}: {i18n.t(language === "en" ? "english" : "chinese")}
-                </Text>
+                </AppText>
               </View>
-              <Ionicons name="repeat-outline" size={25} color="#aaa" />
+              <Ionicons name="repeat-outline" size={sizes.icon.lg} color={colors.textSecondary} />
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.detailContainer}
               onPress={() => navigation.navigate("StorageSettings")}
+              accessibilityRole="button"
+              accessibilityLabel={`${i18n.t("storage")}, ${i18n.t("manageStorage")}`}
             >
               <MaterialIcons
                 name="storage"
-                size={24}
-                color="#007AFF"
+                size={sizes.icon.lg}
+                color={colors.primary}
                 style={styles.detailIcon}
               />
               <View style={styles.detailTextContainer}>
-                <Text style={styles.detailLabel}>{i18n.t("storage")}</Text>
-                <Text style={styles.detailValue}>{i18n.t("manageStorage")}</Text>
+                <AppText variant="secondary" size="md">{i18n.t("storage")}</AppText>
+                <AppText variant="bodyLarge" weight="bold" color="textPrimary">
+                  {i18n.t("manageStorage")}
+                </AppText>
               </View>
-              <MaterialIcons name="chevron-right" size={30} color="#aaa" />
+              <MaterialIcons name="chevron-right" size={sizes.icon.xl} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.guestPrompt}>
-            <Text style={styles.guestPromptText}>{i18n.t("guestUnlockMessage")}</Text>
-            <TouchableOpacity
-              style={styles.editButton}
+            <AppText variant="secondary" size="md" style={styles.guestPromptText}>
+              {i18n.t("guestUnlockMessage")}
+            </AppText>
+            <Button
+              title={i18n.t("loginToUnlock")}
               onPress={() => navigation.navigate("Login")}
-            >
-              <Text style={styles.buttonText}>{i18n.t("loginToUnlock")}</Text>
-            </TouchableOpacity>
+              style={styles.editButton}
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -335,43 +350,41 @@ export default function ProfilePage() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.profileHeader}>
-          <View style={styles.profileCircle}>
-            {profileImage ? (
-              <CachedImage
-                uri={profileImage}
-                type="profile"
-                style={styles.profileImage}
-              />
-            ) : (
-              <Ionicons name="person-circle" size={100} color="#6e6e6e" />
-            )}
-          </View>
+          <Avatar uri={profileImage} size="2xl" style={styles.profileImage} />
         </View>
 
         {user?.admin && (
           <View style={[styles.adminContainer, isWideScreen && styles.adminContainerWide]}>
-            <Text style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>{i18n.t("adminControls")}</Text>
-            <View style={{ flexShrink: 1 }}>
+            <Heading style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>
+              {i18n.t("adminControls")}
+            </Heading>
+            <View style={styles.gridWrapper}>
               <View style={[styles.gridContainer, isWideScreen && styles.gridContainerWide]}>
                 {options.map((option, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[styles.optionButton, isWideScreen && styles.optionButtonWide]}
                     onPress={() => navigation.navigate(option.screen)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      option.badge > 0
+                        ? `${i18n.t(option.titleKey)}, ${option.badge > 99 ? "99+" : option.badge}`
+                        : i18n.t(option.titleKey)
+                    }
                   >
-                    <MaterialIcons name={option.icon} size={40} color="white" />
-                    <Text style={styles.optionText}>
+                    <MaterialIcons name={option.icon} size={sizes.icon["2xl"]} color={colors.onPrimary} />
+                    <AppText variant="button" size="md" style={styles.optionText}>
                       {i18n.t(option.titleKey)}
-                    </Text>
+                    </AppText>
                     {option.badge > 0 && (
                       <View style={styles.optionBadge}>
-                        <Text style={styles.optionBadgeText}>
+                        <AppText variant="badge">
                           {option.badge > 99 ? "99+" : option.badge}
-                        </Text>
+                        </AppText>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -383,19 +396,23 @@ export default function ProfilePage() {
 
         {(user?.admin || user?.instructor) && (
           <View style={[styles.adminContainer, isWideScreen && styles.adminContainerWide]}>
-            <Text style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>{i18n.t("instructorControls")}</Text>
-            <View style={{ flexShrink: 1 }}>
+            <Heading style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>
+              {i18n.t("instructorControls")}
+            </Heading>
+            <View style={styles.gridWrapper}>
               <View style={[styles.gridContainer, styles.instructorGrid, isWideScreen && styles.gridContainerWide]}>
                 {instructorOptions.map((option, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[styles.optionButton, isWideScreen && styles.optionButtonWide]}
                     onPress={() => navigation.navigate(option.screen)}
+                    accessibilityRole="button"
+                    accessibilityLabel={i18n.t(option.titleKey)}
                   >
-                    <MaterialIcons name={option.icon} size={40} color="white" />
-                    <Text style={styles.optionText}>
+                    <MaterialIcons name={option.icon} size={sizes.icon["2xl"]} color={colors.onPrimary} />
+                    <AppText variant="button" size="md" style={styles.optionText}>
                       {i18n.t(option.titleKey)}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -404,18 +421,25 @@ export default function ProfilePage() {
         )}
 
         <View style={styles.profileContainer}>
-          <Text style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>{i18n.t("profile")}</Text>
+          <Heading style={[styles.subHeader, isWideScreen && styles.subHeaderWide]}>
+            {i18n.t("profile")}
+          </Heading>
           {userDetails.map((detail, index) => (
-            <View key={index} style={styles.detailContainer}>
+            <View
+              key={index}
+              style={styles.detailContainer}
+              accessible
+              accessibilityLabel={`${i18n.t(detail.label)}, ${detail.value}`}
+            >
               <MaterialIcons
                 name={detail.icon}
-                size={24}
-                color="#007AFF"
+                size={sizes.icon.lg}
+                color={colors.primary}
                 style={styles.detailIcon}
               />
               <View style={styles.detailTextContainer}>
-                <Text style={styles.detailLabel}>{i18n.t(detail.label)}</Text>
-                <Text style={styles.detailValue}>{detail.value}</Text>
+                <AppText variant="secondary" size="md">{i18n.t(detail.label)}</AppText>
+                <AppText variant="bodyLarge" weight="bold" color="textPrimary">{detail.value}</AppText>
               </View>
             </View>
           ))}
@@ -423,90 +447,95 @@ export default function ProfilePage() {
           <TouchableOpacity
             style={styles.detailContainer}
             onPress={() => navigation.navigate("ChangePassword")}
+            accessibilityRole="button"
+            accessibilityLabel={`${i18n.t("security")}, ${i18n.t("changePassword")}`}
           >
             <MaterialIcons
               name="lock-outline"
-              size={24}
-              color="#007AFF"
+              size={sizes.icon.lg}
+              color={colors.primary}
               style={styles.detailIcon}
             />
             <View style={styles.detailTextContainer}>
-              <Text style={styles.detailLabel}>{i18n.t("security")}</Text>
-              <Text style={styles.detailValue}>{i18n.t("changePassword")}</Text>
+              <AppText variant="secondary" size="md">{i18n.t("security")}</AppText>
+              <AppText variant="bodyLarge" weight="bold" color="textPrimary">{i18n.t("changePassword")}</AppText>
             </View>
             <MaterialIcons
               name="chevron-right"
-              size={30}
-              color="#aaa"
-              style={{ marginLeft: 10 }}
+              size={sizes.icon.xl}
+              color={colors.textSecondary}
+              style={styles.chevron}
             />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.detailContainer}
             onPress={toggleLanguage}
+            accessibilityRole="button"
+            accessibilityLabel={languageLabel}
           >
             <MaterialIcons
               name="language"
-              size={24}
-              color="#007AFF"
+              size={sizes.icon.lg}
+              color={colors.primary}
               style={styles.detailIcon}
             />
             <View style={styles.detailTextContainer}>
-              <Text style={styles.detailLabel}>{i18n.t("changeLanguage")}</Text>
-              <Text style={styles.detailValue}>
+              <AppText variant="secondary" size="md">{i18n.t("changeLanguage")}</AppText>
+              <AppText variant="bodyLarge" weight="bold" color="textPrimary">
                 {i18n.t("language")}:{" "}
                 {i18n.t(language === "en" ? "english" : "chinese")}
-              </Text>
+              </AppText>
             </View>
             <Ionicons
               name="repeat-outline"
-              size={25}
-              color="#aaa"
-              style={{ marginRight: 5 }}
+              size={sizes.icon.lg}
+              color={colors.textSecondary}
+              style={styles.repeatIcon}
             />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.editButton}
+        <Button
+          title={i18n.t("editProfile")}
           onPress={() => navigation.navigate("EditProfile")}
-        >
-          <Text style={styles.buttonText}>{i18n.t("editProfile")}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={styles.editButton}
-          onPress={() => navigation.navigate("StorageSettings")}
-        >
-          <Text style={styles.buttonText}>{i18n.t("storage")}</Text>
-        </TouchableOpacity>
+        />
 
-        <TouchableOpacity
-          style={styles.logoutButton}
+        <Button
+          title={i18n.t("storage")}
+          onPress={() => navigation.navigate("StorageSettings")}
+          style={styles.editButton}
+        />
+
+        <Button
+          title={i18n.t("logout")}
+          variant="danger"
           onPress={handlePressLogout}
-        >
-          <Text style={styles.buttonText}>{i18n.t("logout")}</Text>
-        </TouchableOpacity>
+          style={styles.logoutButton}
+        />
 
         <TouchableOpacity
           style={styles.termsEntry}
           onPress={() => setTermsVisible(true)}
+          accessibilityRole="link"
         >
-          <Text style={styles.termsEntryText}>{termsCopy.linkText}</Text>
+          <AppText variant="link" size="sm">{termsCopy.linkText}</AppText>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.deleteAccountButton, deletingAccount && styles.disabledButton]}
           onPress={confirmDeleteOwnAccount}
           disabled={deletingAccount}
+          accessibilityRole="button"
+          accessibilityLabel={i18n.t("deleteOwnAccount")}
         >
           {deletingAccount ? (
-            <ActivityIndicator color="#c0392b" />
+            <ActivityIndicator color={colors.danger} />
           ) : (
-            <Text style={styles.deleteAccountText}>
+            <AppText variant="link" size="sm" color="danger">
               {i18n.t("deleteOwnAccount")}
-            </Text>
+            </AppText>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -517,6 +546,7 @@ export default function ProfilePage() {
 }
 
 export function ChangePasswordPage({ navigation }) {
+  const styles = useStyles();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -570,41 +600,34 @@ export function ChangePasswordPage({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <PressToRevealPasswordInput
+      <PasswordField
+        size="md"
         placeholder={i18n.t("currentPassword")}
         value={currentPassword}
         onChangeText={setCurrentPassword}
         containerStyle={styles.passwordInputTop}
-        inputStyle={styles.passwordInputText}
       />
-      <PressToRevealPasswordInput
+      <PasswordField
+        size="md"
         placeholder={i18n.t("newPassword")}
         value={newPassword}
         onChangeText={setNewPassword}
         containerStyle={styles.passwordInput}
-        inputStyle={styles.passwordInputText}
       />
-      <PressToRevealPasswordInput
+      <PasswordField
+        size="md"
         placeholder={i18n.t("confirmNewPassword")}
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         containerStyle={styles.passwordInput}
-        inputStyle={styles.passwordInputText}
       />
 
-      <TouchableOpacity
-        style={[styles.changePasswordButton, submitting && { opacity: 0.6 }]}
+      <Button
+        title={i18n.t("updatePassword")}
         onPress={handleChangePassword}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.changePasswordText}>
-            {i18n.t("updatePassword")}
-          </Text>
-        )}
-      </TouchableOpacity>
+        loading={submitting}
+        style={styles.changePasswordButton}
+      />
     </View>
   );
 }
@@ -651,7 +674,7 @@ export function ManageApplicationsPage({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={legacyStyles.container}>
       {loading ? (
         <Text>{i18n.t("loadingApplications")}</Text>
       ) : applications.length > 0 ? (
@@ -666,41 +689,58 @@ export function ManageApplicationsPage({ navigation }) {
             ) : null
           }
           renderItem={({ item }) => (
-            <View style={styles.appCard}>
-              <Text style={styles.detail}>
+            <View style={legacyStyles.appCard}>
+              <Text style={legacyStyles.detail}>
                 {i18n.t("applicant")}
                 {item.contact}
               </Text>
-              <Text style={styles.detail}>
+              <Text style={legacyStyles.detail}>
                 {i18n.t("type")}
                 {item.applicationType}
               </Text>
-              <Text style={styles.detail}>
+              <Text style={legacyStyles.detail}>
                 {i18n.t("date")}
                 {parseServerDate(item.submittedAt)?.toLocaleDateString() ?? ""}
               </Text>
-              <Text style={styles.detail}>
+              <Text style={legacyStyles.detail}>
                 {i18n.t("remarks")} {item.remarks}
               </Text>
             </View>
           )}
         />
       ) : (
-        <Text style={styles.noData}>{i18n.t("noApplications")}</Text>
+        <Text style={legacyStyles.noData}>{i18n.t("noApplications")}</Text>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const WIDE_TILE_SIZE = 140; // fixed tile size on tablets
+const BADGE_SIZE = 22; // count pill on a tile
+const SECTION_RADIUS = 10; // section wrappers (admin, instructor, profile)
+const TILE_RADIUS = 10; // corners of an admin / instructor tile
+// Light shadow under the settings rows
+const ROW_SHADOW = Platform.select({
+  web: { boxShadow: "0px 1px 2px rgba(0,0,0,0.1)" },
+  default: {
+    elevation: 2,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+});
+
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 15,
+    backgroundColor: t.colors.backgroundMuted,
+    padding: t.spacing.base,
   },
+  scrollContent: { flexGrow: 1 },
   adminContainer: {
-    padding: 15,
-    borderRadius: 10,
+    padding: t.spacing.base,
+    borderRadius: SECTION_RADIUS,
     marginBottom: 0,
     paddingBottom: 0,
     alignItems: "stretch",
@@ -708,94 +748,66 @@ const styles = StyleSheet.create({
   // Wide-screen (tablet/iPad) overrides: tighten the vertical rhythm so the admin,
   // instructor, and profile sections sit close together instead of spreading out.
   adminContainerWide: {
-    paddingTop: 4,
+    paddingTop: t.spacing.xs,
   },
   subHeaderWide: {
-    marginVertical: 4,
+    marginVertical: t.spacing.xs,
   },
   gridContainerWide: {
-    marginTop: 6,
+    marginTop: t.spacing.sm,
   },
   // Fixed compact squares instead of ~31% of a wide screen (which balloons to
   // ~240px buttons, only 3 per row); ~140px fits 5–6 per row and keeps rows short.
   optionButtonWide: {
-    width: 140,
-    flexBasis: 140,
-    marginBottom: 8,
+    width: WIDE_TILE_SIZE,
+    flexBasis: WIDE_TILE_SIZE,
+    marginBottom: t.spacing.sm,
   },
   profileContainer: {
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 25,
+    padding: t.spacing.md,
+    borderRadius: SECTION_RADIUS,
+    marginBottom: t.spacing.xl,
     marginTop: 0,
     paddingTop: 0,
   },
   subHeader: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginVertical: 10,
+    marginVertical: t.spacing.md,
   },
   profileHeader: {
     alignItems: "center",
-    marginBottom: 20,
-  },
-  profileCircle: {
-    backgroundColor: "#fff",
-    alignItems: "center",
-    borderRadius: 50,
-    padding: 5,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    marginBottom: t.spacing.lg,
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  detailsContainer: {
-    flexDirection: "column",
-    gap: 10, // Adds spacing between each profile detail row
+    borderWidth: 2,
+    borderColor: t.colors.primary,
   },
   detailContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9f9f9",
-    padding: 12,
-    borderRadius: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2, // Adds shadow for better depth
-    marginBottom: 10,
+    backgroundColor: t.colors.surfaceSubtle,
+    borderRadius: t.radius.row,
+    padding: t.spacing.md,
+    marginBottom: t.spacing.md,
+    ...ROW_SHADOW,
   },
   detailIcon: {
-    marginRight: 15,
+    marginRight: t.spacing.base,
   },
   detailTextContainer: {
     flex: 1,
   },
-  detailLabel: {
-    fontSize: 16,
-    color: "#888",
-  },
-  detailValue: {
-    fontSize: 18,
-    color: "#333",
-    fontWeight: "bold",
-  },
+  chevron: { marginLeft: t.spacing.md },
+  repeatIcon: { marginRight: t.spacing.xs },
+  gridWrapper: { flexShrink: 1 },
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "flex-start",
     alignContent: "flex-start",
     alignSelf: "flex-start",
-    marginTop: 10,
+    marginTop: t.spacing.md,
     marginBottom: 0,
-    gap: 10,
+    gap: t.spacing.sm,
   },
   // The instructor grid often has a single item; stretch it to the full row so
   // the button's percentage width resolves the same as the admin buttons
@@ -807,18 +819,15 @@ const styles = StyleSheet.create({
     width: "45%",
     flexBasis: "31%",
     aspectRatio: 1,
-    backgroundColor: "#007bff",
+    backgroundColor: t.colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 10,
-    marginBottom: 15,
-    paddingHorizontal: 5,
+    borderRadius: TILE_RADIUS,
+    marginBottom: t.spacing.base,
+    paddingHorizontal: t.spacing.xs,
   },
   optionText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginTop: 5,
+    marginTop: t.spacing.xs,
     textAlign: "center",
     flexWrap: "wrap",
   },
@@ -826,86 +835,71 @@ const styles = StyleSheet.create({
   // an admin tile reads the same way as a count anywhere else in the app.
   optionBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 6,
-    borderRadius: 11,
-    backgroundColor: "#e74c3c",
+    top: t.spacing.sm,
+    right: t.spacing.sm,
+    minWidth: BADGE_SIZE,
+    height: BADGE_SIZE,
+    paddingHorizontal: t.spacing.xs,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.badge,
     justifyContent: "center",
     alignItems: "center",
   },
-  optionBadgeText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "700",
-  },
   logoutButton: {
-    backgroundColor: "#e74c3c",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 20,
-    marginBottom: 20,
-    marginHorizontal: 10,
+    marginVertical: t.spacing.lg,
+    marginHorizontal: t.spacing.md,
   },
   termsEntry: {
     alignItems: "center",
-    paddingVertical: 6,
-    marginTop: 4,
-    marginHorizontal: 10,
-  },
-  termsEntryText: {
-    color: "#007AFF",
-    fontSize: 13,
-    fontWeight: "600",
+    paddingVertical: t.spacing.sm,
+    marginTop: t.spacing.xs,
+    marginHorizontal: t.spacing.md,
   },
   deleteAccountButton: {
     alignItems: "center",
-    paddingVertical: 10,
-    marginBottom: 28,
-    marginHorizontal: 10,
-  },
-  deleteAccountText: {
-    color: "#c0392b",
-    fontSize: 14,
-    fontWeight: "600",
+    paddingVertical: t.spacing.md,
+    marginBottom: t.spacing["2xl"],
+    marginHorizontal: t.spacing.md,
   },
   disabledButton: {
-    opacity: 0.6,
+    opacity: t.components.button.disabledOpacity,
   },
   editButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 10,
-    marginHorizontal: 10,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    marginVertical: t.spacing.md,
+    marginHorizontal: t.spacing.md,
   },
   guestContent: {
     flexGrow: 1,
-    paddingTop: 20,
+    paddingTop: t.spacing.lg,
   },
   guestPrompt: {
-    marginTop: 4,
-    paddingHorizontal: 10,
+    marginTop: t.spacing.xs,
+    paddingHorizontal: t.spacing.md,
   },
   guestPromptText: {
-    color: "#666",
-    fontSize: 15,
-    lineHeight: 22,
     textAlign: "center",
-    marginHorizontal: 12,
-    marginBottom: 8,
+    marginHorizontal: t.spacing.md,
+    marginBottom: t.spacing.sm,
+  },
+  passwordInputTop: {
+    marginTop: t.spacing["2xl"],
+    marginBottom: t.spacing.md,
+  },
+  passwordInput: {
+    marginVertical: t.spacing.md,
+  },
+  changePasswordButton: {
+    marginTop: t.spacing["3xl"],
+    marginBottom: t.spacing.lg,
+  },
+}));
+
+// ManageApplicationsPage (admin) still uses its original styles
+const legacyStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    padding: 15,
   },
   appCard: {
     padding: 15,
@@ -925,29 +919,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 20,
     color: "gray",
-  },
-  passwordInput: {
-    marginBottom: 10,
-    marginTop: 10,
-  },
-  passwordInputTop: {
-    marginBottom: 10,
-    marginTop: 30,
-  },
-  passwordInputText: {
-    fontSize: 16,
-  },
-  changePasswordButton: {
-    backgroundColor: "#007BFF",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 40,
-    marginBottom: 20,
-  },
-  changePasswordText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
   },
 });
