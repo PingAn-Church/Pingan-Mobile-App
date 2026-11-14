@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
@@ -10,7 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getMyCourses, type EnrolledCourse } from "@/services/enrollmentService";
 import i18n from "../../../i18n";
@@ -22,6 +21,7 @@ const HUB_LINKS: { route: string; labelKey: string; icon: keyof typeof Ionicons.
 ];
 
 function ProgressBar({ value }: { value: number }) {
+  const styles = useStyles();
   const pct = Math.max(0, Math.min(100, value));
   return (
     <View style={styles.track}>
@@ -31,6 +31,9 @@ function ProgressBar({ value }: { value: number }) {
 }
 
 export default function MyCoursesScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["learning", "my-courses"],
@@ -84,14 +87,14 @@ export default function MyCoursesScreen() {
       <View style={styles.hubRow}>
         {HUB_LINKS.map((l) => (
           <TouchableOpacity key={l.route} style={styles.hubBtn} onPress={() => navigation.navigate(l.route)}>
-            <Ionicons name={l.icon} size={20} color={Colors.secondary} />
+            <Ionicons name={l.icon} size={theme.sizes.icon.md} color={colors.accent} />
             <Text style={styles.hubLabel}>{i18n.t(l.labelKey)}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
+        <ActivityIndicator style={{ marginTop: theme.spacing["3xl"] }} color={colors.accent} />
       ) : isError ? (
         <Text style={styles.empty}>{i18n.t("myCoursesLoadFailed")}</Text>
       ) : courses.length === 0 ? (
@@ -109,6 +112,7 @@ export default function MyCoursesScreen() {
 }
 
 function Stat({ label, value }: { label: string; value: number | string }) {
+  const styles = useStyles();
   return (
     <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
@@ -117,33 +121,36 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  heading: { fontSize: 26, fontWeight: "800", color: Colors.textPrimary, padding: 18, paddingBottom: 8 },
-  statsRow: { flexDirection: "row", gap: 10, paddingHorizontal: 18, marginBottom: 8 },
-  stat: { flex: 1, backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 12, alignItems: "center" },
-  statValue: { color: Colors.textPrimary, fontSize: 18, fontWeight: "800" },
-  statLabel: { color: Colors.textSecondary, fontSize: 11, marginTop: 2 },
-  hubRow: { flexDirection: "row", gap: 10, paddingHorizontal: 18, marginBottom: 10 },
-  hubBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: Colors.backgroundGray,
-    borderRadius: 12,
-    paddingVertical: 12,
-  },
-  hubLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: "600" },
-  list: { padding: 14, paddingBottom: 40 },
-  card: { flexDirection: "row", backgroundColor: Colors.backgroundGray, borderRadius: 12, overflow: "hidden", marginBottom: 12 },
-  thumb: { width: 110, height: 110, backgroundColor: Colors.gray800 },
-  cardBody: { flex: 1, padding: 12, justifyContent: "center" },
-  cardTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700" },
-  cardMeta: { color: Colors.textSecondary, fontSize: 12, marginVertical: 6 },
-  track: { height: 6, borderRadius: 4, backgroundColor: Colors.progressTrack, overflow: "hidden" },
-  fill: { height: 6, backgroundColor: Colors.progressFill },
-  pct: { color: Colors.textSecondary, fontSize: 11, marginTop: 4 },
-  empty: { color: Colors.textSecondary, textAlign: "center", marginTop: 40 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    heading: { fontSize: t.typography.fontSize["2xl"], fontWeight: t.typography.fontWeight.bold, color: lc.text, padding: t.spacing.lg, paddingBottom: t.spacing.sm },
+    statsRow: { flexDirection: "row", gap: t.spacing.md, paddingHorizontal: t.spacing.lg, marginBottom: t.spacing.sm },
+    stat: { flex: 1, backgroundColor: lc.surface, borderRadius: t.radius.card, padding: t.spacing.md, alignItems: "center" },
+    statValue: { color: lc.text, fontSize: t.typography.fontSize.lg, fontWeight: t.typography.fontWeight.bold },
+    statLabel: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, marginTop: t.spacing.xs },
+    hubRow: { flexDirection: "row", gap: t.spacing.md, paddingHorizontal: t.spacing.lg, marginBottom: t.spacing.md },
+    hubBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: t.spacing.sm,
+      backgroundColor: lc.surface,
+      borderRadius: t.radius.card,
+      paddingVertical: t.spacing.md,
+    },
+    hubLabel: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.semibold },
+    list: { padding: t.spacing.base, paddingBottom: t.spacing["3xl"] },
+    card: { flexDirection: "row", backgroundColor: lc.surface, borderRadius: t.radius.card, overflow: "hidden", marginBottom: t.spacing.md },
+    thumb: { width: 110, height: 110, backgroundColor: lc.placeholder },
+    cardBody: { flex: 1, padding: t.spacing.md, justifyContent: "center" },
+    cardTitle: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.bold },
+    cardMeta: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, marginVertical: t.spacing.sm },
+    track: { height: 6, borderRadius: t.radius.control, backgroundColor: lc.progressTrack, overflow: "hidden" },
+    fill: { height: 6, backgroundColor: lc.progressFill },
+    pct: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, marginTop: t.spacing.xs },
+    empty: { color: lc.textSecondary, textAlign: "center", marginTop: t.spacing["3xl"] },
+  };
 });

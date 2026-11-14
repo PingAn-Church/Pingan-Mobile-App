@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   TouchableOpacity,
   Switch,
@@ -10,12 +9,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { getMyReview, postReview, updateReview } from "@/services/reviewService";
 import { notify } from "@/utils/alerts";
 import i18n from "../../../i18n";
 
 export default function LeaveReviewScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const courseId = String(route.params?.courseId ?? "");
@@ -74,7 +76,7 @@ export default function LeaveReviewScreen() {
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: "center" }]}>
-        <ActivityIndicator color={Colors.secondary} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -88,7 +90,7 @@ export default function LeaveReviewScreen() {
             <Ionicons
               name={s <= rating ? "star" : "star-outline"}
               size={36}
-              color={Colors.starGold}
+              color={colors.star}
             />
           </TouchableOpacity>
         ))}
@@ -100,7 +102,7 @@ export default function LeaveReviewScreen() {
         value={text}
         onChangeText={setText}
         placeholder={i18n.t("reviewPlaceholder")}
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
         multiline
       />
 
@@ -118,19 +120,22 @@ export default function LeaveReviewScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary, padding: 18 },
-  label: { color: Colors.textSecondary, fontSize: 14, fontWeight: "600", marginTop: 14, marginBottom: 8 },
-  stars: { flexDirection: "row", gap: 8 },
-  input: {
-    backgroundColor: Colors.textInputBg,
-    color: Colors.textPrimary,
-    borderRadius: 10,
-    padding: 12,
-    minHeight: 120,
-    textAlignVertical: "top",
-  },
-  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
-  btn: { backgroundColor: Colors.secondary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 24 },
-  btnText: { color: Colors.white, fontWeight: "700", fontSize: 16 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background, padding: t.spacing.lg },
+    label: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm, fontWeight: t.typography.fontWeight.semibold, marginTop: t.spacing.base, marginBottom: t.spacing.sm },
+    stars: { flexDirection: "row", gap: t.spacing.sm },
+    input: {
+      backgroundColor: lc.input,
+      color: lc.text,
+      borderRadius: t.radius.card,
+      padding: t.spacing.md,
+      minHeight: 120,
+      textAlignVertical: "top",
+    },
+    switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: t.spacing.sm },
+    btn: { backgroundColor: lc.accent, borderRadius: t.radius.control, paddingVertical: t.spacing.base, alignItems: "center", marginTop: t.spacing.xl },
+    btnText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.bold, fontSize: t.typography.fontSize.md },
+  };
 });

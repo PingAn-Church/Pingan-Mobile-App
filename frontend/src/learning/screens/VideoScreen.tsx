@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from "r
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { markVideoComplete } from "@/services/enrollmentService";
 import { notify } from "@/utils/alerts";
 // Reuse Pingan's web-safe webview wrapper (iframe on web, WebView on native).
@@ -23,6 +23,9 @@ const getEmbedUrl = (url?: string): string => {
 };
 
 export default function VideoScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const queryClient = useQueryClient();
@@ -77,12 +80,12 @@ export default function VideoScreen() {
       {isAuthenticated && videoId &&
         (completed ? (
           <View style={[styles.completeBtn, styles.completedBtn]}>
-            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+            <Ionicons name="checkmark-circle" size={theme.sizes.icon.sm} color={colors.onAccent} />
             <Text style={styles.completeText}>{i18n.t("completed")}</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+            <Ionicons name="checkmark-circle-outline" size={theme.sizes.icon.sm} color={colors.onAccent} />
             <Text style={styles.completeText}>
               {marking ? i18n.t("saving") : i18n.t("markAsComplete")}
             </Text>
@@ -92,32 +95,35 @@ export default function VideoScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  videoWrapper: {
-    alignSelf: "center",
-    backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  video: { flex: 1, width: "100%", height: "100%" },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "700",
-    padding: 18,
-  },
-  completeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.secondary,
-    marginHorizontal: 18,
-    borderRadius: 12,
-    paddingVertical: 14,
-  },
-  completedBtn: { backgroundColor: Colors.green },
-  completeText: { color: Colors.white, fontWeight: "700", fontSize: 15 },
-  muted: { color: Colors.textSecondary },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    videoWrapper: {
+      alignSelf: "center",
+      backgroundColor: lc.media,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    video: { flex: 1, width: "100%", height: "100%" },
+    title: {
+      color: lc.text,
+      fontSize: t.typography.fontSize.lg,
+      fontWeight: t.typography.fontWeight.bold,
+      padding: t.spacing.lg,
+    },
+    completeBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: t.spacing.sm,
+      backgroundColor: lc.accent,
+      marginHorizontal: t.spacing.lg,
+      borderRadius: t.radius.control,
+      paddingVertical: t.spacing.base,
+    },
+    completedBtn: { backgroundColor: lc.success },
+    completeText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.bold, fontSize: t.typography.fontSize.md },
+    muted: { color: lc.textSecondary },
+  };
 });

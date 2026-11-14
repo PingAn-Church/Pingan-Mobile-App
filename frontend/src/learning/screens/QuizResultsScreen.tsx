@@ -2,14 +2,13 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { notify } from "@/utils/alerts";
 import i18n from "../../../i18n";
 import {
@@ -41,6 +40,9 @@ const formatAnswer = (v: any): string => {
  * push notification.
  */
 export default function QuizResultsScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const quizId = String(route.params?.quizId ?? "");
@@ -84,7 +86,7 @@ export default function QuizResultsScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color={Colors.secondary} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -100,12 +102,12 @@ export default function QuizResultsScreen() {
   if (!results.attempted) {
     return (
       <View style={[styles.container, styles.center, { padding: 24 }]}>
-        <Ionicons name="help-circle-outline" size={72} color={Colors.textMuted} />
+        <Ionicons name="help-circle-outline" size={72} color={colors.textMuted} />
         <Text style={styles.resultLabel}>{i18n.t("notAttemptedYet")}</Text>
         <Text style={[styles.muted, { textAlign: "center", marginTop: 8 }]}>
           {i18n.t("notTakenQuizYet")}
         </Text>
-        <View style={{ height: 24 }} />
+        <View style={{ height: theme.spacing.xl }} />
         <TouchableOpacity style={styles.primaryBtn} onPress={goAttempt}>
           <Text style={styles.primaryBtnText}>{i18n.t("takeQuiz")}</Text>
         </TouchableOpacity>
@@ -126,7 +128,7 @@ export default function QuizResultsScreen() {
       <View style={styles.summary}>
         {pending ? (
           <>
-            <Ionicons name="hourglass-outline" size={56} color={Colors.starGold} />
+            <Ionicons name="hourglass-outline" size={56} color={colors.star} />
             <Text style={styles.resultLabel}>{i18n.t("awaitingGrading")}</Text>
             <Text style={[styles.muted, { textAlign: "center", marginTop: 6 }]}>
               {i18n.t("resultsPendingText")}
@@ -137,7 +139,7 @@ export default function QuizResultsScreen() {
             <Ionicons
               name={results.isPassed ? "trophy" : "close-circle"}
               size={56}
-              color={results.isPassed ? Colors.starGold : Colors.red}
+              color={results.isPassed ? colors.star : colors.danger}
             />
             <Text style={styles.resultScore}>{results.score}%</Text>
             <Text style={styles.resultLabel}>
@@ -156,10 +158,10 @@ export default function QuizResultsScreen() {
       {results.questions.map((q, idx) => {
         const isPending = q.pendingReview || q.isCorrect == null;
         const verdictColor = isPending
-          ? Colors.starGold
+          ? colors.star
           : q.isCorrect
-          ? Colors.green
-          : Colors.red;
+          ? colors.success
+          : colors.danger;
         const verdictIcon = isPending
           ? "hourglass-outline"
           : q.isCorrect
@@ -173,7 +175,7 @@ export default function QuizResultsScreen() {
               <Text style={styles.qText}>
                 {idx + 1}. {q.question}
               </Text>
-              <Ionicons name={verdictIcon as any} size={20} color={verdictColor} />
+              <Ionicons name={verdictIcon as any} size={theme.sizes.icon.md} color={verdictColor} />
             </View>
 
             <Text style={styles.fieldLabel}>{i18n.t("yourAnswer")}</Text>
@@ -221,45 +223,51 @@ export default function QuizResultsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  center: { justifyContent: "center", alignItems: "center" },
-  summary: { alignItems: "center", paddingVertical: 12 },
-  resultScore: { color: Colors.textPrimary, fontSize: 48, fontWeight: "900", marginTop: 12 },
-  resultLabel: { color: Colors.textPrimary, fontSize: 20, fontWeight: "700", marginTop: 4 },
-  muted: { color: Colors.textSecondary, fontSize: 13, marginTop: 4 },
-  qCard: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 14, marginTop: 14 },
-  qHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  qText: { color: Colors.textPrimary, fontSize: 16, fontWeight: "600", flex: 1 },
-  fieldLabel: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    marginTop: 10,
-  },
-  fieldValue: { color: Colors.textSecondary, fontSize: 15, marginTop: 2 },
-  points: { color: Colors.textPrimary, fontSize: 14, fontWeight: "700", marginTop: 10 },
-  pendingTag: { color: Colors.starGold, fontSize: 13, fontWeight: "700", marginTop: 10 },
-  feedbackBox: {
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.secondary,
-  },
-  feedbackLabel: { color: Colors.secondary, fontSize: 12, fontWeight: "700", marginBottom: 2 },
-  feedbackText: { color: Colors.textSecondary, fontSize: 14 },
-  explanation: { color: Colors.textMuted, fontSize: 13, fontStyle: "italic", marginTop: 10 },
-  primaryBtn: {
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 24,
-  },
-  primaryBtnText: { color: Colors.white, fontWeight: "700", fontSize: 16 },
-  ghostBtn: { paddingVertical: 14, alignItems: "center", marginTop: 8 },
-  ghostBtnText: { color: Colors.textSecondary, fontWeight: "600" },
+// The quiz score is a one-off display number, larger than any text size.
+const SCORE_FONT_SIZE = 48;
+
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    center: { justifyContent: "center", alignItems: "center" },
+    summary: { alignItems: "center", paddingVertical: t.spacing.md },
+    resultScore: { color: lc.text, fontSize: SCORE_FONT_SIZE, fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.md },
+    resultLabel: { color: lc.text, fontSize: t.typography.fontSize.xl, fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.xs },
+    muted: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm, marginTop: t.spacing.xs },
+    qCard: { backgroundColor: lc.surface, borderRadius: t.radius.card, padding: t.spacing.base, marginTop: t.spacing.base },
+    qHeader: { flexDirection: "row", alignItems: "flex-start", gap: t.spacing.md },
+    qText: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.semibold, flex: 1 },
+    fieldLabel: {
+      color: lc.textMuted,
+      fontSize: t.typography.fontSize.xs,
+      fontWeight: t.typography.fontWeight.bold,
+      textTransform: "uppercase",
+      marginTop: t.spacing.md,
+    },
+    fieldValue: { color: lc.textSecondary, fontSize: t.typography.fontSize.md, marginTop: t.spacing.xs },
+    points: { color: lc.text, fontSize: t.typography.fontSize.sm, fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.md },
+    pendingTag: { color: lc.star, fontSize: t.typography.fontSize.sm, fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.md },
+    feedbackBox: {
+      backgroundColor: lc.surfaceAccent,
+      borderRadius: t.radius.card,
+      padding: t.spacing.md,
+      marginTop: t.spacing.md,
+      borderLeftWidth: 3,
+      borderLeftColor: lc.accent,
+    },
+    feedbackLabel: { color: lc.accent, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.bold, marginBottom: t.spacing.xs },
+    feedbackText: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm },
+    explanation: { color: lc.textMuted, fontSize: t.typography.fontSize.sm, fontStyle: "italic", marginTop: t.spacing.md },
+    primaryBtn: {
+      backgroundColor: lc.accent,
+      borderRadius: t.radius.control,
+      paddingVertical: t.spacing.base,
+      alignItems: "center",
+      marginTop: t.spacing.xl,
+    },
+    primaryBtnText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.bold, fontSize: t.typography.fontSize.md },
+    ghostBtn: { paddingVertical: t.spacing.base, alignItems: "center", marginTop: t.spacing.sm },
+    ghostBtnText: { color: lc.textSecondary, fontWeight: t.typography.fontWeight.semibold },
+  };
 });

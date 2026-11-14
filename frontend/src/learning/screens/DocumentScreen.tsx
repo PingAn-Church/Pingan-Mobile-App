@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Linking, useWindowDimensions 
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { markResourceComplete } from "@/services/enrollmentService";
 import { notify } from "@/utils/alerts";
 import PlatformWebView from "../../components/PlatformWebView";
@@ -40,6 +40,9 @@ const viewerUrl = (url?: string, type?: string): string => {
 };
 
 export default function DocumentScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const queryClient = useQueryClient();
@@ -94,7 +97,7 @@ export default function DocumentScreen() {
         </Text>
         {!!rawUrl && (
           <TouchableOpacity style={styles.openBtn} onPress={() => Linking.openURL(rawUrl)}>
-            <Ionicons name="open-outline" size={18} color={Colors.white} />
+            <Ionicons name="open-outline" size={theme.sizes.icon.sm} color={colors.onAccent} />
             <Text style={styles.openBtnText}>{i18n.t("open")}</Text>
           </TouchableOpacity>
         )}
@@ -122,12 +125,12 @@ export default function DocumentScreen() {
       {isAuthenticated && resourceId &&
         (completed ? (
           <View style={[styles.completeBtn, styles.completedBtn]}>
-            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+            <Ionicons name="checkmark-circle" size={theme.sizes.icon.sm} color={colors.onAccent} />
             <Text style={styles.completeText}>{i18n.t("completed")}</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.completeBtn} onPress={markComplete} disabled={marking}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+            <Ionicons name="checkmark-circle-outline" size={theme.sizes.icon.sm} color={colors.onAccent} />
             <Text style={styles.completeText}>
               {marking ? i18n.t("saving") : i18n.t("markAsComplete")}
             </Text>
@@ -137,40 +140,43 @@ export default function DocumentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-  },
-  title: { color: Colors.textPrimary, fontSize: 16, fontWeight: "700", flex: 1, marginRight: 12 },
-  openBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  openBtnText: { color: Colors.white, fontWeight: "600" },
-  // Claims every pixel the header and complete button leave behind; its measured
-  // height is what the WebView is then given.
-  viewerFill: { flex: 1 },
-  viewer: { width: "100%", backgroundColor: Colors.white },
-  completeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.secondary,
-    margin: 14,
-    borderRadius: 12,
-    paddingVertical: 14,
-  },
-  completedBtn: { backgroundColor: Colors.green },
-  completeText: { color: Colors.white, fontWeight: "700", fontSize: 15 },
-  muted: { color: Colors.textSecondary, padding: 18 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: t.spacing.base,
+    },
+    title: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.bold, flex: 1, marginRight: t.spacing.md },
+    openBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: t.spacing.sm,
+      backgroundColor: lc.accent,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.control,
+    },
+    openBtnText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.semibold },
+    // Claims every pixel the header and complete button leave behind; its measured
+    // height is what the WebView is then given.
+    viewerFill: { flex: 1 },
+    viewer: { width: "100%", backgroundColor: lc.onAccent },
+    completeBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: t.spacing.sm,
+      backgroundColor: lc.accent,
+      margin: t.spacing.base,
+      borderRadius: t.radius.control,
+      paddingVertical: t.spacing.base,
+    },
+    completedBtn: { backgroundColor: lc.success },
+    completeText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.bold, fontSize: t.typography.fontSize.md },
+    muted: { color: lc.textSecondary, padding: t.spacing.lg },
+  };
 });

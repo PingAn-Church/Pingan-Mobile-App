@@ -2,7 +2,6 @@ import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
@@ -10,7 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCourseDetail } from "@/services/courseService";
 import {
@@ -32,6 +31,9 @@ import { formatName } from "../../utils/formatName";
 import { subscribeModerationEvents } from "../../service/ModerationEventService";
 
 export default function CourseDetailScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const queryClient = useQueryClient();
@@ -196,7 +198,7 @@ export default function CourseDetailScreen() {
   if (detailQuery.isLoading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color={Colors.secondary} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -217,33 +219,33 @@ export default function CourseDetailScreen() {
           style={styles.hero}
         />
         <TouchableOpacity style={styles.heart} onPress={toggleWishlist}>
-          <Ionicons name={wishlisted ? "heart" : "heart-outline"} size={24} color={Colors.white} />
+          <Ionicons name={wishlisted ? "heart" : "heart-outline"} size={theme.sizes.icon.lg} color={colors.onAccent} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.body}>
-        <View style={[styles.categoryPill, { backgroundColor: data.categoryColor || Colors.secondary }]}>
+        <View style={[styles.categoryPill, { backgroundColor: data.categoryColor || colors.accent }]}>
           <Text style={styles.categoryPillText}>{data.categoryName}</Text>
         </View>
         <Text style={styles.title}>{data.title}</Text>
         <Text style={styles.instructor}>{i18n.t("byInstructor")} {data.instructorName}</Text>
 
         <View style={styles.metaRow}>
-          <Ionicons name="star" size={16} color={Colors.starGold} />
+          <Ionicons name="star" size={theme.sizes.icon.xs} color={colors.star} />
           <Text style={styles.metaText}>
             {data.rating ? data.rating.toFixed(1) : i18n.t("courseNew")} ({data.totalRatings})
           </Text>
           <Text style={styles.dot}>•</Text>
-          <Ionicons name="time-outline" size={16} color={Colors.textSecondary} />
+          <Ionicons name="time-outline" size={theme.sizes.icon.xs} color={colors.textSecondary} />
           <Text style={styles.metaText}>{data.durationHours}h</Text>
           <Text style={styles.dot}>•</Text>
-          <Ionicons name="albums-outline" size={16} color={Colors.textSecondary} />
+          <Ionicons name="albums-outline" size={theme.sizes.icon.xs} color={colors.textSecondary} />
           <Text style={styles.metaText}>{data.modules.length} {i18n.t("modules")}</Text>
         </View>
 
         {enrolled ? (
           <View style={styles.enrolledPill}>
-            <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
+            <Ionicons name="checkmark-circle" size={theme.sizes.icon.sm} color={colors.success} />
             <Text style={styles.enrolledText}>{i18n.t("youAreEnrolled")}</Text>
           </View>
         ) : (
@@ -261,7 +263,7 @@ export default function CourseDetailScreen() {
             <Text style={styles.sectionTitle}>{i18n.t("whatYouWillLearn")}</Text>
             {data.outcomes.map((o, i) => (
               <View key={i} style={styles.outcomeRow}>
-                <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
+                <Ionicons name="checkmark-circle" size={theme.sizes.icon.sm} color={colors.success} />
                 <Text style={styles.outcomeText}>{o}</Text>
               </View>
             ))}
@@ -282,8 +284,8 @@ export default function CourseDetailScreen() {
                   <TouchableOpacity key={`${lesson.type}-${lesson.id}`} style={styles.lessonRow} onPress={() => openLesson(lesson)}>
                     <Ionicons
                       name={lessonIcon(lesson.type) as any}
-                      size={20}
-                      color={Colors.textSecondary}
+                      size={theme.sizes.icon.md}
+                      color={colors.textSecondary}
                     />
                     <Text style={styles.lessonText} numberOfLines={1}>
                       {lesson.title}
@@ -296,12 +298,12 @@ export default function CourseDetailScreen() {
                       <Text style={styles.previewTag}>{i18n.t("preview")}</Text>
                     )}
                     {enrolled && lesson.type !== "quiz" && lesson.isCompleted && (
-                      <Ionicons name="checkmark-circle" size={18} color={Colors.green} />
+                      <Ionicons name="checkmark-circle" size={theme.sizes.icon.sm} color={colors.success} />
                     )}
                     {enrolled && lesson.type === "quiz" &&
                       (lesson.quizAttempted ? (
                         lesson.gradesReleased ? (
-                          <Text style={[styles.quizScore, { color: lesson.quizPassed ? Colors.green : Colors.starGold }]}>
+                          <Text style={[styles.quizScore, { color: lesson.quizPassed ? colors.success : colors.star }]}>
                             {lesson.quizScore}%
                           </Text>
                         ) : (
@@ -311,7 +313,7 @@ export default function CourseDetailScreen() {
                         <Text style={styles.quizNotAttempted}>{i18n.t("notAttempted")}</Text>
                       ))}
                     {!enrolled && (!lesson.isPreview || (!isAuthenticated && lesson.type === "quiz")) && (
-                      <Ionicons name="lock-closed" size={14} color={Colors.textMuted} />
+                      <Ionicons name="lock-closed" size={theme.sizes.icon.xs} color={colors.textMuted} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -334,7 +336,7 @@ export default function CourseDetailScreen() {
             )}
           </View>
           {reviewsQuery.isLoading ? (
-            <ActivityIndicator style={{ marginVertical: 12 }} color={Colors.secondary} />
+            <ActivityIndicator style={{ marginVertical: theme.spacing.md }} color={colors.accent} />
           ) : reviewsQuery.isError ? (
             <Text style={styles.muted}>{i18n.t("reviewsLoadFailed")}</Text>
           ) : reviews.length === 0 ? (
@@ -367,8 +369,8 @@ export default function CourseDetailScreen() {
               <Ionicons
                 key={s}
                 name={s <= r.rating ? "star" : "star-outline"}
-                size={13}
-                color={Colors.starGold}
+                size={theme.sizes.icon.xs}
+                color={colors.star}
               />
             ))}
             {!r.isOwn && !r.reported && (
@@ -377,7 +379,7 @@ export default function CourseDetailScreen() {
                 onPress={() => reportReview(r.id)}
                 accessibilityLabel={i18n.t("report")}
               >
-                <Ionicons name="flag-outline" size={14} color={Colors.textMuted} />
+                <Ionicons name="flag-outline" size={theme.sizes.icon.xs} color={colors.textMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -406,59 +408,62 @@ export default function CourseDetailScreen() {
       onEndReachedThreshold={0.3}
       ListFooterComponent={
         reviewsQuery.isFetchingNextPage ? (
-          <ActivityIndicator style={{ marginVertical: 14 }} color={Colors.secondary} />
+          <ActivityIndicator style={{ marginVertical: theme.spacing.base }} color={colors.accent} />
         ) : null
       }
     />
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  center: { justifyContent: "center", alignItems: "center" },
-  hero: { width: "100%", height: 200, backgroundColor: Colors.gray800 },
-  heart: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    borderRadius: 20,
-    padding: 8,
-  },
-  body: { padding: 18, gap: 6 },
-  categoryPill: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
-  categoryPillText: { color: Colors.white, fontSize: 11, fontWeight: "700" },
-  title: { color: Colors.textPrimary, fontSize: 24, fontWeight: "800", marginTop: 6 },
-  instructor: { color: Colors.textSecondary, fontSize: 14 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 },
-  metaText: { color: Colors.textSecondary, fontSize: 13 },
-  dot: { color: Colors.textMuted, marginHorizontal: 4 },
-  enrollBtn: { backgroundColor: Colors.secondary, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 14 },
-  enrollBtnText: { color: Colors.white, fontWeight: "700", fontSize: 16 },
-  enrolledPill: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 },
-  enrolledText: { color: Colors.green, fontWeight: "700" },
-  description: { color: Colors.textSecondary, fontSize: 15, lineHeight: 22, marginTop: 14 },
-  section: { marginTop: 22 },
-  sectionTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: "700", marginBottom: 10 },
-  outcomeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  outcomeText: { color: Colors.textSecondary, fontSize: 14, flex: 1 },
-  module: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 14, marginBottom: 12 },
-  moduleTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: "700", marginBottom: 8 },
-  lessonRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
-  lessonText: { color: Colors.textSecondary, fontSize: 14, flex: 1 },
-  previewTag: { color: Colors.starGold, fontSize: 11, fontWeight: "700" },
-  quizScore: { fontSize: 13, fontWeight: "800" },
-  quizPending: { color: Colors.starGold, fontSize: 11, fontWeight: "700" },
-  quizNotAttempted: { color: Colors.textMuted, fontSize: 11, fontWeight: "600" },
-  reviewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  leaveReview: { color: Colors.secondary, fontWeight: "700" },
-  review: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 12, marginBottom: 10 },
-  reviewListItem: { marginHorizontal: 18 },
-  reviewTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  reviewer: { color: Colors.textPrimary, fontWeight: "700" },
-  reviewText: { color: Colors.textSecondary, fontSize: 14 },
-  reportReviewBtn: { marginLeft: 8, padding: 2 },
-  reportedPlaceholder: { color: Colors.textMuted, fontSize: 14, fontStyle: "italic" },
-  reply: { color: Colors.textMuted, fontSize: 13, marginTop: 6, fontStyle: "italic" },
-  muted: { color: Colors.textSecondary, fontSize: 14 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    center: { justifyContent: "center", alignItems: "center" },
+    hero: { width: "100%", height: 200, backgroundColor: lc.placeholder },
+    heart: {
+      position: "absolute",
+      top: 14,
+      right: 14,
+      backgroundColor: lc.overlay,
+      borderRadius: t.radius.full,
+      padding: t.spacing.sm,
+    },
+    body: { padding: t.spacing.lg, gap: t.spacing.sm },
+    categoryPill: { alignSelf: "flex-start", paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.xs, borderRadius: t.radius.card },
+    categoryPillText: { color: lc.onAccent, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.bold },
+    title: { color: lc.text, fontSize: t.typography.fontSize["2xl"], fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.sm },
+    instructor: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm },
+    metaRow: { flexDirection: "row", alignItems: "center", gap: t.spacing.xs, marginTop: t.spacing.sm },
+    metaText: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm },
+    dot: { color: lc.textMuted, marginHorizontal: t.spacing.xs },
+    enrollBtn: { backgroundColor: lc.accent, borderRadius: t.radius.control, paddingVertical: t.spacing.base, alignItems: "center", marginTop: t.spacing.base },
+    enrollBtnText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.bold, fontSize: t.typography.fontSize.md },
+    enrolledPill: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, marginTop: t.spacing.base },
+    enrolledText: { color: lc.success, fontWeight: t.typography.fontWeight.bold },
+    description: { color: lc.textSecondary, fontSize: t.typography.fontSize.md, lineHeight: 22, marginTop: t.spacing.base },
+    section: { marginTop: t.spacing.xl },
+    sectionTitle: { color: lc.text, fontSize: t.typography.fontSize.lg, fontWeight: t.typography.fontWeight.bold, marginBottom: t.spacing.md },
+    outcomeRow: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm, marginBottom: t.spacing.sm },
+    outcomeText: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm, flex: 1 },
+    module: { backgroundColor: lc.surface, borderRadius: t.radius.card, padding: t.spacing.base, marginBottom: t.spacing.md },
+    moduleTitle: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.bold, marginBottom: t.spacing.sm },
+    lessonRow: { flexDirection: "row", alignItems: "center", gap: t.spacing.md, paddingVertical: t.spacing.sm },
+    lessonText: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm, flex: 1 },
+    previewTag: { color: lc.star, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.bold },
+    quizScore: { fontSize: t.typography.fontSize.sm, fontWeight: t.typography.fontWeight.bold },
+    quizPending: { color: lc.star, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.bold },
+    quizNotAttempted: { color: lc.textMuted, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.semibold },
+    reviewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    leaveReview: { color: lc.accent, fontWeight: t.typography.fontWeight.bold },
+    review: { backgroundColor: lc.surface, borderRadius: t.radius.card, padding: t.spacing.md, marginBottom: t.spacing.md },
+    reviewListItem: { marginHorizontal: t.spacing.lg },
+    reviewTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: t.spacing.sm },
+    reviewer: { color: lc.text, fontWeight: t.typography.fontWeight.bold },
+    reviewText: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm },
+    reportReviewBtn: { marginLeft: t.spacing.sm, padding: t.spacing.xs },
+    reportedPlaceholder: { color: lc.textMuted, fontSize: t.typography.fontSize.sm, fontStyle: "italic" },
+    reply: { color: lc.textMuted, fontSize: t.typography.fontSize.sm, marginTop: t.spacing.sm, fontStyle: "italic" },
+    muted: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm },
+  };
 });

@@ -2,7 +2,6 @@ import React, { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
@@ -11,7 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import CourseCoverImage from "@/components/CourseCoverImage";
 import { getCategories, getPublishedCourses } from "@/services/courseService";
 import type { LearningCourse } from "@/types";
@@ -28,6 +27,9 @@ export function CourseCard({
   onPress: () => void;
   width?: number;
 }) {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   return (
     <TouchableOpacity style={[styles.card, width ? { width } : null]} onPress={onPress} activeOpacity={0.85}>
       <CourseCoverImage
@@ -36,7 +38,7 @@ export function CourseCard({
         style={styles.cardImage}
       />
       <View style={styles.cardBody}>
-        <View style={[styles.categoryPill, { backgroundColor: course.categoryColor || Colors.secondary }]}>
+        <View style={[styles.categoryPill, { backgroundColor: course.categoryColor || colors.accent }]}>
           <Text style={styles.categoryPillText}>{course.categoryName}</Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>
@@ -46,15 +48,15 @@ export function CourseCard({
           {course.instructorName}
         </Text>
         <View style={styles.cardMetaRow}>
-          <Ionicons name="star" size={14} color={Colors.starGold} />
+          <Ionicons name="star" size={theme.sizes.icon.xs} color={colors.star} />
           <Text style={styles.cardMetaText}>
             {course.rating ? course.rating.toFixed(1) : i18n.t("courseNew")}
           </Text>
           <Text style={styles.cardMetaDot}>•</Text>
-          <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
+          <Ionicons name="time-outline" size={theme.sizes.icon.xs} color={colors.textSecondary} />
           <Text style={styles.cardMetaText}>{course.durationHours}h</Text>
           <Text style={styles.cardMetaDot}>•</Text>
-          <Ionicons name="people-outline" size={14} color={Colors.textSecondary} />
+          <Ionicons name="people-outline" size={theme.sizes.icon.xs} color={colors.textSecondary} />
           <Text style={styles.cardMetaText}>{course.studentCount}</Text>
         </View>
       </View>
@@ -65,6 +67,9 @@ export function CourseCard({
 const COURSES_PAGE_SIZE = 20;
 
 export default function CoursesScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const { isAuthenticated } = useAuth();
   const { language } = useContext(LanguageContext);
@@ -102,11 +107,11 @@ export default function CoursesScreen() {
         <Text style={styles.heading}>{i18n.t("courses")}</Text>
         {isAuthenticated && <View style={styles.quickLinks}>
           <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate("MyCourses")}>
-            <Ionicons name="school-outline" size={16} color={Colors.white} />
+            <Ionicons name="school-outline" size={theme.sizes.icon.xs} color={colors.onAccent} />
             <Text style={styles.quickText}>{i18n.t("myLearning")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickBtnGhost} onPress={() => navigation.navigate("Wishlist")}>
-            <Ionicons name="heart-outline" size={18} color={Colors.textSecondary} />
+            <Ionicons name="heart-outline" size={theme.sizes.icon.sm} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>}
       </View>
@@ -133,7 +138,7 @@ export default function CoursesScreen() {
       </ScrollView>
 
       {coursesQuery.isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
+        <ActivityIndicator style={{ marginTop: theme.spacing["3xl"] }} color={colors.accent} />
       ) : coursesQuery.isError ? (
         <Text style={styles.empty}>{i18n.t("coursesLoadFailed")}</Text>
       ) : courses.length === 0 ? (
@@ -159,7 +164,7 @@ export default function CoursesScreen() {
           onEndReachedThreshold={0.3}
           ListFooterComponent={
             coursesQuery.isFetchingNextPage ? (
-              <ActivityIndicator style={{ marginVertical: 16 }} color={Colors.secondary} />
+              <ActivityIndicator style={{ marginVertical: theme.spacing.base }} color={colors.accent} />
             ) : null
           }
         />
@@ -168,69 +173,72 @@ export default function CoursesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingTop: 16,
-  },
-  heading: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-  },
-  quickLinks: { flexDirection: "row", alignItems: "center", gap: 8 },
-  quickBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 18,
-  },
-  quickText: { color: Colors.white, fontWeight: "600", fontSize: 12 },
-  quickBtnGhost: {
-    padding: 7,
-    borderRadius: 18,
-    backgroundColor: Colors.backgroundGray,
-  },
-  chipsRow: { maxHeight: 56 },
-  chipsContent: { paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.backgroundGray,
-    marginRight: 8,
-  },
-  chipActive: { backgroundColor: Colors.secondary },
-  chipText: { color: Colors.textSecondary, fontWeight: "600" },
-  chipTextActive: { color: Colors.white },
-  list: { padding: 14, gap: 14, paddingBottom: 40 },
-  card: {
-    backgroundColor: Colors.backgroundGray,
-    borderRadius: 14,
-    overflow: "hidden",
-    marginBottom: 14,
-  },
-  cardImage: { width: "100%", height: 150, backgroundColor: Colors.gray800 },
-  cardBody: { padding: 12, gap: 4 },
-  categoryPill: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginBottom: 4,
-  },
-  categoryPillText: { color: Colors.white, fontSize: 11, fontWeight: "700" },
-  cardTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: "700" },
-  cardInstructor: { color: Colors.textSecondary, fontSize: 13 },
-  cardMetaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
-  cardMetaText: { color: Colors.textSecondary, fontSize: 12 },
-  cardMetaDot: { color: Colors.textMuted, marginHorizontal: 4 },
-  empty: { color: Colors.textSecondary, textAlign: "center", marginTop: 40 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    topRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.base,
+    },
+    heading: {
+      fontSize: t.typography.fontSize["2xl"],
+      fontWeight: t.typography.fontWeight.bold,
+      color: lc.text,
+    },
+    quickLinks: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm },
+    quickBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: t.spacing.xs,
+      backgroundColor: lc.accent,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.full,
+    },
+    quickText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.semibold, fontSize: t.typography.fontSize.xs },
+    quickBtnGhost: {
+      padding: t.spacing.sm,
+      borderRadius: t.radius.full,
+      backgroundColor: lc.surface,
+    },
+    chipsRow: { flexGrow: 0 }, // size to the chips instead of a fixed height
+    chipsContent: { paddingHorizontal: t.spacing.base, paddingVertical: t.spacing.md, gap: t.spacing.sm },
+    chip: {
+      paddingHorizontal: t.spacing.base,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.full,
+      backgroundColor: lc.surface,
+      marginRight: t.spacing.sm,
+    },
+    chipActive: { backgroundColor: lc.accent },
+    chipText: { color: lc.textSecondary, fontWeight: t.typography.fontWeight.semibold },
+    chipTextActive: { color: lc.onAccent },
+    list: { padding: t.spacing.base, gap: t.spacing.base, paddingBottom: t.spacing["3xl"] },
+    card: {
+      backgroundColor: lc.surface,
+      borderRadius: t.radius.card,
+      overflow: "hidden",
+      marginBottom: t.spacing.base,
+    },
+    cardImage: { width: "100%", height: 150, backgroundColor: lc.placeholder },
+    cardBody: { padding: t.spacing.md, gap: t.spacing.xs },
+    categoryPill: {
+      alignSelf: "flex-start",
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.xs,
+      borderRadius: t.radius.card,
+      marginBottom: t.spacing.xs,
+    },
+    categoryPillText: { color: lc.onAccent, fontSize: t.typography.fontSize.xs, fontWeight: t.typography.fontWeight.bold },
+    cardTitle: { color: lc.text, fontSize: t.typography.fontSize.lg, fontWeight: t.typography.fontWeight.bold },
+    cardInstructor: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm },
+    cardMetaRow: { flexDirection: "row", alignItems: "center", gap: t.spacing.xs, marginTop: t.spacing.sm },
+    cardMetaText: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs },
+    cardMetaDot: { color: lc.textMuted, marginHorizontal: t.spacing.xs },
+    empty: { color: lc.textSecondary, textAlign: "center", marginTop: t.spacing["3xl"] },
+  };
 });

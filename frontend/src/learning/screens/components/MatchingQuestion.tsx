@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../../theme";
 import i18n from "../../../../i18n";
 
 export interface MatchPair {
@@ -25,6 +25,9 @@ interface Props {
  * are one-to-one. Emits the `[{ left, right }]` shape the backend grades.
  */
 export default function MatchingQuestion({ left, right, value, onChange }: Props) {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
 
   const matches = useMemo(() => {
@@ -84,7 +87,7 @@ export default function MatchingQuestion({ left, right, value, onChange }: Props
                     <Text style={styles.matchTagText} numberOfLines={1}>
                       {matched}
                     </Text>
-                    <Ionicons name="close-circle" size={15} color={Colors.textSecondary} />
+                    <Ionicons name="close-circle" size={theme.sizes.icon.xs} color={colors.textSecondary} />
                   </View>
                 ) : null}
               </TouchableOpacity>
@@ -118,29 +121,32 @@ export default function MatchingQuestion({ left, right, value, onChange }: Props
   );
 }
 
-const styles = StyleSheet.create({
-  hint: { color: Colors.textSecondary, fontSize: 12, marginBottom: 10 },
-  row: { flexDirection: "row", gap: 10 },
-  col: { flex: 1, gap: 8 },
-  pill: {
-    backgroundColor: Colors.surface,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "transparent",
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-  },
-  pillRight: { backgroundColor: Colors.textInputBg },
-  pillActive: { borderColor: Colors.secondary },
-  pillMatched: { borderColor: Colors.green },
-  pillReady: { borderColor: Colors.blue },
-  pillTaken: { opacity: 0.45 },
-  pillText: { color: Colors.textPrimary, fontSize: 14, fontWeight: "600" },
-  matchTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 6,
-  },
-  matchTagText: { color: Colors.textSecondary, fontSize: 12, flexShrink: 1 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    hint: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, marginBottom: t.spacing.md },
+    row: { flexDirection: "row", gap: t.spacing.md },
+    col: { flex: 1, gap: t.spacing.sm },
+    pill: {
+      backgroundColor: lc.surfaceAccent,
+      borderRadius: t.radius.card,
+      borderWidth: 1.5,
+      borderColor: "transparent",
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.md,
+    },
+    pillRight: { backgroundColor: lc.input },
+    pillActive: { borderColor: lc.accent },
+    pillMatched: { borderColor: lc.success },
+    pillReady: { borderColor: lc.info },
+    pillTaken: { opacity: 0.45 },
+    pillText: { color: lc.text, fontSize: t.typography.fontSize.sm, fontWeight: t.typography.fontWeight.semibold },
+    matchTag: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: t.spacing.xs,
+      marginTop: t.spacing.sm,
+    },
+    matchTagText: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, flexShrink: 1 },
+  };
 });

@@ -3,11 +3,14 @@ import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity }
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { getCertificates, type Certificate } from "@/services/certificateService";
 import i18n from "../../../i18n";
 
 export default function CertificatesScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["learning", "certificates"],
@@ -26,7 +29,7 @@ export default function CertificatesScreen() {
     <View style={styles.container}>
       <Text style={styles.heading}>{i18n.t("certificates")}</Text>
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
+        <ActivityIndicator style={{ marginTop: theme.spacing["3xl"] }} color={colors.accent} />
       ) : isError ? (
         <Text style={styles.empty}>{i18n.t("certificatesLoadFailed")}</Text>
       ) : certificates.length === 0 ? (
@@ -46,10 +49,13 @@ export default function CertificatesScreen() {
 }
 
 function CertificateCard({ cert, onPress }: { cert: Certificate; onPress: () => void }) {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.iconWrap}>
-        <Ionicons name="ribbon" size={28} color={Colors.starGold} />
+        <Ionicons name="ribbon" size={theme.sizes.icon.xl} color={colors.star} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.title} numberOfLines={2}>
@@ -57,33 +63,36 @@ function CertificateCard({ cert, onPress }: { cert: Certificate; onPress: () => 
         </Text>
         <Text style={styles.meta}>{i18n.t("certificateNo", { number: cert.certificateNumber })}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+      <Ionicons name="chevron-forward" size={theme.sizes.icon.md} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  heading: { fontSize: 26, fontWeight: "800", color: Colors.textPrimary, padding: 18 },
-  list: { padding: 14, paddingBottom: 40 },
-  empty: { color: Colors.textSecondary, textAlign: "center", marginTop: 40, paddingHorizontal: 30 },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: Colors.backgroundGray,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-  },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: { color: Colors.textPrimary, fontSize: 16, fontWeight: "700" },
-  meta: { color: Colors.textSecondary, fontSize: 12, marginTop: 4 },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    heading: { fontSize: t.typography.fontSize["2xl"], fontWeight: t.typography.fontWeight.bold, color: lc.text, padding: t.spacing.lg },
+    list: { padding: t.spacing.base, paddingBottom: t.spacing["3xl"] },
+    empty: { color: lc.textSecondary, textAlign: "center", marginTop: t.spacing["3xl"], paddingHorizontal: t.spacing["2xl"] },
+    card: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: t.spacing.base,
+      backgroundColor: lc.surface,
+      borderRadius: t.radius.card,
+      padding: t.spacing.base,
+      marginBottom: t.spacing.md,
+    },
+    iconWrap: {
+      width: 48,
+      height: 48,
+      borderRadius: t.radius.full,
+      backgroundColor: lc.surfaceAccent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    title: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.bold },
+    meta: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, marginTop: t.spacing.xs },
+  };
 });

@@ -41,4 +41,28 @@ export const colors = {
     phone: "#FFC107",
     email: "#673AB7",
   },
+
+  // Courses (learning) screens keep their own dark look. Same values as
+  // src/learning/constants/Colors.ts, which the instructor screens still use.
+  learning: {
+    background: "#2F2F37", // screen background
+    surface: "#2F2F37", // cards, chips, inputs on the list screens
+    surfaceAccent: "#3A339F", // highlighted cards
+    input: "#3E3E47", // text inputs
+    placeholder: "#2E2E2E", // image loading background
+    accent: "#564BEB", // buttons, active chips, links
+    onAccent: "#FFFFFF", // text and icons on `accent`
+    text: "#FFFFFF",
+    textSecondary: "#D4D4D4",
+    textMuted: "#636363",
+    star: "#FFD700",
+    success: "#49AC33",
+    danger: "#ED1B1B",
+    info: "#3B82F6",
+    streak: "#FF6B35",
+    progressTrack: "#D1D5DB",
+    progressFill: "#4F46E5",
+    media: "#000000", // video player background
+    overlay: "rgba(0, 0, 0, 0.4)", // buttons drawn on top of images
+  },
 };

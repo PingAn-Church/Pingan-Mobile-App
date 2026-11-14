@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -10,7 +9,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { notify } from "@/utils/alerts";
 import {
   getQuizDetail,
@@ -23,6 +22,9 @@ import MatchingQuestion, { type MatchPair } from "./components/MatchingQuestion"
 import i18n from "../../../i18n";
 
 export default function QuizScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const quizId = String(route.params?.quizId ?? "");
@@ -93,7 +95,7 @@ export default function QuizScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color={Colors.secondary} />
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
@@ -108,12 +110,12 @@ export default function QuizScreen() {
   if (result?.pendingReview) {
     return (
       <View style={[styles.container, styles.center, { padding: 24 }]}>
-        <Ionicons name="hourglass-outline" size={72} color={Colors.starGold} />
+        <Ionicons name="hourglass-outline" size={72} color={colors.star} />
         <Text style={styles.resultLabel}>{i18n.t("quizSubmittedForReview")}</Text>
         <Text style={[styles.muted, { textAlign: "center", marginTop: 8 }]}>
           {i18n.t("quizPendingReview", { count: result.pendingCount })}
         </Text>
-        <View style={{ height: 24 }} />
+        <View style={{ height: theme.spacing.xl }} />
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={() => navigation.replace("QuizResults", { quizId, title: quiz.title })}
@@ -135,7 +137,7 @@ export default function QuizScreen() {
         <Ionicons
           name={result.isPassed ? "trophy" : "close-circle"}
           size={72}
-          color={result.isPassed ? Colors.starGold : Colors.red}
+          color={result.isPassed ? colors.star : colors.danger}
         />
         <Text style={styles.resultScore}>{result.score}%</Text>
         <Text style={styles.resultLabel}>
@@ -147,7 +149,7 @@ export default function QuizScreen() {
             ? ` • ${i18n.t("attemptsLeft", { count: result.attemptsRemaining })}`
             : ""}
         </Text>
-        <View style={{ height: 24 }} />
+        <View style={{ height: theme.spacing.xl }} />
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={() => navigation.replace("QuizResults", { quizId, title: quiz.title })}
@@ -185,7 +187,7 @@ export default function QuizScreen() {
           <Text style={styles.questionText}>
             {idx + 1}. {q.question}
           </Text>
-          {renderInput(q, answers[q.id], setSingle, toggleMulti, setPairs)}
+          {renderInput(q, answers[q.id], setSingle, toggleMulti, setPairs, styles, theme)}
         </View>
       ))}
 
@@ -201,8 +203,11 @@ function renderInput(
   value: any,
   setSingle: (qid: string, v: string) => void,
   toggleMulti: (qid: string, v: string) => void,
-  setPairs: (qid: string, pairs: MatchPair[]) => void
+  setPairs: (qid: string, pairs: MatchPair[]) => void,
+  styles: ReturnType<typeof useStyles>,
+  theme: ReturnType<typeof useTheme>
 ) {
+  const colors = theme.colors.learning;
   if (q.questionType === "matching") {
     return (
       <MatchingQuestion
@@ -221,7 +226,7 @@ function renderInput(
         value={typeof value === "string" ? value : ""}
         onChangeText={(v) => setSingle(q.id, v)}
         placeholder={i18n.t("typeYourAnswer")}
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
       />
     );
   }
@@ -252,8 +257,8 @@ function renderInput(
                   ? "radio-button-on"
                   : "radio-button-off"
               }
-              size={20}
-              color={selected ? Colors.secondary : Colors.textMuted}
+              size={theme.sizes.icon.md}
+              color={selected ? colors.accent : colors.textMuted}
             />
             <Text style={styles.optionText}>{opt}</Text>
           </TouchableOpacity>
@@ -263,40 +268,46 @@ function renderInput(
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  center: { justifyContent: "center", alignItems: "center" },
-  title: { color: Colors.textPrimary, fontSize: 22, fontWeight: "800" },
-  muted: { color: Colors.textSecondary, fontSize: 13, marginTop: 4 },
-  question: { backgroundColor: Colors.backgroundGray, borderRadius: 12, padding: 14, marginTop: 16 },
-  questionText: { color: Colors.textPrimary, fontSize: 16, fontWeight: "600", marginBottom: 10 },
-  option: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  optionSelected: { backgroundColor: Colors.surface },
-  optionText: { color: Colors.textSecondary, fontSize: 15, flex: 1 },
-  shortAnswer: {
-    backgroundColor: Colors.textInputBg,
-    color: Colors.textPrimary,
-    borderRadius: 8,
-    padding: 12,
-  },
-  primaryBtn: {
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 24,
-    minWidth: 200,
-  },
-  primaryBtnText: { color: Colors.white, fontWeight: "700", fontSize: 16 },
-  ghostBtn: { paddingVertical: 14, alignItems: "center", marginTop: 8 },
-  ghostBtnText: { color: Colors.textSecondary, fontWeight: "600" },
-  resultScore: { color: Colors.textPrimary, fontSize: 48, fontWeight: "900", marginTop: 16 },
-  resultLabel: { color: Colors.textPrimary, fontSize: 20, fontWeight: "700", marginTop: 4 },
+// The quiz score is a one-off display number, larger than any text size.
+const SCORE_FONT_SIZE = 48;
+
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    center: { justifyContent: "center", alignItems: "center" },
+    title: { color: lc.text, fontSize: t.typography.fontSize["2xl"], fontWeight: t.typography.fontWeight.bold },
+    muted: { color: lc.textSecondary, fontSize: t.typography.fontSize.sm, marginTop: t.spacing.xs },
+    question: { backgroundColor: lc.surface, borderRadius: t.radius.card, padding: t.spacing.base, marginTop: t.spacing.base },
+    questionText: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.semibold, marginBottom: t.spacing.md },
+    option: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: t.spacing.md,
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.sm,
+      borderRadius: t.radius.card,
+    },
+    optionSelected: { backgroundColor: lc.surfaceAccent },
+    optionText: { color: lc.textSecondary, fontSize: t.typography.fontSize.md, flex: 1 },
+    shortAnswer: {
+      backgroundColor: lc.input,
+      color: lc.text,
+      borderRadius: t.radius.card,
+      padding: t.spacing.md,
+    },
+    primaryBtn: {
+      backgroundColor: lc.accent,
+      borderRadius: t.radius.control,
+      paddingVertical: t.spacing.base,
+      alignItems: "center",
+      marginTop: t.spacing.xl,
+      minWidth: 200,
+    },
+    primaryBtnText: { color: lc.onAccent, fontWeight: t.typography.fontWeight.bold, fontSize: t.typography.fontSize.md },
+    ghostBtn: { paddingVertical: t.spacing.base, alignItems: "center", marginTop: t.spacing.sm },
+    ghostBtnText: { color: lc.textSecondary, fontWeight: t.typography.fontWeight.semibold },
+    resultScore: { color: lc.text, fontSize: SCORE_FONT_SIZE, fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.base },
+    resultLabel: { color: lc.text, fontSize: t.typography.fontSize.xl, fontWeight: t.typography.fontWeight.bold, marginTop: t.spacing.xs },
+  };
 });

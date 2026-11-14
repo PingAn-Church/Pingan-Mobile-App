@@ -3,11 +3,14 @@ import { View, Text, StyleSheet, FlatList, ActivityIndicator } from "react-nativ
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { Colors } from "@/constants";
+import { makeStyles, useTheme } from "../../theme";
 import { getAchievements, type Achievement } from "@/services/achievementService";
 import i18n from "../../../i18n";
 
 export default function AchievementsScreen() {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["learning", "achievements"],
     queryFn: getAchievements,
@@ -31,7 +34,7 @@ export default function AchievementsScreen() {
         </Text>
       )}
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.secondary} />
+        <ActivityIndicator style={{ marginTop: theme.spacing["3xl"] }} color={colors.accent} />
       ) : isError ? (
         <Text style={styles.empty}>{i18n.t("achievementsLoadFailed")}</Text>
       ) : achievements.length === 0 ? (
@@ -49,14 +52,17 @@ export default function AchievementsScreen() {
 }
 
 function AchievementRow({ item }: { item: Achievement }) {
+  const styles = useStyles();
+  const theme = useTheme();
+  const colors = theme.colors.learning;
   const iconName = (item.icon as keyof typeof Ionicons.glyphMap) || "trophy";
   return (
     <View style={[styles.card, !item.earned && styles.cardLocked]}>
       <View style={[styles.iconWrap, item.earned && styles.iconWrapEarned]}>
         <Ionicons
           name={item.earned ? iconName : "lock-closed"}
-          size={24}
-          color={item.earned ? Colors.starGold : Colors.textMuted}
+          size={theme.sizes.icon.lg}
+          color={item.earned ? colors.star : colors.textMuted}
         />
       </View>
       <View style={{ flex: 1 }}>
@@ -70,33 +76,36 @@ function AchievementRow({ item }: { item: Achievement }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.primary },
-  heading: { fontSize: 26, fontWeight: "800", color: Colors.textPrimary, paddingHorizontal: 18, paddingTop: 18 },
-  sub: { color: Colors.textSecondary, paddingHorizontal: 18, paddingTop: 4 },
-  list: { padding: 14, paddingBottom: 40 },
-  empty: { color: Colors.textSecondary, textAlign: "center", marginTop: 40 },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: Colors.backgroundGray,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-  },
-  cardLocked: { opacity: 0.6 },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconWrapEarned: { backgroundColor: Colors.surface },
-  title: { color: Colors.textPrimary, fontSize: 16, fontWeight: "700" },
-  desc: { color: Colors.textSecondary, fontSize: 12, marginTop: 3 },
-  points: { color: Colors.textMuted, fontSize: 14, fontWeight: "800" },
-  pointsEarned: { color: Colors.starGold },
+const useStyles = makeStyles((t) => {
+  const lc = t.colors.learning;
+  return {
+    container: { flex: 1, backgroundColor: lc.background },
+    heading: { fontSize: t.typography.fontSize["2xl"], fontWeight: t.typography.fontWeight.bold, color: lc.text, paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.lg },
+    sub: { color: lc.textSecondary, paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.xs },
+    list: { padding: t.spacing.base, paddingBottom: t.spacing["3xl"] },
+    empty: { color: lc.textSecondary, textAlign: "center", marginTop: t.spacing["3xl"] },
+    card: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: t.spacing.base,
+      backgroundColor: lc.surface,
+      borderRadius: t.radius.card,
+      padding: t.spacing.base,
+      marginBottom: t.spacing.md,
+    },
+    cardLocked: { opacity: 0.6 },
+    iconWrap: {
+      width: 48,
+      height: 48,
+      borderRadius: t.radius.full,
+      backgroundColor: lc.surfaceAccent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    iconWrapEarned: { backgroundColor: lc.surfaceAccent },
+    title: { color: lc.text, fontSize: t.typography.fontSize.md, fontWeight: t.typography.fontWeight.bold },
+    desc: { color: lc.textSecondary, fontSize: t.typography.fontSize.xs, marginTop: t.spacing.xs },
+    points: { color: lc.textMuted, fontSize: t.typography.fontSize.sm, fontWeight: t.typography.fontWeight.bold },
+    pointsEarned: { color: lc.star },
+  };
 });
