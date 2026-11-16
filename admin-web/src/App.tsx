@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Login } from './Login';
+import { CurrentUser, getCurrentUser, hasSession, logoutUser, SESSION_EXPIRED_EVENT } from './api';
 import { Announcements } from './Announcements';
 import { CourseEditor } from './CourseEditor';
 import { Dashboard } from './Dashboard';
@@ -7,21 +8,32 @@ import { UserManagement } from './UserManagement';
 import { Sidebar } from './Sidebar';
 
 export const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
-    Boolean(localStorage.getItem('accessToken'))
-  );
+  // Signed in = we have tokens AND a saved admin/instructor profile.
+  const [user, setUser] = useState<CurrentUser | null>(() => (hasSession() ? getCurrentUser() : null));
+  // Set when the server says the session can't be refreshed any more.
+  // The screen stays mounted underneath, so unsaved work is not lost.
+  const [expiredUser, setExpiredUser] = useState<CurrentUser | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'courses' | 'announcements' | 'users'>('dashboard');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setIsAuthenticated(false);
+  useEffect(() => {
+    const onExpired = () => setExpiredUser((prev) => prev ?? user);
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, [user]);
+
+  const handleLogout = async () => {
+    await logoutUser();
+    setExpiredUser(null);
+    setUser(null);
   };
 
-  if (!isAuthenticated) {
-    return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
+  if (!user) {
+    return <Login onLoginSuccess={setUser} />;
   }
+
+  const displayName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.email;
+  const roleLabel = user.admin ? 'Administrator' : 'Instructor';
 
   const themeStyles = isDarkMode
     ? {
@@ -137,11 +149,13 @@ export const App: React.FC = () => {
                   fontSize: '14px',
                 }}
               >
-                A
+                {displayName.charAt(0).toUpperCase()}
               </div>
               <div style={{ textAlign: 'left' }}>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Admin User</p>
-                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>admin@pingan.org</p>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{displayName}</p>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  {roleLabel} · {user.email}
+                </p>
               </div>
             </div>
 
@@ -170,6 +184,17 @@ export const App: React.FC = () => {
           {activeTab === 'users' && <UserManagement />}
         </main>
       </div>
+
+      {expiredUser && (
+        <Login
+          sessionExpired
+          expectedEmail={expiredUser.email}
+          onLoginSuccess={(u) => {
+            setUser(u);
+            setExpiredUser(null);
+          }}
+        />
+      )}
     </div>
   );
 };
