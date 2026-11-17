@@ -7,14 +7,18 @@ import {
   createSection,
   deleteCourseResource,
   deleteCourseVideo,
+  deleteQuiz,
   deleteSection,
   getErrorMessage,
+  QuizLesson,
   ResourceLesson,
   updateCourseResource,
   updateCourseVideo,
+  updateQuiz,
   updateSection,
   VideoLesson,
 } from '../api';
+import { QuizQuestionsModal, QuizSettingsModal } from './QuizEditor';
 import { Alert, btn, card, ConfirmDialog, errorText, inputStyle, isHttpUrl, labelStyle, Modal, muted } from './ui';
 
 interface Props {
@@ -266,7 +270,10 @@ const LessonModal: React.FC<{ courseId: string; target: LessonTarget; onClose: (
 type PendingDelete =
   | { kind: 'section'; section: CourseSection }
   | { kind: 'video'; lesson: VideoLesson }
-  | { kind: 'resource'; lesson: ResourceLesson };
+  | { kind: 'resource'; lesson: ResourceLesson }
+  | { kind: 'quiz'; lesson: QuizLesson };
+
+type AnyLesson = VideoLesson | ResourceLesson | QuizLesson;
 
 export const CourseContent: React.FC<Props> = ({ course, reload }) => {
   const sections = [...course.modules].sort((a, b) => a.order_index - b.order_index);
@@ -275,6 +282,8 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [quizSettings, setQuizSettings] = useState<{ sectionId: string; quiz: QuizLesson | null; nextOrder: number } | null>(null);
+  const [questionsFor, setQuestionsFor] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -299,7 +308,7 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
     }
   };
 
-  const moveLesson = async (list: (VideoLesson | ResourceLesson)[], index: number, direction: -1 | 1) => {
+  const moveLesson = async (list: AnyLesson[], index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (moving || target < 0 || target >= list.length) return;
     const reordered = [...list];
@@ -311,7 +320,8 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
         const l = reordered[i];
         if (l.order_index === i) continue;
         if (l.type === 'video') await updateCourseVideo(l.id, { orderIndex: i });
-        else await updateCourseResource(l.id, { orderIndex: i });
+        else if (l.type === 'resource') await updateCourseResource(l.id, { orderIndex: i });
+        else await updateQuiz(l.id, { orderIndex: i });
       }
     } catch (err) {
       setError(`Could not finish reordering: ${getErrorMessage(err)}`);
@@ -328,7 +338,8 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
     try {
       if (pendingDelete.kind === 'section') await deleteSection(pendingDelete.section.id);
       else if (pendingDelete.kind === 'video') await deleteCourseVideo(pendingDelete.lesson.id);
-      else await deleteCourseResource(pendingDelete.lesson.id);
+      else if (pendingDelete.kind === 'resource') await deleteCourseResource(pendingDelete.lesson.id);
+      else await deleteQuiz(pendingDelete.lesson.id);
       setPendingDelete(null);
       await reload();
     } catch (err) {
@@ -356,6 +367,14 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
         </>
       );
     }
+    if (p.kind === 'quiz') {
+      return (
+        <p>
+          The quiz <strong style={{ color: 'var(--text-primary, #0f172a)' }}>“{p.lesson.title}”</strong> will be deleted with all its questions and{' '}
+          <strong style={{ color: '#b91c1c' }}>every learner's attempts and scores</strong>. This cannot be undone.
+        </p>
+      );
+    }
     return (
       <p>
         <strong style={{ color: 'var(--text-primary, #0f172a)' }}>“{p.lesson.title}”</strong> will be removed from the course, along with learners' progress on it.
@@ -367,7 +386,7 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <p style={{ ...muted, margin: 0 }}>Organise the course into sections, then add video and reading lessons to each one. Use the arrows to change the order.</p>
+        <p style={{ ...muted, margin: 0 }}>Organise the course into sections, then add videos, readings and quizzes to each one. Use the arrows to change the order.</p>
         <button type="button" onClick={() => setSectionModal({ section: null })} style={btn('primary')}>
           + Add section
         </button>
@@ -383,6 +402,7 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
       {sections.map((section, index) => {
         const videos = [...section.videos].sort((a, b) => a.order_index - b.order_index);
         const resources = [...section.resources].sort((a, b) => a.order_index - b.order_index);
+        const quizzes = [...section.quizzes].sort((a, b) => a.order_index - b.order_index);
         return (
           <div key={section.id} style={{ ...card, padding: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
@@ -471,19 +491,46 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
                 ))
               )}
 
-              {section.quizzes.map((quiz) => (
+              {quizzes.map((quiz, i) => (
                 <div key={`quiz-${quiz.id}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '8px', background: 'var(--bg-main, #f8fafc)' }}>
                   <span aria-hidden style={{ fontSize: '18px' }}>
                     📝
                   </span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary, #0f172a)' }}>{quiz.title}</div>
-                    <div style={{ ...muted, fontSize: '12px' }}>Quiz · pass mark {quiz.passing_score ?? 70}% · editing quizzes is coming in the next update</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary, #0f172a)', wordBreak: 'break-word' }}>{quiz.title}</div>
+                    <div style={{ ...muted, fontSize: '12px' }}>
+                      Quiz · pass mark {quiz.passing_score ?? 70}%{quiz.max_attempts ? ` · ${quiz.max_attempts} attempts` : ' · unlimited attempts'}
+                    </div>
                   </div>
+                  <button type="button" aria-label="Move up" disabled={moving || i === 0} onClick={() => void moveLesson(quizzes, i, -1)} style={btn('ghost', moving || i === 0)}>
+                    ▲
+                  </button>
+                  <button type="button" aria-label="Move down" disabled={moving || i === quizzes.length - 1} onClick={() => void moveLesson(quizzes, i, 1)} style={btn('ghost', moving || i === quizzes.length - 1)}>
+                    ▼
+                  </button>
+                  <button type="button" onClick={() => setQuestionsFor(quiz.id)} style={{ ...btn('ghost'), color: '#15803d' }}>
+                    Questions
+                  </button>
+                  <button type="button" onClick={() => setQuizSettings({ sectionId: section.id, quiz, nextOrder: quizzes.length })} style={btn('ghost')}>
+                    Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setPendingDelete({ kind: 'quiz', lesson: quiz });
+                    }}
+                    style={{ ...btn('ghost'), color: '#dc2626' }}
+                  >
+                    Delete
+                  </button>
                 </div>
               ))}
 
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <button type="button" onClick={() => setQuizSettings({ sectionId: section.id, quiz: null, nextOrder: quizzes.length })} style={btn('secondary')}>
+                  + Quiz
+                </button>
                 <button type="button" onClick={() => setLessonTarget({ kind: 'video', sectionId: section.id, lesson: null, nextOrder: videos.length })} style={btn('secondary')}>
                   + Video
                 </button>
@@ -500,6 +547,20 @@ export const CourseContent: React.FC<Props> = ({ course, reload }) => {
         <SectionModal courseId={course.id} section={sectionModal.section} nextOrder={sections.length} onClose={() => setSectionModal(null)} onSaved={reload} />
       )}
       {lessonTarget && <LessonModal courseId={course.id} target={lessonTarget} onClose={() => setLessonTarget(null)} onSaved={reload} />}
+      {quizSettings && (
+        <QuizSettingsModal
+          courseId={course.id}
+          sectionId={quizSettings.sectionId}
+          quiz={quizSettings.quiz}
+          nextOrder={quizSettings.nextOrder}
+          onClose={() => setQuizSettings(null)}
+          onSaved={async (newQuizId) => {
+            await reload();
+            if (newQuizId) setQuestionsFor(newQuizId); // go straight to adding questions
+          }}
+        />
+      )}
+      {questionsFor && <QuizQuestionsModal quizId={questionsFor} onClose={() => setQuestionsFor(null)} onChanged={() => void reload().catch(() => undefined)} />}
       {pendingDelete && (
         <ConfirmDialog
           title={pendingDelete.kind === 'section' ? 'Delete this section?' : 'Delete this lesson?'}

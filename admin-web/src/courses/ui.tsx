@@ -66,6 +66,9 @@ export const Alert: React.FC<{ kind: 'error' | 'success' | 'info'; children: Rea
 // ---------------------------------------------------------------------------
 // Modal shell + confirmation dialog
 // ---------------------------------------------------------------------------
+// Open dialogs, newest last: Escape only closes the one on top.
+const openModals: symbol[] = [];
+
 export const Modal: React.FC<{ title: string; onClose: () => void; busy?: boolean; width?: number; children: React.ReactNode }> = ({
   title,
   onClose,
@@ -73,13 +76,22 @@ export const Modal: React.FC<{ title: string; onClose: () => void; busy?: boolea
   width = 520,
   children,
 }) => {
+  const [id] = useState(() => Symbol(title));
+  useEffect(() => {
+    openModals.push(id);
+    return () => {
+      const i = openModals.indexOf(id);
+      if (i >= 0) openModals.splice(i, 1);
+    };
+  }, [id]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
+      if (e.key === 'Escape' && !busy && openModals[openModals.length - 1] === id) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [busy, onClose]);
+  }, [busy, onClose, id]);
 
   return (
     <div

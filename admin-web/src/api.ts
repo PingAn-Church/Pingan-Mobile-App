@@ -622,6 +622,83 @@ export const deleteCourseResource = async (id: string) => {
 };
 
 // ---------------------------------------------------------------------------
+// QUIZZES (authoring)
+// ---------------------------------------------------------------------------
+export type QuestionType = 'multiple-choice' | 'multiple-correct' | 'true-false' | 'short-answer' | 'matching';
+
+/** A question as the server shows it: correct answers are never included. */
+export interface QuizQuestionView {
+  id: string;
+  question: string;
+  question_type: QuestionType;
+  options: string[] | null;
+  points: number;
+  order_index: number;
+  matching_left?: string[];
+  matching_right?: string[];
+}
+
+export interface QuizDetail {
+  id: string;
+  course_id: string;
+  section_id: string | null;
+  title: string;
+  description?: string | null;
+  passing_score: number;
+  time_limit_minutes: number | null;
+  max_attempts: number | null;
+  questions: QuizQuestionView[];
+}
+
+export const getQuizDetail = async (quizId: string): Promise<QuizDetail> => {
+  const res = await api.get(`${LEARNING}/getQuizDetail/${encodeURIComponent(quizId)}`);
+  const d = res.data?.data ?? {};
+  return { ...d, questions: Array.isArray(d.questions) ? d.questions : [] } as QuizDetail;
+};
+
+export interface QuizInput {
+  courseId: string;
+  sectionId: string;
+  title: string;
+  description: string;
+  passingScore: number;
+  timeLimitMinutes: number | null; // null = no time limit
+  maxAttempts: number | null; // null = unlimited
+  orderIndex?: number;
+}
+
+export const createQuiz = async (body: QuizInput) => (await api.post(`${LEARNING}/createQuiz`, body)).data?.data;
+export const updateQuiz = async (id: string, body: Partial<QuizInput>) =>
+  (await api.put(`${LEARNING}/updateQuiz/${encodeURIComponent(id)}`, body)).data?.data;
+export const deleteQuiz = async (id: string) => {
+  await api.delete(`${LEARNING}/deleteQuiz/${encodeURIComponent(id)}`);
+};
+
+export interface MatchingPair {
+  left: string;
+  right: string;
+}
+
+export interface QuestionInput {
+  quizId: string;
+  question: string;
+  questionType: QuestionType;
+  points: number;
+  explanation?: string;
+  options?: string[];
+  /** Option text (single), list of option texts (several), "True"/"False", expected text, or pairs. */
+  correctAnswer?: string | string[] | MatchingPair[];
+  orderIndex?: number;
+}
+
+export const createQuestion = async (body: QuestionInput) => (await api.post(`${LEARNING}/createQuizQuestion`, body)).data?.data;
+export const updateQuestion = async (id: string, body: Partial<QuestionInput>) =>
+  (await api.put(`${LEARNING}/updateQuizQuestion/${encodeURIComponent(id)}`, body)).data?.data;
+export const deleteQuestion = async (id: string) => {
+  await api.delete(`${LEARNING}/deleteQuizQuestion/${encodeURIComponent(id)}`);
+};
+
+// ---------------------------------------------------------------------------
 // VIDEOS
 // ---------------------------------------------------------------------------
 export const fetchVideos = async (page = 0, size = 20) => {
