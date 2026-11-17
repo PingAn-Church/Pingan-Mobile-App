@@ -425,6 +425,42 @@ export const setMemberVerified = async (id: number, verified: boolean): Promise<
   await api.post(`/api/users/update-verified/${id}`, null, { params: { isVerifiedUser: verified } });
 };
 
+/** Thrown when the server refuses to remove the last administrator (HTTP 409). */
+export class LastAdminError extends Error {
+  constructor() {
+    super('This is the only administrator. Make someone else an administrator first, then try again.');
+    this.name = 'LastAdminError';
+  }
+}
+
+export const setMemberAdmin = async (id: number, isAdmin: boolean): Promise<void> => {
+  try {
+    await api.post(`/api/users/update-admin/${id}`, null, { params: { isAdmin } });
+  } catch (err) {
+    if ((err as AxiosError).response?.status === 409) throw new LastAdminError();
+    throw err;
+  }
+};
+
+export const setMemberInstructor = async (id: number, isInstructor: boolean): Promise<void> => {
+  await api.post(`/api/users/update-instructor/${id}`, null, { params: { isInstructor } });
+};
+
+/**
+ * True when the server can be reached. Uses an ordinary API address (the
+ * actuator health address is not covered by the server's browser CORS rules,
+ * so the browser would block it). Any HTTP answer, even an error status,
+ * proves the server is up; only a network failure or timeout counts as down.
+ */
+export const checkServerHealth = async (): Promise<boolean> => {
+  try {
+    await api.get(`${LEARNING}/categoryHandler`, { timeout: 8000 });
+    return true;
+  } catch (err) {
+    return Boolean((err as AxiosError).response);
+  }
+};
+
 /** Clears this admin's "new members" badge (the phone app does this too). */
 export const markNewMembersSeen = async (): Promise<void> => {
   await api.post('/api/users/new-members/seen').catch(() => undefined);
@@ -697,6 +733,20 @@ export const updateQuestion = async (id: string, body: Partial<QuestionInput>) =
 export const deleteQuestion = async (id: string) => {
   await api.delete(`${LEARNING}/deleteQuizQuestion/${encodeURIComponent(id)}`);
 };
+
+// ---------------------------------------------------------------------------
+// DASHBOARD COUNTS (each asks for one item and reads the total)
+// ---------------------------------------------------------------------------
+const totalFrom = (res: { data?: { pagination?: { totalCount?: number }; data?: unknown[] } }) =>
+  Number(res.data?.pagination?.totalCount ?? (Array.isArray(res.data?.data) ? res.data?.data.length : 0));
+
+/** Reported messages not yet resolved (administrators only). */
+export const countOpenReports = async (): Promise<number> =>
+  totalFrom(await api.get('/api/reports', { params: { status: 'PENDING', page: 0, size: 1 } }));
+
+/** Short-answer quiz submissions waiting for an instructor (instructors and administrators). */
+export const countPendingGrading = async (): Promise<number> =>
+  totalFrom(await api.get(`${LEARNING}/getPendingGrading`, { params: { page: 0, size: 1 } }));
 
 // ---------------------------------------------------------------------------
 // VIDEOS

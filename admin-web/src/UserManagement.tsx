@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getErrorMessage, listMembers, markNewMembersSeen, Member, setMemberVerified } from './api';
+import { RoleDialog } from './RoleDialog';
 
 // ---------------------------------------------------------------------------
 // Styles (theme variables from App.tsx so dark mode works)
@@ -113,6 +114,8 @@ const ConfirmDialog: React.FC<{
 // ---------------------------------------------------------------------------
 export const UserManagement: React.FC = () => {
   const [tab, setTab] = useState<Tab>('pending');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'instructor'>('all');
+  const [roleTarget, setRoleTarget] = useState<Member | null>(null);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState(''); // debounced search actually sent
   const [members, setMembers] = useState<Member[]>([]);
@@ -140,7 +143,12 @@ export const UserManagement: React.FC = () => {
       pageToLoad === 0 ? setLoading(true) : setLoadingMore(true);
       setLoadError(null);
       try {
-        const res = await listMembers({ q: query, verified: tab === 'members', page: pageToLoad });
+        const res = await listMembers({
+          q: query,
+          verified: tab === 'members',
+          role: tab === 'members' && roleFilter !== 'all' ? roleFilter : undefined,
+          page: pageToLoad,
+        });
         if (id !== requestId.current) return;
         setMembers((prev) => (pageToLoad === 0 ? res.members : [...prev, ...res.members]));
         setTotalCount(res.totalCount);
@@ -155,7 +163,7 @@ export const UserManagement: React.FC = () => {
         }
       }
     },
-    [query, tab]
+    [query, tab, roleFilter]
   );
 
   useEffect(() => {
@@ -227,6 +235,7 @@ export const UserManagement: React.FC = () => {
             disabled={busy}
             onClick={() => {
               setTab(key);
+              setRoleFilter('all');
               setResult(null);
             }}
             style={{
@@ -262,6 +271,19 @@ export const UserManagement: React.FC = () => {
           aria-label="Search members"
           style={{ ...input, width: '280px' }}
         />
+        {tab === 'members' && (
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as 'all' | 'admin' | 'instructor')}
+            aria-label="Filter by role"
+            disabled={busy}
+            style={{ ...input, width: '190px' }}
+          >
+            <option value="all">Everyone</option>
+            <option value="admin">Administrators only</option>
+            <option value="instructor">Instructors only</option>
+          </select>
+        )}
         <button type="button" onClick={() => void load(0)} disabled={loading || busy} style={button('secondary', loading || busy)}>
           Refresh
         </button>
@@ -406,9 +428,14 @@ export const UserManagement: React.FC = () => {
                         Approve
                       </button>
                     ) : (
-                      <button type="button" disabled={busy} onClick={() => setConfirm({ action: 'unapprove', people: [m] })} style={button('danger', busy)}>
-                        Remove approval
-                      </button>
+                      <span style={{ display: 'inline-flex', gap: '8px' }}>
+                        <button type="button" disabled={busy} onClick={() => setRoleTarget(m)} style={button('secondary', busy)}>
+                          Roles…
+                        </button>
+                        <button type="button" disabled={busy} onClick={() => setConfirm({ action: 'unapprove', people: [m] })} style={button('danger', busy)}>
+                          Remove approval
+                        </button>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -429,6 +456,14 @@ export const UserManagement: React.FC = () => {
             </button>
           )}
         </div>
+      )}
+
+      {roleTarget && (
+        <RoleDialog
+          member={roleTarget}
+          onClose={() => setRoleTarget(null)}
+          onChanged={(updated) => setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))}
+        />
       )}
 
       {confirm && (

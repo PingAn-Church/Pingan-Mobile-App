@@ -110,6 +110,7 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         isDarkMode={isDarkMode}
         setIsDarkMode={setIsDarkMode}
+        isAdmin={Boolean(user.admin)}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -178,10 +179,10 @@ export const App: React.FC = () => {
         </header>
 
         <main style={{ flex: 1, padding: '32px', maxWidth: '1200px', width: '100%', boxSizing: 'border-box' }}>
-          {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
           {activeTab === 'courses' && <CourseEditor />}
-          {activeTab === 'announcements' && <Announcements />}
-          {activeTab === 'users' && <UserManagement />}
+          {activeTab === 'announcements' && user.admin && <Announcements />}
+          {activeTab === 'users' && user.admin && <UserManagement />}
         </main>
       </div>
 
